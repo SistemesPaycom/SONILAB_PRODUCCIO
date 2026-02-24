@@ -7,6 +7,7 @@ import { CreateFolderDto } from './dto/create-folder.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
+import { Delete } from '@nestjs/common';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -47,5 +48,15 @@ export class LibraryController {
   listMedia(@CurrentUser() user: RequestUser, @Query('types') types?: string) {
     const sourceTypes = types ? types.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
     return this.library.listMedia(user.userId, sourceTypes);
+  }
+
+    @Delete('/documents/:id')
+  deleteDocument(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+    return this.library.updateDocument(user.userId, id, { isDeleted: true } as any);
+  }
+
+  @Delete('/folders/:id')
+  deleteFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+    return this.library.softDeleteFolderTree(user.userId, id);
   }
 }

@@ -15,6 +15,9 @@ export class MediaInfo {
 
   @Prop()
   size?: number;
+
+  @Prop()
+  sha256?: string;
 }
 
 @Schema({ timestamps: true })

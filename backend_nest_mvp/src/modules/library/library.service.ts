@@ -21,7 +21,50 @@ export class LibraryService {
       documents: documents.map((d) => ({ ...d, id: d._id.toString() })),
     };
   }
+  async findMediaBySha256(ownerId: string, sha256: string, size?: number) {
+  const q: any = { ownerId, isDeleted: false, 'media.sha256': sha256 };
+  if (typeof size === 'number') q['media.size'] = size;
+  const doc = await this.docModel.findOne(q).lean();
+  return doc ? { ...doc, id: doc._id.toString() } : null;
+}
+async softDeleteFolderTree(ownerId: string, rootFolderId: string) {
+  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+  if (!root) throw new NotFoundException('Folder not found');
 
+  const folders = await this.folderModel
+    .find({ ownerId, isDeleted: false }, { _id: 1, parentId: 1 })
+    .lean();
+
+  const children = new Map<string, string[]>();
+  for (const f of folders) {
+    const pid = f.parentId ?? '__root__';
+    const list = children.get(pid) ?? [];
+    list.push(f._id.toString());
+    children.set(pid, list);
+  }
+
+  const toDelete: string[] = [];
+  const queue: string[] = [rootFolderId];
+
+  while (queue.length) {
+    const cur = queue.shift()!;
+    toDelete.push(cur);
+    const kids = children.get(cur) ?? [];
+    for (const k of kids) queue.push(k);
+  }
+
+  await this.folderModel.updateMany({ ownerId, _id: { $in: toDelete } }, { $set: { isDeleted: true } });
+  await this.docModel.updateMany({ ownerId, parentId: { $in: toDelete } }, { $set: { isDeleted: true } });
+
+  return { deletedFolderIds: toDelete.length };
+}
+async folderNameExists(ownerId: string, name: string, parentId: string | null) {
+  const f = await this.folderModel
+    .findOne({ ownerId, isDeleted: false, parentId, name })
+    .collation({ locale: 'en', strength: 2 }) // case-insensitive
+    .lean();
+  return !!f;
+}
   async createFolder(ownerId: string, name: string, parentId?: string) {
     const folder = await this.folderModel.create({
       ownerId,

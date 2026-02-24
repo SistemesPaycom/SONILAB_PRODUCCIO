@@ -8,6 +8,9 @@ import { AuthModule } from './modules/auth/auth.module';
 import { LibraryModule } from './modules/library/library.module';
 import { MediaModule } from './modules/media/media.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+
 
 @Module({
   imports: [
@@ -33,6 +36,18 @@ import { ProjectsModule } from './modules/projects/projects.module';
     LibraryModule,
     MediaModule,
     ProjectsModule,
+    ThrottlerModule.forRoot([
+  {
+    ttl: 60_000,     // 60s
+    limit: 120,      // 120 req/min por IP
+  },
+]),
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}
