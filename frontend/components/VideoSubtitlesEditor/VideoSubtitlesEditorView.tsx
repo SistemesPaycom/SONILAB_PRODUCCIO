@@ -16,7 +16,6 @@ import { LOCAL_STORAGE_KEYS } from '../../constants';
 
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
-import * as TextMetrics from '../../utils/SubtitlesEditor/textMetrics';
 
 import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges';
 import { linkSegmentsToTakeRanges } from '../../utils/SubtitlesEditor/segmentTakeLinker';
@@ -60,7 +59,7 @@ export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> =
     handleTextChange,
   } = props;
 
-  const { state, getMediaFile, dispatch } = useLibrary();
+  const { state, getMediaFile, ensureMediaFile, dispatch } = useLibrary();
   const { syncRequest } = state;
   const [takeMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_MARGIN, 2);
   const [takeStartMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_START_MARGIN, 2);
@@ -115,8 +114,19 @@ export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> =
   const segments = subsHistory.present;
   const [activeSegmentId, setActiveSegmentId] = useState<number | null>(null);
 
-  const handleSyncMedia = useCallback((doc: Document) => {
-    const file = getMediaFile(doc.id);
+const handleSyncMedia = useCallback((doc: Document) => {
+  void (async () => {
+    let file = getMediaFile(doc.id);
+
+    if (!file) {
+      try {
+        file = await ensureMediaFile(doc.id, doc.name);
+      } catch (e) {
+        console.error('ensureMediaFile failed', e);
+        return;
+      }
+    }
+
     if (file) {
       if (videoSrc) URL.revokeObjectURL(videoSrc);
       setVideoFile(file);
@@ -125,7 +135,8 @@ export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> =
       setCurrentTime(0);
       setDuration(0);
     }
-  }, [getMediaFile, videoSrc]);
+  })();
+}, [getMediaFile, ensureMediaFile, videoSrc]);
 
   const handleSyncSubtitles = useCallback((doc: Document) => {
     const srtText = doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';

@@ -8,6 +8,7 @@ import { UpdateFolderDto } from './dto/update-folder.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { Delete } from '@nestjs/common';
+import { UpdateSrtDto } from './dto/update-srt.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -59,4 +60,15 @@ export class LibraryController {
   deleteFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.library.softDeleteFolderTree(user.userId, id);
   }
+
+  @Patch('/documents/:id/srt')
+updateSrt(
+  @CurrentUser() user: RequestUser,
+  @Param('id') id: string,
+  @Body() dto: UpdateSrtDto,
+) {
+  return this.library.updateDocument(user.userId, id, {
+    contentByLang: { _unassigned: dto.srtText },
+  } as any);
+}
 }

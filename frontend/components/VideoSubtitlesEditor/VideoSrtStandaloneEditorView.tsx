@@ -20,7 +20,7 @@ interface VideoSrtStandaloneEditorViewProps {
 }
 
 export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorViewProps> = ({ currentDoc, isEditing, onClose }) => {
-  const { getMediaFile } = useLibrary();
+  const { getMediaFile, ensureMediaFile } = useLibrary();
   const [maxLinesSubs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.MAX_LINES_SUBS, 2);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -157,7 +157,18 @@ export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorView
   });
 
   const handleSyncMedia = (doc: Document) => {
-    const file = getMediaFile(doc.id);
+  void (async () => {
+    let file = getMediaFile(doc.id);
+
+    if (!file) {
+      try {
+        file = await ensureMediaFile(doc.id, doc.name);
+      } catch (e) {
+        console.error('ensureMediaFile failed', e);
+        return;
+      }
+    }
+
     if (file) {
       if (videoSrc) URL.revokeObjectURL(videoSrc);
       setVideoFile(file);
@@ -166,7 +177,8 @@ export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorView
       setCurrentTime(0);
       setDuration(0);
     }
-  };
+  })();
+};
   
   const handleSegmentChange = (updated: Segment) => {
     if (!isEditing) return;

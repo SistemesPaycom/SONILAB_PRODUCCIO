@@ -52,7 +52,7 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
     handleTextChange,
   } = props;
 
-  const { state, getMediaFile, dispatch } = useLibrary();
+  const { state, getMediaFile, ensureMediaFile, dispatch } = useLibrary();
   const { syncRequest } = state;
   const [takeMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_MARGIN, 2);
   const [takeStartMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_START_MARGIN, 2);
@@ -85,8 +85,19 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
     dispatch({ type: 'CLEAR_SYNC_REQUEST' });
   }, [syncRequest, dispatch, state.documents]);
 
-  const handleVideoFileChange_internal = (doc: Document) => {
-    const file = getMediaFile(doc.id);
+ const handleVideoFileChange_internal = (doc: Document) => {
+  void (async () => {
+    let file = getMediaFile(doc.id);
+
+    if (!file) {
+      try {
+        file = await ensureMediaFile(doc.id, doc.name);
+      } catch (e) {
+        console.error('ensureMediaFile failed', e);
+        return;
+      }
+    }
+
     if (file) {
       if (videoSrc) URL.revokeObjectURL(videoSrc);
       setVideoFile(file);
@@ -95,7 +106,8 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
       setCurrentTime(0);
       setDuration(0);
     }
-  };
+  })();
+};
 
   const takeRanges = useMemo(() => {
     return buildTakeRangesFromScript({

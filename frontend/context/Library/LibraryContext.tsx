@@ -10,7 +10,7 @@ import type { Folder, Document, TranslationTask, TakeStatus, CharacterNote } fro
 import { ViewType, SortByKey, SortOrder, LibraryItem } from '../../types';
 import { indexCharacters } from '../../utils/LectorDeGuions/indexers';
 import { findTakesWithRanges } from '../../utils/LectorDeGuions/takes';
-
+import { api } from '../../services/api';
 // Registre global de fitxers binaris per a la sessió actual (no es guarda a localStorage)
 const mediaRegistry: Record<string, File> = {};
 
@@ -346,12 +346,27 @@ const LibraryContext = createContext<{
   currentItems: LibraryItem[];
   currentFolder: Folder | null;
   getMediaFile: (docId: string) => File | null;
+
+  // ✅ Backend helpers
+  useBackend: boolean;
+  reloadTree: () => Promise<void>;
+  createFolderRemote: (name: string, parentId: string | null) => Promise<void>;
+  createDocumentRemote: (payload: { name: string; parentId: string | null; content: string; csvContent?: string; originalName?: string; sourceType?: string }) => Promise<void>;
+  uploadMediaRemote: (file: File) => Promise<void>;
+  ensureMediaFile: (docId: string, filename: string) => Promise<File>;
 }>({
   state: initialState,
   dispatch: () => null,
   currentItems: [],
   currentFolder: null,
   getMediaFile: () => null,
+
+  useBackend: false,
+  reloadTree: async () => {},
+  createFolderRemote: async () => {},
+  createDocumentRemote: async () => {},
+  uploadMediaRemote: async () => {},
+  ensureMediaFile: async () => { throw new Error('not ready'); },
 });
 
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -359,24 +374,93 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [state, dispatch] = useReducer(libraryReducer, initialState);
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        dispatch({
-          type: 'SET_INITIAL_STATE',
-          payload: { ...initialState, ...parsed, selectedIds: new Set() },
-        });
-      } else {
-        dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
-      }
-    } catch (e) {
-      dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
-    }
-  }, []);
+ const useBackend = process.env.VITE_USE_BACKEND === '1';
+
+  const normalizeFolder = (f: any): Folder => ({
+    id: f.id || f._id,
+    name: f.name,
+    parentId: f.parentId ?? null,
+    createdAt: f.createdAt || new Date().toISOString(),
+    updatedAt: f.updatedAt || new Date().toISOString(),
+    isDeleted: !!f.isDeleted,
+    type: 'folder',
+  });
+
+  const normalizeDocument = (d: any): Document => {
+    const now = new Date().toISOString();
+    const content = d?.contentByLang?._unassigned ?? '';
+    return {
+      id: d.id || d._id,
+      name: d.name,
+      parentId: d.parentId ?? null,
+      createdAt: d.createdAt || now,
+      updatedAt: d.updatedAt || now,
+      isDeleted: !!d.isDeleted,
+      type: 'document',
+      contentByLang: d.contentByLang || { _unassigned: '' },
+      csvContentByLang: d.csvContentByLang || { _unassigned: '' },
+      sourceLang: d.sourceLang ?? null,
+      isLocked: !!d.isLocked,
+      originalName: d.originalName,
+      sourceType: d.sourceType,
+
+      // defaults para no romper el editor
+      characters: indexCharacters(content),
+      takes: findTakesWithRanges(content),
+      layers: [{ id: `L${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: 'Capa 1', visible: true, locked: false, order: 1 }],
+      strokes: [],
+      textAnnotations: [],
+      textHighlights: [],
+      annotationLinks: [],
+      takeStatuses: {},
+      takeNotes: {},
+      characterNotes: [],
+    };
+  };
+
+  const reloadTree = async () => {
+    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } }); // pone loading false al final
+    const tree = await api.getTree();
+    dispatch({
+      type: 'SET_INITIAL_STATE',
+      payload: {
+        ...initialState,
+        folders: (tree.folders || []).map(normalizeFolder),
+        documents: (tree.documents || []).map(normalizeDocument),
+        selectedIds: new Set(),
+      },
+    });
+  };
 
   useEffect(() => {
+    if (!useBackend) {
+      // modo local (tu lógica actual)
+      try {
+        const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          dispatch({
+            type: 'SET_INITIAL_STATE',
+            payload: { ...initialState, ...parsed, selectedIds: new Set() },
+          });
+        } else {
+          dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
+        }
+      } catch (e) {
+        dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
+      }
+      return;
+    }
+
+    // modo backend
+    reloadTree().catch(() => {
+      // si falla (401), dejamos librería vacía y no crashea
+      dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
+    });
+  }, []);
+
+    useEffect(() => {
+    if (useBackend) return;
     if (!state.isLoading) {
       const dataToStore = {
         folders: state.folders,
@@ -385,7 +469,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
       };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToStore));
     }
-  }, [state.folders, state.documents, state.translationTasks, state.isLoading]);
+  }, [state.folders, state.documents, state.translationTasks, state.isLoading, useBackend]);
 
   const currentItems = useMemo(() => {
     const { folders, documents, currentFolderId, view, sortBy, sortOrder } = state;
@@ -420,10 +504,63 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
     [state.currentFolderId, state.folders]
   );
 
+  const createFolderRemote = async (name: string, parentId: string | null) => {
+    await api.createFolder(name, parentId);
+    await reloadTree();
+  };
+
+ const createDocumentRemote = async (payload: {
+  name: string;
+  parentId: string | null;
+  content: string;
+  csvContent?: string;
+  originalName?: string;
+  sourceType?: string;
+}) => {
+  await api.createDocument({
+    name: payload.name,
+    parentId: payload.parentId,
+    sourceType: payload.sourceType || 'txt',
+    contentByLang: { _unassigned: payload.content || '' },
+    // ❌ NO enviar csvContentByLang ni originalName (backend los rechaza con forbidNonWhitelisted)
+  });
+
+  await reloadTree();
+};
+
+  const uploadMediaRemote = async (file: File) => {
+    await api.uploadMedia(file);
+    await reloadTree();
+  };
+
   const getMediaFile = (docId: string) => mediaRegistry[docId] || null;
 
-  return (
-    <LibraryContext.Provider value={{ state, dispatch, currentItems, currentFolder, getMediaFile }}>
+ const ensureMediaFile = async (docId: string, filename: string) => {
+    const existing = getMediaFile(docId);
+    if (existing) return existing;
+
+    // Requiere que tengas frontend/services/api.ts con api.downloadMediaAsFile
+    const file = await api.downloadMediaAsFile(docId, filename);
+
+    mediaRegistry[docId] = file;
+    return file;
+  };
+
+    return (
+    <LibraryContext.Provider value={{
+      state,
+      dispatch,
+      currentItems,
+      currentFolder,
+      getMediaFile,
+
+      useBackend,
+      reloadTree,
+      createFolderRemote,
+      createDocumentRemote,
+      uploadMediaRemote,
+      ensureMediaFile,
+    }}>
       {children}
     </LibraryContext.Provider>
   );

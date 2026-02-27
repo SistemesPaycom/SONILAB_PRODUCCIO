@@ -11,6 +11,7 @@ import { FileItem } from './FileItem';
 import * as Icons from '../icons';
 import OpenWithModal from './OpenWithModal';
 import ImportFilesModal from '../Import/ImportFilesModal';
+import { api } from '@/services/api';
 
 type OpenMode = 'editor' | 'lector' | 'editor-video' | 'editor-video-subs';
 
@@ -60,7 +61,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenSettings,
   onOpenNotifications,
 }) => {
-  const { state, dispatch, currentItems, currentFolder } = useLibrary();
+  const { state, dispatch, currentItems, currentFolder,useBackend, createFolderRemote, createDocumentRemote, uploadMediaRemote, reloadTree } = useLibrary();
   const { view, sortBy, sortOrder, selectedIds, folders, translationTasks } = state;
 
   const [isCreateFolderModalOpen, setCreateFolderModalOpen] = useState(false);
@@ -70,7 +71,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [openWithDocId, setOpenWithDocId] = useState<string | null>(null);
   const [isImportModalOpen, setImportModalOpen] = useState(false);
   const [showPermanentDeleteConfirm, setShowPermanentDeleteConfirm] = useState(false);
-  
+  const [isRenameModalOpen, setRenameModalOpen] = useState(false);
+const [renameValue, setRenameValue] = useState('');
   const [nameColWidth, setNameColWidth] = useState(200);
   const [formatColWidth, setFormatColWidth] = useState(100);
 
@@ -119,13 +121,18 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     dispatch({ type: 'SET_SORT', payload: { sortBy: key, sortOrder: newOrder } });
   };
 
-  const handleCreateFolder = () => {
-    if (newFolderName.trim()) {
-      dispatch({ type: 'CREATE_FOLDER', payload: { name: newFolderName.trim(), parentId: state.currentFolderId } });
-      setNewFolderName('');
-      setCreateFolderModalOpen(false);
-    }
-  };
+ const handleCreateFolder = async () => {
+  if (!newFolderName.trim()) return;
+
+  if (useBackend) {
+    await createFolderRemote(newFolderName.trim(), state.currentFolderId);
+  } else {
+    dispatch({ type: 'CREATE_FOLDER', payload: { name: newFolderName.trim(), parentId: state.currentFolderId } });
+  }
+
+  setNewFolderName('');
+  setCreateFolderModalOpen(false);
+};
 
   const handleFilesUpload = async (files: File[]) => {
     for (const file of files) {
@@ -163,18 +170,33 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       
       const finalName = (ext === 'pdf' || ext === 'docx') ? `${baseName}.slsf` : originalName;
       
-      dispatch({ 
-        type: 'IMPORT_DOCUMENT', 
-        payload: { 
-          name: finalName, 
-          parentId: state.currentFolderId, 
-          content, 
-          csvContent, 
-          originalName, 
-          sourceType,
-          file: ['mp4', 'wav', 'mov', 'webm', 'ogg', 'mp3'].includes(ext || '') ? file : undefined 
-        } 
-      });
+     if (useBackend) {
+  if (['mp4', 'wav', 'mov', 'webm', 'ogg', 'mp3', 'm4a'].includes(ext || '')) {
+    await uploadMediaRemote(file);
+  } else {
+    await createDocumentRemote({
+      name: finalName,
+      parentId: state.currentFolderId,
+      content,
+      csvContent,
+      originalName,
+      sourceType,
+    });
+  }
+} else {
+  dispatch({
+    type: 'IMPORT_DOCUMENT',
+    payload: {
+      name: finalName,
+      parentId: state.currentFolderId,
+      content,
+      csvContent,
+      originalName,
+      sourceType,
+      file: ['mp4', 'wav', 'mov', 'webm', 'ogg', 'mp3'].includes(ext || '') ? file : undefined,
+    },
+  });
+}
     } catch (error) { console.error(`Error important arxiu ${file.name}:`, error); }
   };
 
@@ -192,7 +214,26 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     else { dispatch({ type: 'SET_VIEW', payload: 'trash' }); setIsCollapsed(false); }
   };
 
-  const handleDeleteSelected = () => dispatch({ type: 'DELETE_ITEMS', payload: { itemIds: Array.from(selectedIds) } });
+  const handleDeleteSelected = () => {
+  const ids = Array.from(state.selectedIds).map((v) => String(v));
+
+  if (!useBackend) {
+    dispatch({ type: 'DELETE_ITEMS', payload: { itemIds: ids } });
+    return;
+  }
+
+  void (async () => {
+    const folderIds = ids.filter((id) => state.folders.some((f) => f.id === id));
+    const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
+
+    await Promise.all([
+      ...folderIds.map((id) => api.deleteFolder(id)),
+      ...docIds.map((id) => api.deleteDocument(id)),
+    ]);
+
+    await reloadTree();
+  })();
+};
   const handleRestoreSelected = () => dispatch({ type: 'RESTORE_ITEMS', payload: { itemIds: Array.from(selectedIds) } });
   
   const handlePermanentDeleteConfirmed = () => {
@@ -219,7 +260,30 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         dispatch({ type: 'SET_CURRENT_FOLDER', payload: currentFolder.parentId }); 
     }
   };
-  
+  const handleRenameConfirm = () => {
+  if (!selectedItem) return;
+  const newName = renameValue.trim();
+  if (!newName) return;
+
+  if (!useBackend) {
+    dispatch({
+      type: 'RENAME_ITEM',
+      payload: { id: selectedItem.id, type: selectedItem.type, newName },
+    });
+    setRenameModalOpen(false);
+    return;
+  }
+
+  void (async () => {
+    if (selectedItem.type === 'folder') {
+      await api.patchFolder(selectedItem.id, { name: newName });
+    } else {
+      await api.patchDocument(selectedItem.id, { name: newName });
+    }
+    await reloadTree();
+    setRenameModalOpen(false);
+  })();
+};
   const handleOpenFromModal = (docId: string, mode: OpenMode) => {
     const isEditing = mode !== 'lector';
     onOpenDocument(docId, mode, isEditing);
@@ -229,7 +293,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const handlePreviewDocument = useCallback((docId: string) => { onOpenDocument(docId, 'editor', false); }, [onOpenDocument]);
 
   const isAllSelected = currentItems.length > 0 && selectedIds.size === currentItems.length;
-
+  const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null;
+const selectedItem =
+  singleSelectedId
+    ? (state.folders.find((f) => f.id === singleSelectedId) ||
+       state.documents.find((d) => d.id === singleSelectedId) ||
+       null)
+    : null;
   const renderEmptyState = () => (
     <div className="text-center py-20 min-w-full flex flex-col items-center">
       <div className="mx-auto h-16 w-16 text-gray-600"><Icons.Folder className="w-16 h-16" /></div>
@@ -262,7 +332,19 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             {!isCollapsed && (
                 <div className="h-10 flex items-center gap-2">
                     {selectedIds.size > 0 ? (
-                        <>
+                        <>  {view === 'library' && selectedIds.size === 1 && selectedItem && (
+  <button
+    onClick={() => {
+      setRenameValue(selectedItem.name);
+      setRenameModalOpen(true);
+    }}
+    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2"
+    title="Renombrar"
+  >
+    <Icons.Pencil />
+    <span>Renombrar</span>
+  </button>
+)}
                             {view === 'library' && (
                                 <button onClick={handleDeleteSelected} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Enviar a la paperera">
                                     <Icons.Trash /><span>{`Esborrar (${selectedIds.size})`}</span>
@@ -399,6 +481,25 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           </div>
         </div>
       )}
+      {isRenameModalOpen && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[500]">
+    <div className="bg-gray-800 rounded-xl p-4 w-full max-w-sm border border-gray-700 shadow-2xl" onClick={e => e.stopPropagation()}>
+      <h2 className="text-lg font-semibold text-white mb-2">Renombrar</h2>
+      <input
+        value={renameValue}
+        onChange={(e) => setRenameValue(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleRenameConfirm()}
+        className="w-full px-3 py-2 rounded bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-blue-500 outline-none"
+        placeholder="Nou nom"
+        autoFocus
+      />
+      <div className="flex justify-end gap-2 mt-4">
+        <button onClick={() => setRenameModalOpen(false)} className="px-4 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-200 font-medium">Cancel·lar</button>
+        <button onClick={handleRenameConfirm} className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded text-white font-medium">Guardar</button>
+      </div>
+    </div>
+  </div>
+)}
 
       {openWithDocId && <OpenWithModal docId={openWithDocId} onClose={() => setOpenWithDocId(null)} onOpen={handleOpenFromModal} />}
       {isImportModalOpen && <ImportFilesModal isOpen={isImportModalOpen} onClose={() => setImportModalOpen(false)} onFilesSelect={handleFilesUpload} accept=".pdf,.docx,.srt,.mp4,.wav,.mov,.webm,.ogg" title="Importar Fitxers" description="Selecciona o arrossega guions (PDF, DOCX), subtítols (SRT) o vídeo/àudio." />}

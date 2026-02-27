@@ -15,7 +15,7 @@ interface OpenWithModalProps {
 }
 
 const OpenWithModal: React.FC<OpenWithModalProps> = ({ docId, onClose, onOpen }) => {
-  const { state, dispatch } = useLibrary();
+  const { state, dispatch, useBackend, createDocumentRemote } = useLibrary();
   const [isEditingMode, setIsEditingMode] = useState(true);
   const doc = state.documents.find(d => d.id === docId);
 
@@ -25,31 +25,73 @@ const OpenWithModal: React.FC<OpenWithModalProps> = ({ docId, onClose, onOpen })
     }
   };
 
-  const handleConvertToSlsf = () => {
+ const handleConvertToSlsf = () => {
+  void (async () => {
     if (!doc) return;
-    const srtContent = doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';
+
+    const srtContent =
+      doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';
     const slsfContent = convertSrtToSlsf(srtContent);
     if (!slsfContent) return;
-    const newName = doc.name.replace(/\.srt$/i, '') + '.slsf';
-    dispatch({
-        type: 'IMPORT_DOCUMENT',
-        payload: { name: newName, parentId: doc.parentId, content: slsfContent, sourceType: 'slsf' }
-    });
-    onClose();
-  };
 
-  const handleConvertToSsrtlsf = () => {
+    const newName = doc.name.replace(/\.srt$/i, '') + '.slsf';
+
+    if (useBackend) {
+      await createDocumentRemote({
+        name: newName,
+        parentId: doc.parentId,
+        content: slsfContent,
+        sourceType: 'slsf',
+      });
+    } else {
+      dispatch({
+        type: 'IMPORT_DOCUMENT',
+        payload: {
+          name: newName,
+          parentId: doc.parentId,
+          content: slsfContent,
+          sourceType: 'slsf',
+        },
+      });
+    }
+
+    onClose();
+  })();
+};
+
+const handleConvertToSsrtlsf = () => {
+  void (async () => {
     if (!doc) return;
-    const srtContent = doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';
+
+    const srtContent =
+      doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';
     const ssrtlsfContent = convertSrtToSsrtlsf(srtContent);
     if (!ssrtlsfContent) return;
+
     const newName = doc.name.replace(/\.srt$/i, '') + '.ssrtlsf';
-    dispatch({
+
+    if (useBackend) {
+      await createDocumentRemote({
+        name: newName,
+        parentId: doc.parentId,
+        content: ssrtlsfContent,
+        sourceType: 'ssrtlsf',
+      });
+    } else {
+      dispatch({
         type: 'IMPORT_DOCUMENT',
-        payload: { name: newName, parentId: doc.parentId, content: ssrtlsfContent, sourceType: 'ssrtlsf' }
-    });
+        payload: {
+          name: newName,
+          parentId: doc.parentId,
+          content: ssrtlsfContent,
+          sourceType: 'ssrtlsf',
+        },
+      });
+    }
+
     onClose();
-  };
+  })();
+};
 
   if (!doc) return null;
 

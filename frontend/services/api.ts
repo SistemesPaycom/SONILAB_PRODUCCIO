@@ -1,0 +1,154 @@
+import { env } from "process";
+
+// frontend/services/api.ts
+const API_URL = ('http://localhost:8000').replace(/\/$/, '');
+const TOKEN_KEY = 'sonilab_token';
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string | null) {
+  if (!token) localStorage.removeItem(TOKEN_KEY);
+  else localStorage.setItem(TOKEN_KEY, token);
+}
+
+type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+
+async function request<T>(
+  path: string,
+  opts: { method?: HttpMethod; body?: any; headers?: Record<string, string> } = {},
+): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    ...(opts.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const init: RequestInit = {
+    method: opts.method || 'GET',
+    headers,
+    credentials: 'include', // por si más adelante migras a cookies
+  };
+
+  if (opts.body instanceof FormData) {
+    init.body = opts.body;
+  } else if (opts.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(opts.body);
+  }
+
+  const res = await fetch(`${API_URL}${path}`, init);
+
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const data = await res.json();
+      msg = data?.message ? (Array.isArray(data.message) ? data.message.join(', ') : data.message) : msg;
+    } catch {}
+    throw new Error(msg);
+  }
+
+  // 204 no content
+  if (res.status === 204) return undefined as unknown as T;
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) return (await res.json()) as T;
+
+  // fallback (texto)
+  return (await res.text()) as unknown as T;
+}
+
+export const api = {
+  // Auth
+  async register(email: string, password: string) {
+    return request<{ accessToken: string }>(`/auth/register`, {
+      method: 'POST',
+      body: { email, password },
+    });
+  },
+  async login(email: string, password: string) {
+    return request<{ accessToken: string }>(`/auth/login`, {
+      method: 'POST',
+      body: { email, password },
+    });
+  },
+
+  // Library tree
+  async getTree() {
+    return request<{ folders: any[]; documents: any[] }>(`/library/tree`);
+  },
+
+  // Folders
+  async createFolder(name: string, parentId: string | null) {
+    return request<any>(`/folders`, { method: 'POST', body: { name, parentId } });
+  },
+  async patchFolder(id: string, patch: any) {
+    return request<any>(`/folders/${id}`, { method: 'PATCH', body: patch });
+  },
+  async deleteFolder(id: string) {
+    return request<any>(`/folders/${id}`, { method: 'DELETE' });
+  },
+
+  // Documents
+  async createDocument(payload: any) {
+    return request<any>(`/documents`, { method: 'POST', body: payload });
+  },
+  async patchDocument(id: string, patch: any) {
+    return request<any>(`/documents/${id}`, { method: 'PATCH', body: patch });
+  },
+  async deleteDocument(id: string) {
+    return request<any>(`/documents/${id}`, { method: 'DELETE' });
+  },
+  async updateSrt(id: string, srtText: string) {
+    return request<any>(`/documents/${id}/srt`, { method: 'PATCH', body: { srtText } });
+  },
+
+  // Media
+  async uploadMedia(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request<{ document: any; duplicated?: boolean }>(`/media/upload`, {
+      method: 'POST',
+      body: fd,
+    });
+  },
+  async listMedia() {
+    return request<any[]>(`/media/list`);
+  },
+  streamUrl(docId: string) {
+    return `${API_URL}/media/${docId}/stream`;
+  },
+  async downloadMediaAsFile(docId: string, filename: string): Promise<File> {
+    const token = getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const res = await fetch(this.streamUrl(docId), {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`Failed to download media: ${res.status}`);
+    const blob = await res.blob();
+    const type = blob.type || 'application/octet-stream';
+    return new File([blob], filename, { type });
+  },
+
+  // Transcription options
+  async transcriptionOptions() {
+    return request<any>(`/transcription/options`);
+  },
+
+  // Projects / Jobs
+  async createProject(payload: { name: string; mediaDocumentId: string; settings?: any }) {
+    return request<any>(`/projects`, { method: 'POST', body: payload });
+  },
+  async createProjectFromExisting(payload: { name: string; mediaDocumentId: string; srtText: string; settings?: any }) {
+    return request<any>(`/projects/from-existing`, { method: 'POST', body: payload });
+  },
+  async getJob(id: string) {
+    return request<any>(`/jobs/${id}`);
+  },
+  async getProjectBySrt(srtDocId: string) {
+    return request<any>(`/projects/by-srt/${srtDocId}`);
+  },
+};

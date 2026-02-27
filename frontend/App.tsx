@@ -20,6 +20,8 @@ import useLocalStorage from './hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from './constants';
 import SettingsModal from './components/SettingsModal';
 import * as Icons from './components/icons';
+import { AuthModal } from './components/Auth/AuthModal';
+import { getToken } from './services/api';
 
 const DEFAULT_STYLES: EditorStyles = {
   take: { fontFamily: 'Courier Prime, monospace', fontSize: 16, color: '#000000', bold: true, italic: false },
@@ -347,10 +349,21 @@ const MainAppContent: React.FC = () => {
   );
 };
 
-const App: React.FC = () => (
-  <LibraryProvider>
-    <MainAppContent />
-  </LibraryProvider>
-);
+const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
+
+const App: React.FC = () => {
+  const [authed, setAuthed] = useState(() => !!getToken());
+
+  return (
+    <>
+      <AuthModal open={USE_BACKEND && !authed} onDone={() => setAuthed(true)} />
+      {(!USE_BACKEND || authed) && (
+        <LibraryProvider>
+          <MainAppContent />
+        </LibraryProvider>
+      )}
+    </>
+  );
+};
 
 export default App;

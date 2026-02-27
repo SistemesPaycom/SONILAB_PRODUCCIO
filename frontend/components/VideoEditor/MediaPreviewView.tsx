@@ -11,26 +11,46 @@ interface MediaPreviewViewProps {
 }
 
 export const MediaPreviewView: React.FC<MediaPreviewViewProps> = ({ currentDoc }) => {
-  const { getMediaFile } = useLibrary();
+  const { getMediaFile, ensureMediaFile } = useLibrary();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const videoFile = getMediaFile(currentDoc.id);
-
+const [videoFile, setVideoFile] = useState<File | null>(null);
   // Estats de seguiment de l'ona
   const [autoScrollWave, setAutoScrollWave] = useState(true);
   const [scrollModeWave, setScrollModeWave] = useState<'stationary' | 'page'>('stationary');
 
   useEffect(() => {
-    if (videoFile) {
-      const url = URL.createObjectURL(videoFile);
-      setVideoSrc(url);
-      return () => URL.revokeObjectURL(url);
+  let cancelled = false;
+  let url: string | null = null;
+
+  void (async () => {
+    let f = getMediaFile(currentDoc.id);
+
+    if (!f) {
+      try {
+        f = await ensureMediaFile(currentDoc.id, currentDoc.name);
+      } catch (e) {
+        console.error('ensureMediaFile failed', e);
+        return;
+      }
     }
-  }, [currentDoc.id, videoFile]);
+
+    if (cancelled || !f) return;
+
+    setVideoFile(f);
+    url = URL.createObjectURL(f);
+    setVideoSrc(url);
+  })();
+
+  return () => {
+    cancelled = true;
+    if (url) URL.revokeObjectURL(url);
+  };
+}, [currentDoc.id, currentDoc.name, getMediaFile, ensureMediaFile]);
 
   const onTogglePlay = () => setIsPlaying(!isPlaying);
   const onSeek = (time: number) => {
