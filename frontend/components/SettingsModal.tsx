@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { EditorStyles, EditorStyle, AppShortcuts, Shortcut } from '../types';
 import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS } from '../constants';
 import useLocalStorage from '../hooks/useLocalStorage';
+import { useAuth } from '../context/Auth/AuthContext';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -106,8 +107,9 @@ const ShortcutsTab: React.FC = () => {
         </div>
     );
 };
-
+const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, onStylesChange }) => {
+  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('general');
   const [libraryWidth, setLibraryWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_WIDTH, 420);
   const [takeMargin, setTakeMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_MARGIN, 2);
@@ -142,7 +144,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, on
                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Script Editor Pro v10.0</p>
              </div>
           </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-800 text-gray-400 hover:text-white transition-all text-2xl">&times;</button>
+         <div className="flex items-center gap-2">
+  {USE_BACKEND && (
+    <button
+      onClick={() => { logout(); onClose(); }}
+      className="px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg border border-red-500/50 transition-all active:scale-95"
+      title="Cerrar sesión"
+    >
+      Logout
+    </button>
+  )}
+  <button
+    onClick={onClose}
+    className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-800 text-gray-400 hover:text-white transition-all text-2xl"
+  >
+    &times;
+  </button>
+</div>
         </div>
 
         <div className="flex bg-gray-900/30 border-b border-gray-800">

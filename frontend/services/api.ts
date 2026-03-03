@@ -40,6 +40,11 @@ async function request<T>(
 
   const res = await fetch(`${API_URL}${path}`, init);
 
+   if (res.status === 401) {
+    setToken(null);
+    window.dispatchEvent(new Event('AUTH_REQUIRED'));
+  }
+
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
     try {
@@ -73,7 +78,9 @@ export const api = {
       body: { email, password },
     });
   },
-
+async listProjects() {
+  return request<any[]>(`/projects`);
+},
   // Library tree
   async getTree() {
     return request<{ folders: any[]; documents: any[] }>(`/library/tree`);

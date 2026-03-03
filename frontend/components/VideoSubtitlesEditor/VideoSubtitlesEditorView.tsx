@@ -17,6 +17,7 @@ import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
 
+import { api } from '../../services/api';
 import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges';
 import { linkSegmentsToTakeRanges } from '../../utils/SubtitlesEditor/segmentTakeLinker';
 
@@ -59,7 +60,7 @@ export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> =
     handleTextChange,
   } = props;
 
-  const { state, getMediaFile, ensureMediaFile, dispatch } = useLibrary();
+  const { state, getMediaFile, ensureMediaFile, dispatch, useBackend } = useLibrary();
   const { syncRequest } = state;
   const [takeMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_MARGIN, 2);
   const [takeStartMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_START_MARGIN, 2);
@@ -235,15 +236,24 @@ const handleSyncMedia = useCallback((doc: Document) => {
     }
   }, [takeRanges, currentTime, onSeek]);
 
-  const handleSave = useCallback(() => {
-    subsHistory.save((data) => {
-        const srtContent = serializeSrt(data);
-        dispatch({
-            type: 'UPDATE_DOCUMENT_CONTENTS',
-            payload: { documentId: currentDoc.id, lang: '_unassigned', content: srtContent, csvContent: '' }
-        });
+const handleSave = useCallback(() => {
+  subsHistory.save((data) => {
+    const srtContent = serializeSrt(data);
+
+    // 1) estado local (para UI)
+    dispatch({
+      type: 'UPDATE_DOCUMENT_CONTENTS',
+      payload: { documentId: currentDoc.id, lang: '_unassigned', content: srtContent, csvContent: '' },
     });
-  }, [subsHistory, currentDoc.id, dispatch]);
+
+    // 2) ✅ persistencia backend (lo que te faltaba)
+    if (useBackend) {
+      void api.updateSrt(currentDoc.id, srtContent).catch((e) => {
+        console.error('updateSrt failed', e);
+      });
+    }
+  });
+}, [subsHistory, currentDoc.id, dispatch, useBackend]);
 
   const handleSplitSegmentAtCursor = useCallback((idParam?: number) => {
     const payload = window.__SEG_SPLIT_PAYLOAD__;

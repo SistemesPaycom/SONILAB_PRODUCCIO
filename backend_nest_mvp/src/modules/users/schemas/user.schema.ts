@@ -10,6 +10,14 @@ export class User {
 
   @Prop({ required: true })
   passwordHash: string;
+
+   // nuevo (opcional)
+  @Prop({ required: false, trim: true })
+  name?: string;
+
+  // nuevo (opcional): almacena preferencias libres
+  @Prop({ type: Object, default: {} })
+  preferences?: any;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

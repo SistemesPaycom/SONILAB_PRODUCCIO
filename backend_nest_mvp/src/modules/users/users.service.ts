@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
@@ -26,4 +26,29 @@ export class UsersService {
 
     return { id: user._id.toString(), email: user.email };
   }
+async findById(id: string) {
+    const user = await this.userModel.findById(id).lean();
+    if (!user) return null;
+    const { passwordHash, ...safe } = user as any;
+    // convertir _id a id para API
+    return { id: (user as any)._id.toString(), ...safe };
+  }
+
+  async update(id: string, updates: { name?: string; email?: string; preferences?: any }) {
+    // si cambia email, validar duplicado
+    if (updates.email) {
+      const exists = await this.userModel.findOne({ email: updates.email.toLowerCase(), _id: { $ne: id } }).lean();
+      if (exists) throw new ConflictException('Email already registered');
+    }
+    const set: any = {};
+    if (updates.name !== undefined) set.name = updates.name;
+    if (updates.email !== undefined) set.email = updates.email.toLowerCase();
+    if (updates.preferences !== undefined) set.preferences = updates.preferences;
+
+    const updated = await this.userModel.findByIdAndUpdate(id, set, { new: true }).lean();
+    if (!updated) throw new NotFoundException('User not found');
+    const { passwordHash, ...safe } = updated as any;
+    return { id: (updated as any)._id.toString(), ...safe };
+  }
+
 }

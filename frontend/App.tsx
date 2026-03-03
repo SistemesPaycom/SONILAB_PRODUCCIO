@@ -21,7 +21,9 @@ import { LOCAL_STORAGE_KEYS } from './constants';
 import SettingsModal from './components/SettingsModal';
 import * as Icons from './components/icons';
 import { AuthModal } from './components/Auth/AuthModal';
-import { getToken } from './services/api';
+
+import { AuthProvider, useAuth } from './context/Auth/AuthContext';
+import { api } from './services/api';
 
 const DEFAULT_STYLES: EditorStyles = {
   take: { fontFamily: 'Courier Prime, monospace', fontSize: 16, color: '#000000', bold: true, italic: false },
@@ -87,7 +89,7 @@ const NotificationModal: React.FC<{ tasks: TranslationTask[]; onClear: () => voi
 };
 
 const MainAppContent: React.FC = () => {
-  const { state, dispatch } = useLibrary();
+  const { state, dispatch, useBackend } = useLibrary();
   
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [openMode, setOpenMode] = useState<OpenMode | null>(null);
@@ -101,7 +103,7 @@ const MainAppContent: React.FC = () => {
   const [tabSize, setTabSize] = useState(4);
   const [pageWidth, setPageWidth] = useState('794px');
   const [editorStyles, setEditorStyles] = useLocalStorage<EditorStyles>(LOCAL_STORAGE_KEYS.EDITOR_STYLES, DEFAULT_STYLES);
-  
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
@@ -155,6 +157,38 @@ const MainAppContent: React.FC = () => {
     }
   }, [currentDoc?.id, effectiveLang, activeLang]);
 
+  useEffect(() => {
+  if (!useBackend) return;
+  if (openMode !== 'editor-video-subs') return;
+  if (!openDocId) return;
+
+  const doc = state.documents.find((d) => d.id === openDocId);
+  if (!doc) return;
+
+  const isSrt = (doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt');
+  if (!isSrt) return;
+
+  let cancelled = false;
+
+  void (async () => {
+    try {
+      const proj = await api.getProjectBySrt(doc.id);
+      if (cancelled) return;
+
+      const mediaId = proj?.mediaDocumentId || proj?.mediaDocId;
+      if (mediaId) {
+        dispatch({ type: 'TRIGGER_SYNC_REQUEST', payload: { docId: mediaId, type: 'media' } });
+      }
+    } catch (e) {
+      console.warn('getProjectBySrt failed', e);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [useBackend, openMode, openDocId, state.documents, dispatch]);
+
   const docContent = useMemo(() => currentDoc?.contentByLang[effectiveLang] || '', [currentDoc, effectiveLang]);
   const history = useDocumentHistory(openDocId || 'temp', docContent);
 
@@ -169,6 +203,11 @@ const MainAppContent: React.FC = () => {
     });
   }, [history, currentDoc, effectiveLang, dispatch]);
 
+  const enableScriptShortcuts =
+  !!openDocId &&
+  isEditing &&
+  (openMode === 'editor' || openMode === 'editor-video' || openMode === 'editor-ssrtlsf');
+
   useKeyboardShortcuts('scriptEditor', (action) => {
     if (!openDocId) return;
     switch (action) {
@@ -176,7 +215,7 @@ const MainAppContent: React.FC = () => {
       case 'REDO': history.redo(); break;
       case 'SAVE': handleSave(); break;
     }
-  });
+  }, enableScriptShortcuts);
 
   const [pendingNav, setPendingNav] = useState<{ id: string | null, mode: OpenMode | null, edit: boolean } | null>(null);
   const [showDirtyModal, setShowDirtyModal] = useState(false);
@@ -351,18 +390,30 @@ const MainAppContent: React.FC = () => {
 
 const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 
-const App: React.FC = () => {
-  const [authed, setAuthed] = useState(() => !!getToken());
+const AuthedGate: React.FC = () => {
+  const { authed, reason, markAuthed } = useAuth();
 
   return (
     <>
-      <AuthModal open={USE_BACKEND && !authed} onDone={() => setAuthed(true)} />
+      <AuthModal
+        open={USE_BACKEND && !authed}
+        onDone={() => markAuthed()}
+        reason={reason}
+      />
       {(!USE_BACKEND || authed) && (
         <LibraryProvider>
           <MainAppContent />
         </LibraryProvider>
       )}
     </>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AuthedGate />
+    </AuthProvider>
   );
 };
 

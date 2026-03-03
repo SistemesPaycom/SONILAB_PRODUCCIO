@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { api, setToken } from '../../services/api';
 
-export const AuthModal: React.FC<{ open: boolean; onDone: () => void }> = ({ open, onDone }) => {
+export const AuthModal: React.FC<{
+  open: boolean;
+  onDone: () => void;
+  reason?: 'login' | 'expired';
+}> = ({ open, onDone, reason = 'login' }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,7 +31,7 @@ export const AuthModal: React.FC<{ open: boolean; onDone: () => void }> = ({ ope
     }
   };
 
-  return (
+ return (
     <div className="fixed inset-0 z-[1000] bg-black/70 flex items-center justify-center p-4" onClick={() => {}}>
       <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
@@ -41,6 +45,12 @@ export const AuthModal: React.FC<{ open: boolean; onDone: () => void }> = ({ ope
             {mode === 'login' ? 'Crear cuenta' : 'Tengo cuenta'}
           </button>
         </div>
+
+        {reason === 'expired' && (
+          <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 px-3 py-2 text-sm">
+            Sesión caducada. Vuelve a iniciar sesión.
+          </div>
+        )}
 
         <div className="space-y-3">
           <input
@@ -68,7 +78,7 @@ export const AuthModal: React.FC<{ open: boolean; onDone: () => void }> = ({ ope
           </button>
 
           <div className="text-xs text-gray-400">
-            Nota: en V1 usamos JWT (Bearer). Más adelante podemos pasar a cookie para streaming eficiente.
+            App transcripció i subtitulació de vídeos. Fet amb ❤️ per Sonilab.
           </div>
         </div>
       </div>
