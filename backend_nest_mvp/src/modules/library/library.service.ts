@@ -12,15 +12,16 @@ export class LibraryService {
   ) {}
 
   async getTree(ownerId: string) {
-    const [folders, documents] = await Promise.all([
-      this.folderModel.find({ ownerId, isDeleted: false }).lean(),
-      this.docModel.find({ ownerId, isDeleted: false }).lean(),
-    ]);
-    return {
-      folders: folders.map((f) => ({ ...f, id: f._id.toString() })),
-      documents: documents.map((d) => ({ ...d, id: d._id.toString() })),
-    };
-  }
+  const [folders, documents] = await Promise.all([
+    this.folderModel.find({ ownerId }).lean(),
+    this.docModel.find({ ownerId }).lean(),
+  ]);
+
+  return {
+    folders: folders.map((f: any) => ({ ...f, id: f._id.toString() })),
+    documents: documents.map((d: any) => ({ ...d, id: d._id.toString() })),
+  };
+}
   async findMediaBySha256(ownerId: string, sha256: string, size?: number) {
   const q: any = { ownerId, isDeleted: false, 'media.sha256': sha256 };
   if (typeof size === 'number') q['media.size'] = size;
@@ -58,6 +59,95 @@ async softDeleteFolderTree(ownerId: string, rootFolderId: string) {
 
   return { deletedFolderIds: toDelete.length };
 }
+async restoreFolderTree(ownerId: string, rootFolderId: string) {
+  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+  if (!root) throw new NotFoundException('Folder not found');
+
+  // Cogemos todas las folders (incluidas borradas) para reconstruir el árbol
+  const folders = await this.folderModel
+    .find({ ownerId }, { _id: 1, parentId: 1 })
+    .lean();
+
+  const children = new Map<string, string[]>();
+  for (const f of folders) {
+    const pid = f.parentId ?? '__root__';
+    const list = children.get(pid) ?? [];
+    list.push(f._id.toString());
+    children.set(pid, list);
+  }
+
+  const toRestore: string[] = [];
+  const queue: string[] = [rootFolderId];
+
+  while (queue.length) {
+    const cur = queue.shift()!;
+    toRestore.push(cur);
+    const kids = children.get(cur) ?? [];
+    for (const k of kids) queue.push(k);
+  }
+
+  // Restauramos folders + docs dentro del árbol
+  await this.folderModel.updateMany(
+    { ownerId, _id: { $in: toRestore } },
+    { $set: { isDeleted: false } },
+  );
+
+  await this.docModel.updateMany(
+    { ownerId, parentId: { $in: toRestore } },
+    { $set: { isDeleted: false } },
+  );
+
+  return { restoredFolderIds: toRestore.length };
+}
+
+async purgeFolderTree(ownerId: string, rootFolderId: string) {
+  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+  if (!root) throw new NotFoundException('Folder not found');
+
+  const folders = await this.folderModel
+    .find({ ownerId }, { _id: 1, parentId: 1 })
+    .lean();
+
+  const children = new Map<string, string[]>();
+  for (const f of folders) {
+    const pid = f.parentId ?? '__root__';
+    const list = children.get(pid) ?? [];
+    list.push(f._id.toString());
+    children.set(pid, list);
+  }
+
+  const toDelete: string[] = [];
+  const queue: string[] = [rootFolderId];
+
+  while (queue.length) {
+    const cur = queue.shift()!;
+    toDelete.push(cur);
+    const kids = children.get(cur) ?? [];
+    for (const k of kids) queue.push(k);
+  }
+
+  // Borra docs del árbol y luego folders del árbol
+  await this.docModel.deleteMany({ ownerId, parentId: { $in: toDelete } });
+  const res = await this.folderModel.deleteMany({ ownerId, _id: { $in: toDelete } });
+
+  return { purgedFolderIds: res.deletedCount ?? toDelete.length };
+}
+
+async restoreDocument(ownerId: string, id: string) {
+  const doc = await this.docModel
+    .findOneAndUpdate({ _id: id, ownerId }, { $set: { isDeleted: false } }, { new: true })
+    .lean();
+
+  if (!doc) throw new NotFoundException('Document not found');
+  return { ...doc, id: doc._id.toString() };
+}
+
+async purgeDocument(ownerId: string, id: string) {
+  const res = await this.docModel.deleteOne({ _id: id, ownerId });
+  if (!res.deletedCount) throw new NotFoundException('Document not found');
+  return { ok: true };
+}
+
 async folderNameExists(ownerId: string, name: string, parentId: string | null) {
   const f = await this.folderModel
     .findOne({ ownerId, isDeleted: false, parentId, name })

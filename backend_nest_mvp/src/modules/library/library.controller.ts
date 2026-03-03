@@ -60,6 +60,25 @@ export class LibraryController {
   deleteFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.library.softDeleteFolderTree(user.userId, id);
   }
+  @Patch('/folders/:id/restore')
+restoreFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+  return this.library.restoreFolderTree(user.userId, id);
+}
+
+@Patch('/documents/:id/restore')
+restoreDocument(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+  return this.library.restoreDocument(user.userId, id);
+}
+
+@Delete('/folders/:id/purge')
+purgeFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+  return this.library.purgeFolderTree(user.userId, id);
+}
+
+@Delete('/documents/:id/purge')
+purgeDocument(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+  return this.library.purgeDocument(user.userId, id);
+}
 
   @Patch('/documents/:id/srt')
 updateSrt(

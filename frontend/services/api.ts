@@ -105,14 +105,57 @@ export const api = {
   },
 
   // Media
-  async uploadMedia(file: File) {
-    const fd = new FormData();
-    fd.append('file', file);
-    return request<{ document: any; duplicated?: boolean }>(`/media/upload`, {
-      method: 'POST',
-      body: fd,
-    });
-  },
+ async uploadMedia(file: File, onProgress?: (pct: number) => void) {
+  const API_URL = (process.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+  const token = getToken(); // tu helper actual
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  return await new Promise<{ document: any; duplicated?: boolean }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_URL}/media/upload`, true);
+
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      onProgress?.(pct);
+    };
+
+    xhr.onerror = () => reject(new Error('Upload failed (network error)'));
+
+    xhr.onload = () => {
+      const ok = xhr.status >= 200 && xhr.status < 300;
+      if (!ok) {
+        try {
+          const data = JSON.parse(xhr.responseText || '{}');
+          const msg = data?.message
+            ? (Array.isArray(data.message) ? data.message.join(', ') : data.message)
+            : `HTTP ${xhr.status}`;
+          if (xhr.status === 401) {
+            setToken(null);
+            window.dispatchEvent(new Event('AUTH_REQUIRED'));
+          }
+          reject(new Error(msg));
+        } catch {
+          reject(new Error(`HTTP ${xhr.status}`));
+        }
+        return;
+      }
+
+      try {
+        const data = JSON.parse(xhr.responseText);
+        resolve(data);
+      } catch {
+        reject(new Error('Invalid JSON response from upload'));
+      }
+    };
+
+    xhr.send(fd);
+  });
+},
   async listMedia() {
     return request<any[]>(`/media/list`);
   },
@@ -151,4 +194,18 @@ export const api = {
   async getProjectBySrt(srtDocId: string) {
     return request<any>(`/projects/by-srt/${srtDocId}`);
   },
+
+  //Restore 
+  async restoreFolder(id: string) {
+  return request(`/folders/${id}/restore`, { method: 'PATCH' });
+},
+async restoreDocument(id: string) {
+  return request(`/documents/${id}/restore`, { method: 'PATCH' });
+},
+async purgeFolder(id: string) {
+  return request(`/folders/${id}/purge`, { method: 'DELETE' });
+},
+async purgeDocument(id: string) {
+  return request(`/documents/${id}/purge`, { method: 'DELETE' });
+},
 };

@@ -12,6 +12,7 @@ import * as Icons from '../icons';
 import OpenWithModal from './OpenWithModal';
 import ImportFilesModal from '../Import/ImportFilesModal';
 import { api } from '@/services/api';
+import { CreateProjectModal } from '../Projects/CreateProjectModal';
 
 type OpenMode = 'editor' | 'lector' | 'editor-video' | 'editor-video-subs';
 
@@ -75,6 +76,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 const [renameValue, setRenameValue] = useState('');
   const [nameColWidth, setNameColWidth] = useState(200);
   const [formatColWidth, setFormatColWidth] = useState(100);
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
 
   const handleResizeNameMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -172,7 +175,15 @@ const [renameValue, setRenameValue] = useState('');
       
      if (useBackend) {
   if (['mp4', 'wav', 'mov', 'webm', 'ogg', 'mp3', 'm4a'].includes(ext || '')) {
-    await uploadMediaRemote(file);
+    setUploadProgress({ name: file.name, pct: 0 });
+
+await api.uploadMedia(file, (pct) => {
+  setUploadProgress({ name: file.name, pct });
+});
+
+await reloadTree(); // o tu flujo actual
+
+setUploadProgress(null);
   } else {
     await createDocumentRemote({
       name: finalName,
@@ -234,12 +245,47 @@ const [renameValue, setRenameValue] = useState('');
     await reloadTree();
   })();
 };
-  const handleRestoreSelected = () => dispatch({ type: 'RESTORE_ITEMS', payload: { itemIds: Array.from(selectedIds) } });
+  const handleRestoreSelected = () => {
+  const ids = Array.from(state.selectedIds).map((v) => String(v));
+
+  if (!useBackend) {
+    dispatch({ type: 'RESTORE_ITEMS', payload: { itemIds: ids } });
+    return;
+  }
+
+  void (async () => {
+    const folderIds = ids.filter((id) => state.folders.some((f) => f.id === id));
+    const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
+
+    await Promise.all([
+      ...folderIds.map((id) => api.restoreFolder(id)),
+      ...docIds.map((id) => api.restoreDocument(id)),
+    ]);
+
+    await reloadTree();
+  })();
+};
   
   const handlePermanentDeleteConfirmed = () => {
-    dispatch({ type: 'PERMANENTLY_DELETE_ITEMS', payload: { itemIds: Array.from(selectedIds) } });
-  };
+  const ids = Array.from(state.selectedIds).map((v) => String(v));
 
+  if (!useBackend) {
+    dispatch({ type: 'PERMANENTLY_DELETE_ITEMS', payload: { itemIds: ids } });
+    return;
+  }
+
+  void (async () => {
+    const folderIds = ids.filter((id) => state.folders.some((f) => f.id === id));
+    const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
+
+    await Promise.all([
+      ...folderIds.map((id) => api.purgeFolder(id)),
+      ...docIds.map((id) => api.purgeDocument(id)),
+    ]);
+
+    await reloadTree();
+  })();
+};
   const breadcrumbs = React.useMemo(() => {
     if (view === 'trash') {
         return [{ id: null, name: 'Llibreria' }, { id: 'trash', name: 'Paperera' }];
@@ -367,6 +413,13 @@ const selectedItem =
                                  <>
                                     <button onClick={() => setCreateFolderModalOpen(true)} className="px-3 py-2 bg-gray-700 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-gray-600" title="Crear carpeta"><Icons.FolderPlus /></button>
                                     <button onClick={() => setImportModalOpen(true)} className="px-3 py-2 bg-gray-700 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-gray-600" title="Importar fitxer"><Icons.Upload /></button>
+                                    <button
+    onClick={() => setIsCreateProjectOpen(true)}
+    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold"
+    title="Crear proyecto"
+  >
+    Crear proyecto
+  </button>
                                  </>
                             )}
                         </>
@@ -500,9 +553,25 @@ const selectedItem =
     </div>
   </div>
 )}
-
+{uploadProgress && (
+  <div className="fixed bottom-4 left-4 z-[600] bg-gray-900/90 border border-gray-700 text-gray-100 px-4 py-3 rounded-xl shadow-xl">
+    <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Upload</div>
+    <div className="text-sm font-semibold truncate max-w-[320px]">{uploadProgress.name}</div>
+    <div className="mt-2 h-2 w-80 bg-gray-700 rounded overflow-hidden">
+      <div className="h-2 bg-blue-500" style={{ width: `${uploadProgress.pct}%` }} />
+    </div>
+    <div className="mt-1 text-xs text-gray-300">{uploadProgress.pct}%</div>
+  </div>
+)}
+<CreateProjectModal
+  open={isCreateProjectOpen}
+  onClose={() => setIsCreateProjectOpen(false)}
+  onOpenDocument={onOpenDocument}
+/>
       {openWithDocId && <OpenWithModal docId={openWithDocId} onClose={() => setOpenWithDocId(null)} onOpen={handleOpenFromModal} />}
       {isImportModalOpen && <ImportFilesModal isOpen={isImportModalOpen} onClose={() => setImportModalOpen(false)} onFilesSelect={handleFilesUpload} accept=".pdf,.docx,.srt,.mp4,.wav,.mov,.webm,.ogg" title="Importar Fitxers" description="Selecciona o arrossega guions (PDF, DOCX), subtítols (SRT) o vídeo/àudio." />}
+    
+    
     </div>
   );
 };

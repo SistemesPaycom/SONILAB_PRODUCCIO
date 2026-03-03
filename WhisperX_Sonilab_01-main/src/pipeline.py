@@ -120,7 +120,7 @@ def pipeline_generate(
     batch_size: int,
     hf_token: str,
     device_pref: str,
-    offline_mode: bool = True,   # <- default offline
+    offline_mode: bool = False,   # <- default offline
     status_cb=None,
 ):
     offline_mode = bool(offline_mode)
@@ -134,6 +134,7 @@ def pipeline_generate(
     patch_torch_safe_globals()
     configure_local_caches(CACHE_ROOT)
     configure_offline_mode(offline_mode)
+    _status(f"offline_mode={offline_mode} HF_HUB_OFFLINE={os.getenv('HF_HUB_OFFLINE')}")
     report_cache_status(_status)
     apply_hf_token(hf_token)
 
@@ -219,7 +220,11 @@ def pipeline_generate(
         audio_arr = whisperx.load_audio(wav_path)
 
         _status("Transcribiendo (WhisperX)...")
-        result = transcribe_audio(model, audio_arr, batch_size, language)
+        result = transcribe_audio(model, audio_arr, batch_size, language, chunk_size=15)
+        segs = result.get("segments", []) or []
+        if segs:
+            max_dur = max(float(s["end"]) - float(s["start"]) for s in segs)
+            _status(f"VAD segments: {len(segs)} | max_dur={max_dur:.2f}s")
 
 
         lang_for_align = language or result.get("language") or ("es" if profile == "VE" else "ca")
@@ -231,7 +236,9 @@ def pipeline_generate(
             language_code=lang_for_align,
             status_cb=_status,
         )
-
+        if _used_fallback:
+            raise RuntimeError("ALIGN FAILED -> no genero SRT porque los timecodes pueden salir mal. "
+                       "Revisa cache/modelos alignment y recursos.")
         # ------------------------
         # Diarización (opcional)
         # ------------------------

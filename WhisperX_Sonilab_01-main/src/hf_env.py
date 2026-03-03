@@ -66,10 +66,9 @@ def configure_local_caches(cache_root: str) -> None:
 
 
 def configure_offline_mode(enable: bool) -> None:
-    """
-    Fuerza modo sin red. Si falta algún modelo en caché, fallará (correcto).
-    """
     if not enable:
+        for k in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"):
+            os.environ.pop(k, None)
         return
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"

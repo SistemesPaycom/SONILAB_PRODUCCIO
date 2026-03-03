@@ -63,17 +63,19 @@ def load_whisperx_model(model_size: str, device: str, compute_type: str, languag
             return whisperx.load_model(model_size, device, compute_type=compute_type)
 
 
-def transcribe_audio(model, audio_arr, batch_size: int, language: Optional[str]):
-    """
-    Transcribe con WhisperX con compat compat versiones (vad_method).
-    """
+def transcribe_audio(model, audio_arr, batch_size: int, language: Optional[str], chunk_size: int = 15):
     transcribe_kwargs = {"batch_size": int(batch_size)}
     if language:
         transcribe_kwargs["language"] = language
 
+    # chunk_size reduce deriva y problemas con VAD/música
+    transcribe_kwargs["chunk_size"] = int(chunk_size)
+
     try:
         return model.transcribe(audio_arr, vad_method="silero", **transcribe_kwargs)
     except TypeError:
+        # compat: versiones viejas que no aceptan vad_method/chunk_size
+        transcribe_kwargs.pop("chunk_size", None)
         return model.transcribe(audio_arr, **transcribe_kwargs)
 
 
