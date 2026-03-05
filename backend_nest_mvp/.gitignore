@@ -1,5 +1,4 @@
 node_modules
 dist
 .env
-media
 .DS_Store

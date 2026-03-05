@@ -14,14 +14,7 @@ Thumbs.db
 **/.env.local
 
 # Media / storage
-**/media/
-**/uploads/
-**/projects/
-**/*.mp4
-**/*.mov
-**/*.mxf
-**/*.wav
-**/*.mp3
+
 
 # Python
 **/__pycache__/
