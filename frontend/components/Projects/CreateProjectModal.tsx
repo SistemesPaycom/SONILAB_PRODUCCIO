@@ -105,13 +105,39 @@ export const CreateProjectModal: React.FC<{
         const jobId = res?.job?.id;
         const srtDocId = res?.srtDocument?.id;
         const mediaDocId = res?.project?.mediaDocumentId || mediaId;
-
         if (!jobId || !srtDocId) throw new Error('Respuesta inválida al crear proyecto');
+        dispatch({
+          type: 'ADD_TRANSCRIPTION_TASK',
+          payload: {
+            id: jobId,
+            projectId: res.project.id,
+            projectName: name.trim(),
+            srtDocumentId: srtDocId,
+            mediaDocumentId: mediaDocId,
+            status: res.job.status,
+            progress: Number(res.job.progress || 0),
+            error: null,
+            timestamp: new Date().toISOString(),
+          },
+        });
 
         // polling
         for (let i = 0; i < 600; i++) { // hasta ~10 min
           const j = await api.getJob(jobId);
-          setJobProgress(Number(j.progress || 0));
+          const progress = Number(j.progress || 0);
+  setJobProgress(progress);
+           dispatch({
+    type: 'UPDATE_TRANSCRIPTION_TASK',
+    payload: {
+      id: jobId,
+      patch: {
+        status: j.status,
+        progress,
+        error: j.error || null,
+      },
+    },
+  });
+
           if (j.status === 'done') break;
           if (j.status === 'error') throw new Error(j.error || 'Job error');
           await sleep(1000);

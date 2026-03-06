@@ -21,6 +21,7 @@ Thumbs.db
 **/*.pyc
 **/.venv/
 **/venv/
+**/venv311/
 
 # HuggingFace / caches
 **/.cache/

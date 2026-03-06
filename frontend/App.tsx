@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useLibrary, LibraryProvider } from './context/Library/LibraryContext';
-import { ViewType, SortByKey, SortOrder, OpenMode, Layout, EditorStyles, TranslationTask } from './types';
+import { ViewType, SortByKey, SortOrder, OpenMode, Layout, EditorStyles, TranslationTask, TranscriptionTask } from './types';
 import { LibraryView } from './components/Library/LibraryView';
 import { VideoEditorView } from './components/VideoEditor/VideoEditorView';
 import { VideoSubtitlesEditorView } from './components/VideoSubtitlesEditor/VideoSubtitlesEditorView';
@@ -39,55 +39,120 @@ const COLLAPSED_WIDTH = 60;
 
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
 
-const NotificationModal: React.FC<{ tasks: TranslationTask[]; onClear: () => void; onClose: () => void }> = ({ tasks, onClear, onClose }) => {
+const NotificationModal: React.FC<{
+  translationTasks: TranslationTask[];
+  transcriptionTasks: TranscriptionTask[];
+  onClearTranslations: () => void;
+  onClearTranscriptions: () => void;
+  onClose: () => void;
+}> = ({ translationTasks, transcriptionTasks, onClearTranslations, onClearTranscriptions, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[500] p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h4 className="font-bold text-xl text-white flex items-center gap-3">
             <Icons.Bell className="w-6 h-6 text-blue-400" />
-            Tasques de Traducció IA
+            Notificacions
           </h4>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none transition-colors">&times;</button>
         </div>
-        <div className="overflow-y-auto flex-1 p-5 space-y-4">
-          {tasks.length === 0 ? (
-            <div className="py-16 text-center text-gray-500 italic">No hi ha tasques recents al registre.</div>
-          ) : (
-            tasks.map(task => (
-              <div key={task.id} className="p-4 bg-gray-900/60 rounded-xl border border-gray-700/50 hover:border-600 transition-colors">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-800 px-2 py-0.5 rounded">
-                    {new Date(task.timestamp).toLocaleTimeString()}
-                  </span>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm ${
-                    task.status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                    task.status === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse'
-                  }`}>
-                    {task.status === 'processing' ? 'Processant...' : task.status === 'completed' ? 'Finalitzada' : 'Error'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-sm font-bold text-gray-100 flex-1 truncate" title={task.documentName}>{task.documentName}</p>
-                  <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400 bg-gray-800/80 px-3 py-1 rounded-lg border border-gray-700/50">
-                    <span className="uppercase text-blue-400">{task.fromLang}</span>
-                    <span className="text-gray-600">→</span>
-                    <span className="uppercase text-emerald-400">{task.toLang}</span>
+
+        <div className="overflow-y-auto flex-1 p-5 space-y-8">
+          {/* --- Traduccions --- */}
+          <div>
+            <h4 className="font-black text-sm text-gray-200 mb-3">Tasques de Traducció IA</h4>
+
+            {translationTasks.length === 0 ? (
+              <div className="py-6 text-center text-gray-500 italic">No hi ha tasques de traducció.</div>
+            ) : (
+              <div className="space-y-4">
+                {translationTasks.map(task => (
+                  <div key={task.id} className="p-4 bg-gray-900/60 rounded-xl border border-gray-700/50 hover:border-600 transition-colors">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-800 px-2 py-0.5 rounded">
+                        {new Date(task.timestamp).toLocaleTimeString()}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm ${
+                        task.status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                        task.status === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                        'bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse'
+                      }`}>
+                        {task.status === 'processing' ? 'Processant...' : task.status === 'completed' ? 'Finalitzada' : 'Error'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-sm font-bold text-gray-100 flex-1 truncate" title={task.documentName}>
+                        {task.documentName}
+                      </p>
+                      <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400 bg-gray-800/80 px-3 py-1 rounded-lg border border-gray-700/50">
+                        <span className="uppercase text-blue-400">{task.fromLang}</span>
+                        <span className="text-gray-600">→</span>
+                        <span className="uppercase text-emerald-400">{task.toLang}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))
-          )}
+            )}
+          </div>
+
+          {/* --- Transcripcions --- */}
+          <div>
+            <h4 className="font-black text-sm text-gray-200 mb-3">Transcripcions WhisperX</h4>
+
+            {transcriptionTasks.length === 0 ? (
+              <div className="py-6 text-center text-gray-500 italic">No hi ha transcripcions.</div>
+            ) : (
+              <div className="space-y-4">
+                {transcriptionTasks.map(t => (
+                  <div key={t.id} className="p-4 bg-gray-900/60 rounded-xl border border-gray-700/50">
+                    <div className="flex justify-between">
+                      <div className="font-bold text-gray-100 truncate pr-4" title={t.projectName}>{t.projectName}</div>
+                      <div className="text-xs text-gray-300">{t.status}</div>
+                    </div>
+
+                    <div className="h-2 bg-gray-700 rounded overflow-hidden mt-2">
+                      <div className="h-2 bg-blue-500" style={{ width: `${t.progress}%` }} />
+                    </div>
+                    <div className="text-xs text-gray-300 mt-1">{t.progress}%</div>
+
+                    {t.status === 'error' && <div className="text-xs text-red-300 mt-1">{t.error}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+
         <div className="p-5 border-t border-gray-700 bg-gray-900/30 flex gap-4">
-          <button onClick={onClear} disabled={!tasks.some(t => t.status !== 'processing')} className="flex-1 py-3 text-xs font-black text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all uppercase tracking-widest disabled:opacity-30 border border-gray-600">Netejar historial</button>
-          <button onClick={onClose} className="flex-1 py-3 text-xs font-black text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all uppercase tracking-widest border border-blue-500 shadow-lg active:scale-95">Tancar</button>
+          <button
+            onClick={onClearTranslations}
+            disabled={!translationTasks.some(t => t.status !== 'processing')}
+            className="flex-1 py-3 text-xs font-black text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all uppercase tracking-widest disabled:opacity-30 border border-gray-600"
+          >
+            Netejar traduccions
+          </button>
+
+          <button
+            onClick={onClearTranscriptions}
+            disabled={!transcriptionTasks.some(t => t.status !== 'queued' && t.status !== 'processing')}
+            className="flex-1 py-3 text-xs font-black text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all uppercase tracking-widest disabled:opacity-30 border border-gray-600"
+          >
+            Netejar transcripcions
+          </button>
+
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 text-xs font-black text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all uppercase tracking-widest border border-blue-500 shadow-lg active:scale-95"
+          >
+            Tancar
+          </button>
         </div>
       </div>
     </div>
   );
 };
-
 const MainAppContent: React.FC = () => {
   const { state, dispatch, useBackend } = useLibrary();
   
@@ -95,7 +160,7 @@ const MainAppContent: React.FC = () => {
   const [openMode, setOpenMode] = useState<OpenMode | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [activeLang, setActiveLang] = useState<string>('');
-
+const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
   const [isLibraryCollapsed, setIsLibraryCollapsed] = useState(false);
   const [libraryWidth, setLibraryWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_WIDTH, 420);
   const [layout, setLayout] = useState<Layout>('cols');
@@ -351,6 +416,8 @@ const MainAppContent: React.FC = () => {
             setIsCollapsed={setIsLibraryCollapsed} 
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenNotifications={() => setIsNotificationsOpen(true)}
+            page={page}
+  onChangePage={(p) => { setPage(p); setOpenDocId(null); setOpenMode(null); setIsEditing(false); }}
         />
         {!isLibraryCollapsed && (
             <div 
@@ -372,11 +439,13 @@ const MainAppContent: React.FC = () => {
       )}
 
       {isNotificationsOpen && (
-        <NotificationModal 
-            tasks={state.translationTasks} 
-            onClear={() => dispatch({ type: 'CLEAR_COMPLETED_TASKS' })} 
-            onClose={() => setIsNotificationsOpen(false)} 
-        />
+        <NotificationModal
+  translationTasks={state.translationTasks}
+  transcriptionTasks={state.transcriptionTasks}
+  onClearTranslations={() => dispatch({ type: 'CLEAR_COMPLETED_TASKS' })}
+  onClearTranscriptions={() => dispatch({ type: 'CLEAR_COMPLETED_TRANSCRIPTION_TASKS' })}
+  onClose={() => setIsNotificationsOpen(false)}
+/>
       )}
 
       {history.isDirty && (

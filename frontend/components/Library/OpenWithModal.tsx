@@ -149,30 +149,6 @@ const handleConvertToSsrtlsf = () => {
                   </div>
                 </button>
               </li>
-              <li>
-                <button
-                  onClick={handleConvertToSsrtlsf}
-                  className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-emerald-600/20 hover:border-emerald-500/50 border border-transparent transition-all text-left"
-                >
-                  <Icons.Hash className="w-8 h-8 text-emerald-400 flex-shrink-0" />
-                  <div>
-                    <p className="font-bold text-gray-100 text-sm">Convertir a SSRTLSF (Taula)</p>
-                    <p className="text-xs text-gray-400">Llista plana de frases per a adaptació.</p>
-                  </div>
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={handleConvertToSlsf}
-                  className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-orange-600/20 hover:border-orange-500/50 border border-transparent transition-all text-left"
-                >
-                  <Icons.ScriptAdjustIcon className="w-8 h-8 text-orange-400 flex-shrink-0" />
-                  <div>
-                    <p className="font-bold text-gray-100 text-sm">Convertir a SLSF (Guió)</p>
-                    <p className="text-xs text-gray-400">Crea automàticament un guió amb takes.</p>
-                  </div>
-                </button>
-              </li>
             </>
           ) : (
             <>

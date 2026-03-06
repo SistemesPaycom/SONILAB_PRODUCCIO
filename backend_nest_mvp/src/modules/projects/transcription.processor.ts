@@ -38,7 +38,7 @@ export class TranscriptionProcessor {
   @Process('transcribe')
   async handle(job: BullJob<TranscribeJobPayload>) {
     const { ownerId, projectId, jobId } = job.data;
-
+    console.log('[TRANSCRIBE] handle start', job.id, job.data);
     try {
       await this.projects.updateJob(jobId, { status: 'processing', progress: 5 } as any);
       await this.projects.updateProject(projectId, { status: 'processing', lastError: null } as any);

@@ -125,3 +125,15 @@ export type Id = string | number;
 export type TimelineViewMode = 'waveform' | 'segments' | 'both' | 'hidden';
 
 export type OpenMode = 'editor' | 'lector' | 'editor-video' | 'editor-video-subs' | 'editor-ssrtlsf' | 'editor-srt-standalone';
+
+export interface TranscriptionTask {
+  id: string;                 // jobId
+  projectId: string;
+  projectName: string;
+  srtDocumentId: string;
+  mediaDocumentId: string;
+  status: 'queued' | 'processing' | 'done' | 'error';
+  progress: number;           // 0..100
+  error?: string | null;
+  timestamp: string;
+}

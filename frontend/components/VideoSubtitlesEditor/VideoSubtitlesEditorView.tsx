@@ -77,7 +77,9 @@ export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> =
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-
+const [autosave, setAutosave] = useLocalStorage<boolean>(LOCAL_STORAGE_KEYS.AUTOSAVE_SRT, false);
+const autosaveTimer = useRef<any>(null);
+const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '');
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiMode, setAiMode] = useState<'whisper' | 'translate' | 'revision'>('whisper');
@@ -160,7 +162,24 @@ const handleSyncMedia = useCallback((doc: Document) => {
       }
       dispatch({ type: 'CLEAR_SYNC_REQUEST' });
   }, [syncRequest, dispatch, state.documents, handleSyncMedia, handleSyncSubtitles]);
+useEffect(() => {
+  if (!autosave || !useBackend || !isEditing) return;
 
+  const srt = serializeSrt(subsHistory.present);
+  if (srt === lastSavedRef.current) return;
+
+  if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+  autosaveTimer.current = setTimeout(() => {
+    void api.updateSrt(currentDoc.id, srt).then(() => {
+      lastSavedRef.current = srt;
+      dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: '_unassigned', content: srt, csvContent: '' }});
+    }).catch(()=>{});
+  }, 1500);
+
+  return () => {
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+  };
+}, [autosave, useBackend, isEditing, subsHistory.present, currentDoc.id, dispatch]);
   const takeRanges = useMemo(() => {
     return buildTakeRangesFromScript({
       content: currentContent || '',
@@ -219,7 +238,8 @@ const handleSyncMedia = useCallback((doc: Document) => {
     setActiveSegmentId(numericId);
     if (syncSubsEnabled && videoRef.current) {
       const segment = linkedSegments.find((s) => s.id === numericId);
-      if (segment) onSeek(segment.startTime);
+      if (segment) onSeek(Math.max(0, segment.startTime - 0.05));
+
     }
   }, [linkedSegments, syncSubsEnabled, onSeek]);
 
@@ -465,7 +485,7 @@ const handleSave = useCallback(() => {
       <div className="flex-shrink-0 bg-[#1e293b] border-y border-gray-700/50">
         <VideoSubtitlesToolbar
           onOpenSync={() => setIsSyncModalOpen(true)} onExportSrt={handleExportSrt} isPlaying={isPlaying} onTogglePlay={onTogglePlay} onJumpSegment={onJumpSegment} onJumpTime={onJumpTime} currentTime={currentTime} duration={duration} onSeek={onSeek} playbackRate={playbackRate} onChangeRate={onChangeRate} isScriptLinked={isScriptLinked} onToggleScriptLink={() => setIsScriptLinked((p) => !p)} isEditable={isEditing} autoScrollWave={autoScrollWave} onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)} scrollModeWave={scrollModeWave} onScrollModeChangeWave={setScrollModeWave} autoScrollSubs={autoScrollSubs} onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
-          onUndo={() => subsHistory.undo()} onRedo={() => subsHistory.redo()} canUndo={subsHistory.canUndo} canRedo={subsHistory.canRedo}
+          onUndo={() => subsHistory.undo()} onRedo={() => subsHistory.redo()} canUndo={subsHistory.canUndo} canRedo={subsHistory.canRedo} onSave={handleSave}
         />
       </div>
       <div ref={bottomContainerRef} className="flex-1 flex min-h-0 overflow-hidden">

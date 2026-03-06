@@ -1,7 +1,7 @@
 import { env } from "process";
 
 // frontend/services/api.ts
-const API_URL = ('http://localhost:8000').replace(/\/$/, '');
+const API_URL = (process.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const TOKEN_KEY = 'sonilab_token';
 
 export function getToken(): string | null {

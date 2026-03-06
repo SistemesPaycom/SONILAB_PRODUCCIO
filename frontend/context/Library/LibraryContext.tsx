@@ -1,4 +1,5 @@
 // context/Library/LibraryContext.tsx
+import { LOCAL_STORAGE_KEYS } from '@/constants';
 import React, {
   createContext,
   useContext,
@@ -6,7 +7,7 @@ import React, {
   useEffect,
   useMemo,
 } from 'react';
-import type { Folder, Document, TranslationTask, TakeStatus, CharacterNote } from '../../types';
+import type { Folder, Document, TranslationTask, TranscriptionTask, TakeStatus, CharacterNote } from '../../types';
 import { ViewType, SortByKey, SortOrder, LibraryItem } from '../../types';
 import { indexCharacters } from '../../utils/LectorDeGuions/indexers';
 import { findTakesWithRanges } from '../../utils/LectorDeGuions/takes';
@@ -21,6 +22,7 @@ interface LibraryState {
   selectedIds: Set<string>;
   view: ViewType;
   sortBy: SortByKey;
+  transcriptionTasks: TranscriptionTask[];
   sortOrder: SortOrder;
   isLoading: boolean;
   translationTasks: TranslationTask[];
@@ -51,8 +53,19 @@ type Action =
   | { type: 'UPDATE_TRANSLATION_TASK_STATUS'; payload: { id: string; status: 'completed' | 'error' } }
   | { type: 'CLEAR_COMPLETED_TASKS' }
   | { type: 'TRIGGER_SYNC_REQUEST'; payload: { docId: string; type: 'media' | 'subtitles' } }
-  | { type: 'CLEAR_SYNC_REQUEST' };
-
+  | { type: 'CLEAR_SYNC_REQUEST' }
+  | { type: 'ADD_TRANSCRIPTION_TASK'; payload: TranscriptionTask }
+  | { type: 'UPDATE_TRANSCRIPTION_TASK'; payload: { id: string; patch: Partial<TranscriptionTask> } }
+  | { type: 'CLEAR_TRANSCRIPTION_TASKS_DONE' };
+function loadLocal<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 const libraryReducer = (state: LibraryState, action: Action): LibraryState => {
   switch (action.type) {
     case 'SET_INITIAL_STATE':
@@ -310,6 +323,19 @@ const libraryReducer = (state: LibraryState, action: Action): LibraryState => {
         documents: state.documents.map(doc => (task && doc.id === task.documentId) ? { ...doc, isLocked: false } : doc)
       };
     }
+    case 'ADD_TRANSCRIPTION_TASK':
+  return { ...state, transcriptionTasks: [action.payload, ...state.transcriptionTasks] };
+
+case 'UPDATE_TRANSCRIPTION_TASK':
+  return {
+    ...state,
+    transcriptionTasks: state.transcriptionTasks.map(t =>
+      t.id === action.payload.id ? { ...t, ...action.payload.patch } : t
+    ),
+  };
+
+case 'CLEAR_TRANSCRIPTION_TASKS_DONE':
+  return { ...state, transcriptionTasks: state.transcriptionTasks.filter(t => t.status === 'queued' || t.status === 'processing') };
 
     case 'CLEAR_COMPLETED_TASKS':
       return { ...state, translationTasks: state.translationTasks.filter(task => task.status === 'processing') };
@@ -334,7 +360,8 @@ const initialState: LibraryState = {
   sortBy: SortByKey.Name,
   sortOrder: SortOrder.Asc,
   isLoading: true,
-  translationTasks: [],
+  translationTasks: loadLocal(LOCAL_STORAGE_KEYS.TASKS_TRANSLATION, []),
+  transcriptionTasks: loadLocal(LOCAL_STORAGE_KEYS.TASKS_TRANSCRIPTION, []),
   syncRequest: null,
 };
 
@@ -431,7 +458,11 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
       },
     });
   };
-
+useEffect(() => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LOCAL_STORAGE_KEYS.TASKS_TRANSLATION, JSON.stringify(state.translationTasks));
+  localStorage.setItem(LOCAL_STORAGE_KEYS.TASKS_TRANSCRIPTION, JSON.stringify(state.transcriptionTasks));
+}, [state.translationTasks, state.transcriptionTasks]);
   useEffect(() => {
     if (!useBackend) {
       // modo local (tu lógica actual)
@@ -466,10 +497,11 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
         folders: state.folders,
         documents: state.documents,
         translationTasks: state.translationTasks,
+        transcriptionTasks: state.transcriptionTasks,
       };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToStore));
     }
-  }, [state.folders, state.documents, state.translationTasks, state.isLoading, useBackend]);
+  }, [state.folders, state.documents, state.translationTasks, state.isLoading, state.trascriptionTask, useBackend]);
 
   const currentItems = useMemo(() => {
     const { folders, documents, currentFolderId, view, sortBy, sortOrder } = state;
@@ -532,6 +564,51 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
     await api.uploadMedia(file);
     await reloadTree();
   };
+
+useEffect(() => {
+  if (!useBackend) return;
+
+  let cancelled = false;
+  let timer: any = null;
+
+  const loop = async () => {
+    const active = state.transcriptionTasks.filter(t => t.status === 'queued' || t.status === 'processing');
+    if (active.length === 0 || cancelled) return;
+
+    // Intervalo adaptativo: cuantos más jobs, menos agresivo
+    let nextDelay = Math.min(15000, 2500 + active.length * 1500);
+
+    try {
+      for (const t of active) {
+        const j = await api.getJob(t.id);
+        if (cancelled) return;
+
+        dispatch({
+          type: 'UPDATE_TRANSCRIPTION_TASK',
+          payload: {
+            id: t.id,
+            patch: {
+              status: j.status,
+              progress: Number(j.progress || 0),
+              error: j.error || null,
+            },
+          },
+        });
+      }
+    } catch (e: any) {
+      // si nos pegamos contra throttling, esperamos más
+      if (String(e?.message || '').includes('429')) nextDelay = 15000;
+    }
+
+    timer = setTimeout(loop, nextDelay);
+  };
+
+  timer = setTimeout(loop, 2000);
+  return () => {
+    cancelled = true;
+    if (timer) clearTimeout(timer);
+  };
+}, [useBackend, state.transcriptionTasks, dispatch]);
 
   const getMediaFile = (docId: string) => mediaRegistry[docId] || null;
 

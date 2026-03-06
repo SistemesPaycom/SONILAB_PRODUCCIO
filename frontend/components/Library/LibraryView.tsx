@@ -1,7 +1,7 @@
 // components/Library/LibraryView.tsx
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useLibrary } from '../../context/Library/LibraryContext';
-import { ViewType, SortByKey, SortOrder, LibraryItem, EditorStyles, TranslationTask } from '../../types';
+import { ViewType, SortByKey, SortOrder, LibraryItem, EditorStyles, TranslationTask, TranscriptionTask } from '../../types';
 import { importPdfFile } from '../../utils/Import/pdfImporter';
 import { importDocxFile } from '../../utils/Import/docxImporter';
 import { ImportOptions } from '../../utils/Import/importShared';
@@ -63,7 +63,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenNotifications,
 }) => {
   const { state, dispatch, currentItems, currentFolder,useBackend, createFolderRemote, createDocumentRemote, uploadMediaRemote, reloadTree } = useLibrary();
-  const { view, sortBy, sortOrder, selectedIds, folders, translationTasks } = state;
+ const { view, sortBy, sortOrder, selectedIds, folders, translationTasks, transcriptionTasks } = state;
 
   const [isCreateFolderModalOpen, setCreateFolderModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -74,10 +74,37 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [showPermanentDeleteConfirm, setShowPermanentDeleteConfirm] = useState(false);
   const [isRenameModalOpen, setRenameModalOpen] = useState(false);
 const [renameValue, setRenameValue] = useState('');
+const [page, setPage] = useState<'library'|'media'|'projects'>('library');
+const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [nameColWidth, setNameColWidth] = useState(200);
   const [formatColWidth, setFormatColWidth] = useState(100);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+
+  const goLibrary = () => {
+  dispatch({ type: 'SET_VIEW', payload: 'library' });
+  setIsCollapsed(false);
+  setPage('library');
+};
+
+const goMedia = () => {
+  dispatch({ type: 'SET_VIEW', payload: 'library' });
+  setIsCollapsed(false);
+  setPage('media');
+};
+
+const goProjects = () => {
+  dispatch({ type: 'SET_VIEW', payload: 'library' });
+  setIsCollapsed(false);
+  setPage('projects');
+};
+
+const goTrash = () => {
+  dispatch({ type: 'SET_VIEW', payload: 'trash' });
+  setIsCollapsed(false);
+  // page lo dejamos igual o lo puedes resetear si quieres:
+  // setPage('library');
+};
 
   const handleResizeNameMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -336,7 +363,15 @@ setUploadProgress(null);
     setOpenWithDocId(null);
   };
 
-  const handlePreviewDocument = useCallback((docId: string) => { onOpenDocument(docId, 'editor', false); }, [onOpenDocument]);
+ const handlePreviewDocument = useCallback((docId: string) => {
+  const doc = state.documents.find(d => d.id === docId);
+  const isSrt = doc && ((doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt'));
+  if (isSrt) {
+    onOpenDocument(docId, 'editor-srt-standalone' as any, true);
+    return;
+  }
+  onOpenDocument(docId, 'editor', false);
+}, [onOpenDocument, state.documents]);
 
   const isAllSelected = currentItems.length > 0 && selectedIds.size === currentItems.length;
   const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null;
@@ -359,20 +394,78 @@ const selectedItem =
   );
 
   const gridColumns = `32px ${nameColWidth}px ${formatColWidth}px 140px 40px`;
-  const activeTasksCount = translationTasks.filter(t => t.status === 'processing').length;
+ const activeTasksCount =
+  translationTasks.filter(t => t.status === 'processing').length +
+  state.transcriptionTasks.filter(t => t.status === 'queued' || t.status === 'processing').length;
+const itemsToRender = currentItems.filter((item) => {
+  // Si estás en Trash, no filtramos por página (o podrías filtrar también si quieres)
+  if (view === 'trash') return true;
 
+  if (page === 'library') return true;
+
+  if (page === 'media') {
+    return (
+      item.type === 'document' &&
+      MEDIA_EXTS.includes(((item as any).sourceType || '').toLowerCase())
+    );
+  }
+
+  if (page === 'projects') {
+    const st = ((item as any).sourceType || '').toLowerCase();
+    return item.type === 'document' && (st === 'srt' || item.name.toLowerCase().endsWith('.srt'));
+  }
+
+  return true;
+});
   return (
     <div className={`bg-[#111827] rounded-none shadow-sm h-full flex flex-col overflow-hidden relative ${isCollapsed ? 'p-1.5' : 'p-4 sm:p-6'}`}>
       <div className="flex-1 flex flex-col min-h-0">
         <div className={`flex items-start mb-4 ${isCollapsed ? 'flex-col items-center gap-3' : 'sm:flex-row justify-between items-start sm:items-center gap-4'}`}>
-          <div className={`flex items-center ${isCollapsed ? 'flex-col gap-3' : 'gap-2'}`}>
-            <button onClick={handleLibraryClick} className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${view === 'library' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'} ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`} title="Llibreria">
-              <Icons.Library className={isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} /><span className={isCollapsed ? 'hidden' : 'inline'}>Llibreria</span>
-            </button>
-            <button onClick={handleTrashClick} className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${view === 'trash' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'} ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`} title="Paperera">
-              <Icons.Trash className={isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} /><span className={isCollapsed ? 'hidden' : 'inline'}>Paperera</span>
-            </button>
-          </div>
+        <div className={`flex items-center ${isCollapsed ? 'flex-col gap-3' : 'gap-2'}`}>
+  <button
+    onClick={goLibrary}
+    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
+      ${(view === 'library' && page === 'library') ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
+    title="Llibreria"
+  >
+    <Icons.Library className={isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} />
+    <span className={isCollapsed ? 'hidden' : 'inline'}>Llibreria</span>
+  </button>
+
+  <button
+    onClick={goMedia}
+    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
+      ${(view === 'library' && page === 'media') ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
+    title="Media"
+  >
+    <span className={isCollapsed ? '' : ''}>🎞️</span>
+    <span className={isCollapsed ? 'hidden' : 'inline'}>Media</span>
+  </button>
+
+  <button
+    onClick={goProjects}
+    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
+      ${(view === 'library' && page === 'projects') ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
+    title="Proyectos"
+  >
+    <span>📌</span>
+    <span className={isCollapsed ? 'hidden' : 'inline'}>Proyectos</span>
+  </button>
+
+  <button
+    onClick={goTrash}
+    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
+      ${view === 'trash' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
+    title="Paperera"
+  >
+    <Icons.Trash className={isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} />
+    <span className={isCollapsed ? 'hidden' : 'inline'}>Paperera</span>
+  </button>
+</div>
 
           <div className="flex items-center gap-2">
             {!isCollapsed && (
@@ -488,9 +581,14 @@ const selectedItem =
               </header>
 
               <div className="divide-y divide-gray-800/30 mx-2">
-                {currentItems.length > 0 ? (
-                  currentItems.map((item) => (
-                    <FileItem key={item.id} item={item} isSelected={selectedIds.has(item.id)} isDragging={isDragging} setIsDragging={setIsDragging} dropTargetId={dropTargetId} setDropTargetId={setDropTargetId} onPreviewDocument={handlePreviewDocument} onDoubleClickOpen={setOpenWithDocId} gridColumns={gridColumns} />
+                {itemsToRender.length > 0 ? (
+                  itemsToRender.map((item) => (
+                    <FileItem key={item.id} item={item} isSelected={selectedIds.has(item.id)} isDragging={isDragging} setIsDragging={setIsDragging} dropTargetId={dropTargetId} setDropTargetId={setDropTargetId} onPreviewDocument={handlePreviewDocument} onDoubleClickOpen={(docId) => {
+    const doc = state.documents.find(d => d.id === docId);
+    const isSrt = doc && ((doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt'));
+    if (isSrt) onOpenDocument(docId, 'editor-srt-standalone' as any, true);
+    else setOpenWithDocId(docId);
+  }} gridColumns={gridColumns} />
                   ))
                 ) : (
                   renderEmptyState()

@@ -22,12 +22,14 @@ interface VideoSubtitlesToolbarProps {
     isScriptLinked: boolean;
     onToggleScriptLink: () => void;
     isEditable?: boolean;
-    
+    onSave?: () => void;
     // Seguiment Ona
     autoScrollWave: boolean;
     onToggleAutoScrollWave: () => void;
     scrollModeWave: 'stationary' | 'page';
     onScrollModeChangeWave: (mode: 'stationary' | 'page') => void;
+    autosaveEnabled?: boolean;
+    onToggleAutosave?: () => void;
     
     // Seguiment Subtítols
     autoScrollSubs: boolean;
@@ -228,7 +230,29 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
                         <span className="text-[11px] font-mono font-bold text-blue-400 w-9 text-center">{props.playbackRate.toFixed(2)}x</span>
                         <ControlButton onClick={() => props.onChangeRate(0.1)} title="Augmentar velocitat" className="!p-1"><PlusIcon className="w-3 h-3" /></ControlButton>
                     </div>
-
+                    {props.onToggleAutosave && (
+  <button
+    onClick={props.onToggleAutosave}
+    className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border ${
+      props.autosaveEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-gray-800 text-gray-400 border-gray-700'
+    }`}
+    title="Autosave"
+  >
+    AUTO
+  </button>
+)}
+                    {props.onSave && (
+  <button
+    onClick={props.onSave}
+    className="p-2 text-blue-300 hover:text-blue-200 transition-colors"
+    title="Guardar (Ctrl+S)"
+  >
+    {/* icono simple */}
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
+    </svg>
+  </button>
+)}
                     <button 
                         onClick={props.onExportSrt}
                         className="p-2 text-emerald-400 hover:text-emerald-300 transition-colors"

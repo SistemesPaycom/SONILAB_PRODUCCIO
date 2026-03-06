@@ -97,6 +97,16 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const [zoomH, setZoomH] = useState(MIN_ZOOM_INICI_H);
   const [zoomV, setZoomV] = useState(MIN_ZOOM_INICI_V);
 
+  const pendingUpdateRef = useRef<{ id: Id; s: number; e: number } | null>(null);
+const rafUpdateRef = useRef<number | null>(null);
+
+const flushPendingUpdate = useCallback(() => {
+  rafUpdateRef.current = null;
+  const p = pendingUpdateRef.current;
+  if (!p) return;
+  onSegmentUpdate?.(p.id, p.s, p.e);
+}, [onSegmentUpdate]);
+
   // viewport
   const currentViewportStartRef = useRef<number>(0);
   const [manualScrollOffset, setManualScrollOffset] = useState<number>(0);
@@ -328,11 +338,11 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       };
 
       drawRange(0, width, '#4b5563');
-      segments.forEach((seg) => {
+    /*   segments.forEach((seg) => {
         const x1 = timeToX(seg.startTime, viewportStart, width, visDur);
         const x2 = timeToX(seg.endTime, viewportStart, width, visDur);
         if (x2 > 0 && x1 < width) drawRange(Math.max(0, x1), Math.min(width, x2), '#4f46e5');
-      });
+      }); */
 
       if (viewMode !== 'hidden') {
         const margin = 5;
@@ -500,8 +510,11 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         nE = Math.min(duration, Math.max(dragState.originalStart + 0.2, dragState.originalEnd + timeDelta));
       }
 
-      onSegmentUpdate?.(dragState.segmentId, nS, nE);
-      return;
+     pendingUpdateRef.current = { id: dragState.segmentId, s: nS, e: nE };
+if (rafUpdateRef.current == null) {
+  rafUpdateRef.current = requestAnimationFrame(flushPendingUpdate);
+}
+return;
     }
 
     const target = getHitTarget(x, y, rect.width, rect.height, timeAtMouse);

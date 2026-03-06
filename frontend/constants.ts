@@ -9,6 +9,9 @@ export const LOCAL_STORAGE_KEYS = {
   MAX_LINES_SUBS: 'slsf_max_lines_subs',
   SUB_GRID_OPACITY: 'slsf_sub_grid_opacity',
   WAVEFORM_HOLD_MS: 'slsf_waveform_hold_ms',
+  AUTOSAVE_SRT: 'slsf_autosave_srt',
+   TASKS_TRANSLATION: 'slsf_tasks_translation',
+  TASKS_TRANSCRIPTION: 'slsf_tasks_transcription',
 };
 
 export const A4_WIDTH_PX = 794;
