@@ -5,6 +5,16 @@ import type { Document, OpenMode } from '../../types';
 
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
 
+const MODEL_LABELS: Record<string, string> = {
+  tiny: 'tiny — muy rápido, menor precisión',
+  base: 'base — rápido',
+  small: 'small — equilibrado',
+  medium: 'medium — buena calidad',
+  'large-v2': 'large-v2 — alta calidad',
+  'large-v3': 'large-v3 — mejor calidad',
+  'large-v3-turbo': 'large-v3-turbo — rápido y alta calidad',
+};
+
 function isMediaDoc(d: Document) {
   const st = (d.sourceType || '').toLowerCase();
   return MEDIA_EXTS.includes(st);
@@ -105,13 +115,39 @@ export const CreateProjectModal: React.FC<{
         const jobId = res?.job?.id;
         const srtDocId = res?.srtDocument?.id;
         const mediaDocId = res?.project?.mediaDocumentId || mediaId;
-
         if (!jobId || !srtDocId) throw new Error('Respuesta inválida al crear proyecto');
+        dispatch({
+          type: 'ADD_TRANSCRIPTION_TASK',
+          payload: {
+            id: jobId,
+            projectId: res.project.id,
+            projectName: name.trim(),
+            srtDocumentId: srtDocId,
+            mediaDocumentId: mediaDocId,
+            status: res.job.status,
+            progress: Number(res.job.progress || 0),
+            error: null,
+            timestamp: new Date().toISOString(),
+          },
+        });
 
         // polling
         for (let i = 0; i < 600; i++) { // hasta ~10 min
           const j = await api.getJob(jobId);
-          setJobProgress(Number(j.progress || 0));
+          const progress = Number(j.progress || 0);
+  setJobProgress(progress);
+           dispatch({
+    type: 'UPDATE_TRANSCRIPTION_TASK',
+    payload: {
+      id: jobId,
+      patch: {
+        status: j.status,
+        progress,
+        error: j.error || null,
+      },
+    },
+  });
+
           if (j.status === 'done') break;
           if (j.status === 'error') throw new Error(j.error || 'Job error');
           await sleep(1000);
@@ -269,8 +305,8 @@ export const CreateProjectModal: React.FC<{
                 <div className="text-xs text-gray-400 mb-1">Modelo</div>
                 <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
                   value={model} onChange={(e) => setModel(e.target.value)}>
-                  {(options?.models || ['tiny','base','small','medium','large-v2']).map((m: string) => (
-                    <option key={m} value={m}>{m}</option>
+                  {(options?.models || ['tiny','base','small','medium','large-v2','large-v3','large-v3-turbo']).map((m: string) => (
+                    <option key={m} value={m}>{MODEL_LABELS[m] ?? m}</option>
                   ))}
                 </select>
               </div>

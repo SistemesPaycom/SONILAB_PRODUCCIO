@@ -4,6 +4,7 @@ import { OverlayConfig } from '../../types';
 import SegmentItem from './SegmentItem';
 import { EyeIcon, EyeOffIcon, EarIcon, Languages } from '../icons';
 import { LinkIcon, LinkOffIcon } from '../VideoEditor/PlayerIcons';
+import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
 
 interface SubtitlesEditorProps {
   title: string;
@@ -16,6 +17,8 @@ interface SubtitlesEditorProps {
   onSegmentFocus: (id: number) => void;
   onSplit?: (id: number) => void;
   onMerge?: (id: number) => void;
+  onInsert?: (id: number, position: 'before' | 'after') => void;
+  onDelete?: (id: number) => void;
   syncEnabled: boolean;
   onSyncChange: (enabled: boolean) => void;
   overlayConfig: OverlayConfig;
@@ -25,7 +28,7 @@ interface SubtitlesEditorProps {
   onOpenAIOperations: (mode: 'whisper' | 'translate' | 'revision') => void;
 }
 
-const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
+const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   title,
   segments,
   activeId,
@@ -36,6 +39,8 @@ const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
   onSegmentFocus,
   onSplit,
   onMerge,
+  onInsert,
+  onDelete,
   syncEnabled,
   onSyncChange,
   overlayConfig,
@@ -44,6 +49,7 @@ const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
   autoScroll,
   onOpenAIOperations
 }) => {
+  const { caretHintRef } = useSubtitleEditor();
   const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
 
   useEffect(() => {
@@ -69,7 +75,7 @@ const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
     if (direction === 'next' && idx < segments.length - 1) {
         const nextId = segments[idx + 1].id as number;
         // Utilitzem el sistema de hints global per garantir consistència
-        window.__SEG_CARET_HINT__ = {
+        caretHintRef.current = {
             segmentId: nextId,
             target: 'first',
             where: 'end',
@@ -79,7 +85,7 @@ const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
         onSegmentClick(nextId);
     } else if (direction === 'prev' && idx > 0) {
         const prevId = segments[idx - 1].id as number;
-        window.__SEG_CARET_HINT__ = {
+        caretHintRef.current = {
             segmentId: prevId,
             target: 'lastNonEmpty',
             where: 'end',
@@ -180,7 +186,6 @@ const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
                 key={segment.id}
                 segment={segment}
                 isActive={activeId === segment.id}
-                // FIX: Used 'isEditable' prop instead of undefined 'isEditing'
                 isEditable={isEditable}
                 onChange={onSegmentChange}
                 onBlur={onSegmentBlur}
@@ -188,6 +193,9 @@ const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
                 onFocus={onSegmentFocus}
                 onSplit={onSplit}
                 onModifyMerge={idx < segments.length - 1 ? onMerge : undefined}
+                onInsertBefore={onInsert ? (id) => onInsert(id, 'before') : undefined}
+                onInsertAfter={onInsert ? (id) => onInsert(id, 'after') : undefined}
+                onDelete={segments.length > 1 ? onDelete : undefined}
                 generalConfig={generalConfig}
                 autoScroll={autoScroll}
                 onNavigate={(dir) => handleNavigate(dir, segment.id)}
@@ -202,5 +210,10 @@ const SubtitlesEditor: React.FC<SubtitlesEditorProps> = ({
     </div>
   );
 };
+
+// SubtitlesEditor requiere SubtitleEditorProvider en un component pare (VideoSubtitlesEditorView / VideoSrtStandaloneEditorView).
+const SubtitlesEditor: React.FC<SubtitlesEditorProps> = (props) => (
+  <SubtitlesEditorInner {...props} />
+);
 
 export default SubtitlesEditor;
