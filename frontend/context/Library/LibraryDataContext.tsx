@@ -300,7 +300,7 @@ const LibraryDataContext = createContext<LibraryDataContextValue>({
 export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(libraryDataReducer, initialState);
 
-  const useBackend = process.env.VITE_USE_BACKEND === '1';
+  const useBackend = import.meta.env.VITE_USE_BACKEND === '1';
 
   const normalizeFolder = (f: any): Folder => ({
     id: f.id || f._id,
@@ -375,7 +375,8 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     reloadTree().catch(() => {
       dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
     });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useBackend]);
 
   // Persist core data to localStorage (local mode only)
   useEffect(() => {

@@ -61,7 +61,7 @@ export const TranscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
     transcriptionTasks: loadLocal<TranscriptionTask[]>(LOCAL_STORAGE_KEYS.TASKS_TRANSCRIPTION, []),
   });
 
-  const useBackend = process.env.VITE_USE_BACKEND === '1';
+  const useBackend = import.meta.env.VITE_USE_BACKEND === '1';
 
   // Persist to localStorage
   useEffect(() => {
