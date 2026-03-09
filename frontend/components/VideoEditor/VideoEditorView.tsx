@@ -12,6 +12,7 @@ import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges
 import { useLibrary } from '../../context/Library/LibraryContext';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
+import { useVerticalPanelResize } from '../../hooks/usePanelResize';
 
 type EditorView = 'script' | 'csv';
 
@@ -186,38 +187,8 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
     }
   };
 
-  const [topPanelHeight, setTopPanelHeight] = useState(350);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isResizingRef = useRef(false);
-  const startYRef = useRef<number>(0);
-  const startHeightRef = useRef<number>(0);
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizingRef.current || !containerRef.current) return;
-    const deltaY = e.clientY - startYRef.current;
-    const containerHeight = containerRef.current.offsetHeight;
-    const toolbarHeight = 52;
-    setTopPanelHeight(Math.max(MIN_PANEL_HEIGHT, Math.min(containerHeight - MIN_PANEL_HEIGHT - toolbarHeight, startHeightRef.current + deltaY)));
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    isResizingRef.current = false;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = 'none';
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-  }, [handleMouseMove]);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    startYRef.current = e.clientY;
-    startHeightRef.current = topPanelHeight;
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [topPanelHeight, handleMouseMove, handleMouseUp]);
+  const { height: topPanelHeight, handleMouseDown } = useVerticalPanelResize(350, MIN_PANEL_HEIGHT);
 
   const playerProps = {
     isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments: [], activeSegment: null,

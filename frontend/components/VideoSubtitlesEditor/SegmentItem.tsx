@@ -1,33 +1,11 @@
 import React, { useRef, useLayoutEffect, useEffect, useMemo, useCallback } from 'react';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
-import { secondsToSrtTime } from '../../utils/SubtitlesEditor/srtParser';
 import * as TextMetrics from '../../utils/SubtitlesEditor/textMetrics';
 import * as RichText from '../../utils/SubtitlesEditor/richTextHelpers';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
-
-declare global {
-  interface Window {
-    __SEG_CARET_HINT__?:
-      | {
-          segmentId?: number; // per aplicar el hint només al segment correcte
-          where: 'start' | 'end';
-          target: 'first' | 'lastNonEmpty' | number;
-          ts: number;
-          retries?: number; // per sobreviure a 2-3 re-renders
-        }
-      | null;
-
-    __SEG_SPLIT_PAYLOAD__?:
-      | {
-          id: number;
-          leftText: string;
-          rightText: string;
-          splitRatio: number;
-        }
-      | null;
-  }
-}
+import { TimecodeInput } from './TimecodeInput';
+import { useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
 
 interface SegmentItemProps {
   segment: Segment;
@@ -39,6 +17,9 @@ interface SegmentItemProps {
   onChange: (updated: Segment) => void;
   onSplit?: (id: number) => void;
   onModifyMerge?: (id: number) => void;
+  onInsertBefore?: (id: number) => void;
+  onInsertAfter?: (id: number) => void;
+  onDelete?: (id: number) => void;
   generalConfig: GeneralConfig;
   autoScroll?: boolean;
   onNavigate?: (direction: 'next' | 'prev') => void;
@@ -71,10 +52,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   onChange,
   onSplit,
   onModifyMerge,
+  onInsertBefore,
+  onInsertAfter,
+  onDelete,
   generalConfig,
   autoScroll = true,
   onNavigate,
 }) => {
+  const { caretHintRef, splitPayloadRef } = useSubtitleEditor();
   const containerRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [gridOpacity] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.SUB_GRID_OPACITY, 0);
@@ -214,14 +199,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         fullMarkupLines.slice(0, activeLineIndex).reduce((acc, l) => acc + strip(l).length, 0) +
         strip(headMarkup).length;
 
-      window.__SEG_SPLIT_PAYLOAD__ = {
+      splitPayloadRef.current = {
         id: segment.id,
         leftText,
         rightText,
         splitRatio: totalChars > 0 ? charsBefore / totalChars : 0.5,
       };
 
-      window.__SEG_CARET_HINT__ = {
+      caretHintRef.current = {
         segmentId: segment.id,
         target: activeLineIndex,
         where: 'end',
@@ -298,10 +283,8 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
       }
 
       if (!moved) {
-        window.__SEG_CARET_HINT__ = {
+        caretHintRef.current = {
           target: dir === 'prev' ? 'lastNonEmpty' : 'first',
-          // CORRECCIÓ: Sempre 'end' per anar al final de la primera línia (si anem next)
-          // o al final de la darrera (si anem prev)
           where: 'end',
           ts: Date.now(),
           retries: 3,
@@ -318,7 +301,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         if (lineIndex > 0) {
           placeCaret(lineRefs.current.get(lineIndex - 1)!, 'end');
         } else {
-          window.__SEG_CARET_HINT__ = { target: 'lastNonEmpty', where: 'end', ts: Date.now(), retries: 3 };
+          caretHintRef.current = { target: 'lastNonEmpty', where: 'end', ts: Date.now(), retries: 3 };
           onNavigate?.('prev');
         }
         return;
@@ -385,7 +368,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
 
     if (!isActive) return;
 
-    const hint = window.__SEG_CARET_HINT__;
+    const hint = caretHintRef.current;
     if (hint && Date.now() - hint.ts < 1500) {
       if (typeof hint.segmentId === 'number' && hint.segmentId !== segment.id) return;
 
@@ -398,9 +381,9 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
 
         const retriesLeft = (hint.retries ?? 1) - 1;
         if (retriesLeft > 0) {
-          window.__SEG_CARET_HINT__ = { ...hint, retries: retriesLeft, ts: Date.now() };
+          caretHintRef.current = { ...hint, retries: retriesLeft, ts: Date.now() };
         } else {
-          window.__SEG_CARET_HINT__ = null;
+          caretHintRef.current = null;
         }
       }
     }
@@ -434,7 +417,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         className="grid items-stretch"
         style={{
           // REAJUSTAMENT: Amplades optimitzades per evitar solapaments (10ch per a TK, 12ch per a ID/CPS)
-          gridTemplateColumns: '10ch 12ch 16ch 5ch minmax(0, 1fr)',
+          gridTemplateColumns: '10ch 12ch 21ch 5ch minmax(0, 1fr)',
           gridTemplateRows: `repeat(${maxLines}, ${ROW_HEIGHT})`,
         }}
       >
@@ -460,18 +443,28 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
               ) : null}
             </div>
 
-            {/* Columna 3: Timecodes */}
-            <div style={gridCellStyle} className="flex items-center px-2 gap-2 font-mono text-[10px] text-gray-300">
+            {/* Columna 3: Timecodes editables */}
+            <div style={gridCellStyle} className="flex items-center px-1">
               {i === 0 ? (
-                <>
-                  <span className="bg-gray-800/50 px-1 rounded text-[9px] text-gray-400">IN</span>
-                  {secondsToSrtTime(segment.startTime)}
-                </>
+                <TimecodeInput
+                  value={segment.startTime}
+                  label="IN"
+                  isEditable={isEditable}
+                  onCommit={(newVal) => {
+                    onChange({ ...segment, startTime: newVal });
+                    onBlur?.();
+                  }}
+                />
               ) : i === 1 ? (
-                <>
-                  <span className="bg-gray-800/50 px-1 rounded text-[9px] text-gray-400">OUT</span>
-                  {secondsToSrtTime(segment.endTime)}
-                </>
+                <TimecodeInput
+                  value={segment.endTime}
+                  label="OUT"
+                  isEditable={isEditable}
+                  onCommit={(newVal) => {
+                    onChange({ ...segment, endTime: newVal });
+                    onBlur?.();
+                  }}
+                />
               ) : null}
             </div>
 
@@ -518,6 +511,64 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           </React.Fragment>
         ))}
       </div>
+
+      {/* Barra d'accions: visible en hover o quan el segment és actiu */}
+      {isEditable && (
+        <div
+          className={`flex items-center gap-0.5 mt-0.5 pt-0.5 border-t border-gray-700/30 transition-opacity ${
+            isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {onInsertBefore && (
+            <button
+              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-blue-300 hover:bg-blue-600/10 transition-colors"
+              onClick={() => onInsertBefore(segment.id)}
+              title="Insertar subtítol abans (Alt+↑)"
+            >
+              +↑
+            </button>
+          )}
+          {onInsertAfter && (
+            <button
+              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-blue-300 hover:bg-blue-600/10 transition-colors"
+              onClick={() => onInsertAfter(segment.id)}
+              title="Insertar subtítol després (Alt+↓)"
+            >
+              +↓
+            </button>
+          )}
+          {(onInsertBefore || onInsertAfter) && <div className="w-px h-3 bg-gray-700 mx-0.5 flex-shrink-0" />}
+          {onSplit && (
+            <button
+              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-amber-300 hover:bg-amber-600/10 transition-colors font-mono"
+              onClick={() => onSplit(segment.id)}
+              title="Dividir en dos (Ctrl+K)"
+            >
+              Split
+            </button>
+          )}
+          {onModifyMerge && (
+            <button
+              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-emerald-300 hover:bg-emerald-600/10 transition-colors font-mono"
+              onClick={() => onModifyMerge(segment.id)}
+              title="Fusionar amb el següent"
+            >
+              Merge↓
+            </button>
+          )}
+          <div className="flex-grow" />
+          {onDelete && (
+            <button
+              className="px-1.5 py-0.5 rounded text-[9px] text-gray-600 hover:text-red-400 hover:bg-red-600/10 transition-colors"
+              onClick={() => onDelete(segment.id)}
+              title="Eliminar subtítol (Ctrl+Supr)"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -13,6 +13,10 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
+import { useVerticalPanelResize, useHorizontalPanelResize } from '../../hooks/usePanelResize';
+import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
+import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
+import { ScriptViewPanel } from './ScriptViewPanel';
 
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
@@ -46,7 +50,7 @@ interface VideoSubtitlesEditorViewProps {
 
 const MIN_PANEL_HEIGHT = 100;
 
-export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> = (props) => {
+const VideoSubtitlesEditorViewInner: React.FC<VideoSubtitlesEditorViewProps> = (props) => {
   const {
     currentDoc,
     isEditing,
@@ -60,6 +64,7 @@ export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> =
     handleTextChange,
   } = props;
 
+  const { splitPayloadRef } = useSubtitleEditor();
   const { state, getMediaFile, ensureMediaFile, dispatch, useBackend } = useLibrary();
   const { syncRequest } = state;
   const [takeMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_MARGIN, 2);
@@ -83,7 +88,6 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiMode, setAiMode] = useState<'whisper' | 'translate' | 'revision'>('whisper');
-  const [isAIProcessing, setIsAIProcessing] = useState(false);
 
   const [autoScrollSubs, setAutoScrollSubs] = useState(true);
   const [autoScrollWave, setAutoScrollWave] = useState(true);
@@ -116,6 +120,14 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const subsHistory = useDocumentHistory<Segment[]>(currentDoc.id, initialSegments);
   const segments = subsHistory.present;
   const [activeSegmentId, setActiveSegmentId] = useState<number | null>(null);
+
+  const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
+    useSubtitleAIOperations({
+      videoFile,
+      segments,
+      onCommitSegments: (newSegs) => subsHistory.commit(newSegs),
+      onCloseModal: () => setIsAIModalOpen(false),
+    });
 
 const handleSyncMedia = useCallback((doc: Document) => {
   void (async () => {
@@ -276,7 +288,7 @@ const handleSave = useCallback(() => {
 }, [subsHistory, currentDoc.id, dispatch, useBackend]);
 
   const handleSplitSegmentAtCursor = useCallback((idParam?: number) => {
-    const payload = window.__SEG_SPLIT_PAYLOAD__;
+    const payload = splitPayloadRef.current;
     if (payload) {
         const idx = segments.findIndex(s => s.id === payload.id);
         if (idx === -1) return;
@@ -290,8 +302,8 @@ const handleSave = useCallback(() => {
 
         const newSegments = [...segments];
         newSegments.splice(idx, 1, newSeg1, newSeg2);
-        
-        window.__SEG_SPLIT_PAYLOAD__ = null;
+
+        splitPayloadRef.current = null;
         subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
         return;
     }
@@ -314,6 +326,38 @@ const handleSave = useCallback(() => {
     newSegments.splice(idx, 1, newSeg1, newSeg2);
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
   }, [activeSegmentId, segments, isEditing, subsHistory]);
+
+  const handleInsertSegment = useCallback((id: number, position: 'before' | 'after') => {
+    if (!isEditing) return;
+    const idx = segments.findIndex(s => s.id === id);
+    if (idx === -1) return;
+
+    const target = segments[idx];
+    let newSeg: Segment;
+
+    if (position === 'after') {
+      const next = segments[idx + 1];
+      const start = target.endTime + 0.1;
+      const end = next ? Math.min(next.startTime - 0.1, start + 2) : start + 2;
+      newSeg = { id: Date.now(), startTime: start, endTime: Math.max(end, start + 0.5), originalText: '' };
+    } else {
+      const prev = idx > 0 ? segments[idx - 1] : null;
+      const end = target.startTime - 0.1;
+      const start = prev ? Math.max(prev.endTime + 0.1, end - 2) : Math.max(0, end - 2);
+      newSeg = { id: Date.now(), startTime: Math.max(0, start), endTime: Math.max(end, 0.5), originalText: '' };
+    }
+
+    const insertAt = position === 'after' ? idx + 1 : idx;
+    const newSegments = [...segments];
+    newSegments.splice(insertAt, 0, newSeg);
+    subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
+  }, [isEditing, segments, subsHistory]);
+
+  const handleDeleteSegment = useCallback((id: number) => {
+    if (!isEditing || segments.length <= 1) return;
+    const newSegments = segments.filter(s => s.id !== id);
+    subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
+  }, [isEditing, segments, subsHistory]);
 
   const handleMergeSegmentWithNext = useCallback(() => {
     if (!activeSegmentId || !isEditing) return;
@@ -373,32 +417,6 @@ const handleSave = useCallback(() => {
     subsHistory.commit();
   }, [isEditing, subsHistory]);
 
-  const handleWhisperTranscription = async (lang: string) => {
-    if (!videoFile) { alert("Vinculeu un vídeo primer."); return; }
-    setIsAIProcessing(true);
-    try { await new Promise(r => setTimeout(r, 2000)); setIsAIModalOpen(false); } 
-    finally { setIsAIProcessing(false); }
-  };
-
-  const handleAITranslation = async (from: string, to: string) => {
-    if (segments.length === 0) return;
-    setIsAIProcessing(true);
-    try { await new Promise(r => setTimeout(r, 2000)); setIsAIModalOpen(false); } 
-    finally { setIsAIProcessing(false); }
-  };
-
-  const handleAIRevision = async () => {
-    if (segments.length === 0) return;
-    setIsAIProcessing(true);
-    try {
-        await new Promise(r => setTimeout(r, 1500));
-        const newSegments = segments.map((s, idx) => idx === 2 ? { ...s, hasDiff: true } : s);
-        subsHistory.commit(newSegments);
-        alert("Revisió IA finalitzada.");
-        setIsAIModalOpen(false);
-    } finally { setIsAIProcessing(false); }
-  };
-
   const handleExportSrt = () => {
     if (segments.length === 0) return;
     const srtContent = serializeSrt(segments);
@@ -408,60 +426,14 @@ const handleSave = useCallback(() => {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
-  const [topPanelHeight, setTopPanelHeight] = useState(400);
   const verticalContainerRef = useRef<HTMLDivElement>(null);
-  const isVerticalResizingRef = useRef(false);
-  const startYRef = useRef<number>(0);
-  const startHeightRef = useRef<number>(0);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(50);
   const bottomContainerRef = useRef<HTMLDivElement>(null);
-  const isHorizontalResizingRef = useRef(false);
-  const startXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
 
-  const handleVerticalMouseMove = useCallback((e: MouseEvent) => {
-    if (!isVerticalResizingRef.current || !verticalContainerRef.current) return;
-    const deltaY = e.clientY - startYRef.current;
-    setTopPanelHeight(Math.max(MIN_PANEL_HEIGHT, startHeightRef.current + deltaY));
-  }, []);
+  const { height: topPanelHeight, handleMouseDown: handleVerticalMouseDown } =
+    useVerticalPanelResize(400, MIN_PANEL_HEIGHT);
 
-  const handleHorizontalMouseMove = useCallback((e: MouseEvent) => {
-    if (!isHorizontalResizingRef.current || !bottomContainerRef.current) return;
-    const deltaX = e.clientX - startXRef.current;
-    const containerWidth = bottomContainerRef.current.offsetWidth;
-    const newWidth = ((startWidthRef.current + deltaX) / containerWidth) * 100;
-    setLeftPanelWidth(Math.max(20, Math.min(80, newWidth)));
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    isVerticalResizingRef.current = false;
-    isHorizontalResizingRef.current = false;
-    document.body.style.cursor = '';
-    window.removeEventListener('mousemove', handleVerticalMouseMove);
-    window.removeEventListener('mousemove', handleHorizontalMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-  }, [handleVerticalMouseMove, handleHorizontalMouseMove]);
-
-  const handleVerticalMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isVerticalResizingRef.current = true;
-    startYRef.current = e.clientY;
-    startHeightRef.current = topPanelHeight;
-    document.body.style.cursor = 'row-resize';
-    window.addEventListener('mousemove', handleVerticalMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [topPanelHeight, handleVerticalMouseMove, handleMouseUp]);
-
-  const handleHorizontalMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!bottomContainerRef.current) return;
-    isHorizontalResizingRef.current = true;
-    startXRef.current = e.clientX;
-    startWidthRef.current = (bottomContainerRef.current.children[0] as HTMLElement).clientWidth;
-    document.body.style.cursor = 'col-resize';
-    window.addEventListener('mousemove', handleHorizontalMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [handleHorizontalMouseMove, handleMouseUp]);
+  const { widthPercent: leftPanelWidth, handleMouseDown: handleHorizontalMouseDown } =
+    useHorizontalPanelResize(bottomContainerRef as React.RefObject<HTMLElement>, 50, 20, 80);
 
   const activeSegmentForPlayer = useMemo(() => {
     const seg = linkedSegments.find((s: Segment) => currentTime >= s.startTime && currentTime < s.endTime);
@@ -489,42 +461,41 @@ const handleSave = useCallback(() => {
         />
       </div>
       <div ref={bottomContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
-        <div style={{ width: `${leftPanelWidth}%` }} className="flex flex-col min-w-0 h-full border-r border-gray-950">
-          <header className="flex-shrink-0 h-11 border-b border-gray-700 bg-gray-800/80 flex items-center px-4">
-            <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-500">Guió Original</h3>
-          </header>
-          <main ref={scriptScrollRef} data-script-scroll-container="true" className="flex-grow overflow-y-auto flex flex-col items-center min-h-0 bg-[#111827] px-4 pb-12 pt-0 custom-scrollbar">
-            <div id="page-content-area-subs" className="relative page-a4 bg-white text-gray-900 shadow-2xl rounded-sm p-10 transition-all duration-300 pointer-events-none select-none" style={{ width: pageWidth, maxWidth: '100%' }}>
-              {editorView === 'csv' ? (
-                <CsvView content={currentCsvContent} setContent={() => {}} isEditable={false} pageWidth={pageWidth} />
-              ) : layout === 'mono' ? (
-                <Editor content={currentContent} setContent={() => {}} isEditable={false} tabSize={tabSize} />
-              ) : (
-                <ColumnView content={currentContent} setContent={() => {}} isEditable={false} col1Width={col1Width} editorStyles={editorStyles} onTakeLayout={handleTakeLayout} />
-              )}
-            </div>
-          </main>
-        </div>
+        <ScriptViewPanel
+          width={leftPanelWidth}
+          content={currentContent}
+          csvContent={currentCsvContent}
+          editorView={editorView}
+          layout={layout}
+          tabSize={tabSize}
+          col1Width={col1Width}
+          editorStyles={editorStyles}
+          pageWidth={pageWidth}
+          onTakeLayout={handleTakeLayout}
+          scrollRef={scriptScrollRef}
+        />
         <div className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors" onMouseDown={handleHorizontalMouseDown} />
         <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">
-           <SubtitlesEditor 
-            title="Subtítols SRT" 
-            segments={linkedSegments} 
-            activeId={activeSegmentId} 
-            isEditable={isEditing} 
-            onSegmentChange={handleSegmentChange} 
+           <SubtitlesEditor
+            title="Subtítols SRT"
+            segments={linkedSegments}
+            activeId={activeSegmentId}
+            isEditable={isEditing}
+            onSegmentChange={handleSegmentChange}
             onSegmentBlur={handleSegmentBlur}
-            onSegmentClick={(id) => handleSegmentClick(id)} 
-            onSegmentFocus={(id) => isEditing && setActiveSegmentId(id)} 
-            syncEnabled={syncSubsEnabled} 
-            onSyncChange={setSyncSubsEnabled} 
-            overlayConfig={subsOverlayConfig} 
-            onOverlayConfigChange={setSubsOverlayConfig} 
-            generalConfig={generalConfig} 
-            autoScroll={autoScrollSubs} 
-            onOpenAIOperations={(m) => { setAiMode(m); setIsAIModalOpen(true); }} 
+            onSegmentClick={(id) => handleSegmentClick(id)}
+            onSegmentFocus={(id) => isEditing && setActiveSegmentId(id)}
+            syncEnabled={syncSubsEnabled}
+            onSyncChange={setSyncSubsEnabled}
+            overlayConfig={subsOverlayConfig}
+            onOverlayConfigChange={setSubsOverlayConfig}
+            generalConfig={generalConfig}
+            autoScroll={autoScrollSubs}
+            onOpenAIOperations={(m) => { setAiMode(m); setIsAIModalOpen(true); }}
             onSplit={handleSplitSegmentAtCursor}
             onMerge={handleMergeSegmentWithNext}
+            onInsert={handleInsertSegment}
+            onDelete={handleDeleteSegment}
           />
         </div>
       </div>
@@ -533,3 +504,9 @@ const handleSave = useCallback(() => {
     </div>
   );
 };
+
+export const VideoSubtitlesEditorView: React.FC<VideoSubtitlesEditorViewProps> = (props) => (
+  <SubtitleEditorProvider>
+    <VideoSubtitlesEditorViewInner {...props} />
+  </SubtitleEditorProvider>
+);

@@ -14,6 +14,8 @@ import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import { api } from '../../services/api';
+import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
+import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
 
 interface VideoSrtStandaloneEditorViewProps {
   currentDoc: Document;
@@ -21,7 +23,8 @@ interface VideoSrtStandaloneEditorViewProps {
   onClose: () => void;
 }
 
-export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorViewProps> = ({ currentDoc, isEditing, onClose }) => {
+const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewProps> = ({ currentDoc, isEditing, onClose }) => {
+  const { splitPayloadRef } = useSubtitleEditor();
   const { state, dispatch, useBackend, getMediaFile, ensureMediaFile } = useLibrary();
 
   const [maxLinesSubs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.MAX_LINES_SUBS, 2);
@@ -40,7 +43,6 @@ export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorView
 
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiMode, setAiMode] = useState<'whisper' | 'translate' | 'revision'>('whisper');
-  const [isAIProcessing, setIsAIProcessing] = useState(false);
 
   const [autoScrollWave, setAutoScrollWave] = useState(true);
   const [scrollModeWave, setScrollModeWave] = useState<'stationary' | 'page'>('stationary');
@@ -66,6 +68,14 @@ export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorView
 
   const subsHistory = useDocumentHistory<Segment[]>(currentDoc.id, initialSegments);
   const segments = subsHistory.present;
+
+  const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
+    useSubtitleAIOperations({
+      videoFile,
+      segments,
+      onCommitSegments: (newSegs) => subsHistory.commit(newSegs),
+      onCloseModal: () => setIsAIModalOpen(false),
+    });
 
   useEffect(() => {
     if (segments.length > 0 && activeSegmentId == null) setActiveSegmentId(segments[0].id);
@@ -127,8 +137,40 @@ export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorView
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
   }, [activeSegmentId, segments, isEditing, subsHistory]);
 
+  const handleInsertSegment = useCallback((id: number, position: 'before' | 'after') => {
+    if (!isEditing) return;
+    const idx = segments.findIndex(s => s.id === id);
+    if (idx === -1) return;
+
+    const target = segments[idx];
+    let newSeg: Segment;
+
+    if (position === 'after') {
+      const next = segments[idx + 1];
+      const start = target.endTime + 0.1;
+      const end = next ? Math.min(next.startTime - 0.1, start + 2) : start + 2;
+      newSeg = { id: Date.now(), startTime: start, endTime: Math.max(end, start + 0.5), originalText: '' };
+    } else {
+      const prev = idx > 0 ? segments[idx - 1] : null;
+      const end = target.startTime - 0.1;
+      const start = prev ? Math.max(prev.endTime + 0.1, end - 2) : Math.max(0, end - 2);
+      newSeg = { id: Date.now(), startTime: Math.max(0, start), endTime: Math.max(end, 0.5), originalText: '' };
+    }
+
+    const insertAt = position === 'after' ? idx + 1 : idx;
+    const newSegments = [...segments];
+    newSegments.splice(insertAt, 0, newSeg);
+    subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
+  }, [isEditing, segments, subsHistory]);
+
+  const handleDeleteSegment = useCallback((id: number) => {
+    if (!isEditing || segments.length <= 1) return;
+    const newSegments = segments.filter(s => s.id !== id);
+    subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
+  }, [isEditing, segments, subsHistory]);
+
   const handleSplitSegmentAtCursor = useCallback(() => {
-    const payload = (window as any).__SEG_SPLIT_PAYLOAD__;
+    const payload = splitPayloadRef.current;
     if (!payload) return;
 
     const idx = segments.findIndex(s => s.id === payload.id);
@@ -148,7 +190,7 @@ export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorView
 
     const newSegments = [...segments];
     newSegments.splice(idx, 1, newSeg1, newSeg2);
-    (window as any).__SEG_SPLIT_PAYLOAD__ = null;
+    splitPayloadRef.current = null;
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
   }, [segments, subsHistory]);
 
@@ -364,6 +406,8 @@ useEffect(() => {
             onOpenAIOperations={(m) => { setAiMode(m); setIsAIModalOpen(true); }}
             onSplit={handleSplitSegmentAtCursor}
             onMerge={handleMergeSegmentWithNext}
+            onInsert={handleInsertSegment}
+            onDelete={handleDeleteSegment}
           />
         </div>
       </div>
@@ -386,11 +430,17 @@ useEffect(() => {
           onClose={() => setIsAIModalOpen(false)}
           mode={aiMode}
           isProcessing={isAIProcessing}
-          onWhisper={() => {}}
-          onTranslate={() => {}}
-          onRevision={() => {}}
+          onWhisper={handleWhisperTranscription}
+          onTranslate={handleAITranslation}
+          onRevision={handleAIRevision}
         />
       )}
     </div>
   );
 };
+
+export const VideoSrtStandaloneEditorView: React.FC<VideoSrtStandaloneEditorViewProps> = (props) => (
+  <SubtitleEditorProvider>
+    <VideoSrtStandaloneEditorViewInner {...props} />
+  </SubtitleEditorProvider>
+);

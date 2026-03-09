@@ -13,7 +13,7 @@ export class TranscriptionOptionsController {
   @Get('options')
   options() {
     return {
-      models: ['tiny', 'base', 'small', 'medium', 'large-v2'],
+      models: ['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3', 'large-v3-turbo'],
       profiles: ['VE', 'VCAT'],
       defaults: {
         model: this.config.get('WHISPERX_MODEL', 'small'),

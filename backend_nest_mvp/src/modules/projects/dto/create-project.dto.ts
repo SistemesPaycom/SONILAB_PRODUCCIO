@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 
 export class TranscriptionSettingsDto {
   @IsOptional()
-  @IsIn(['tiny', 'base', 'small', 'medium', 'large-v2'])
+  @IsIn(['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3', 'large-v3-turbo'])
   model?: string;
 
   @IsOptional()
