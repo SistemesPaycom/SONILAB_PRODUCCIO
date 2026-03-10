@@ -2,7 +2,14 @@ import argparse
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
+
+# Forzar UTF-8 en stdout/stderr para evitar UnicodeEncodeError en consolas cp1252 (Windows)
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 from pipeline import pipeline_generate
 from rules import SubtitleRules

@@ -363,7 +363,7 @@ def apply_postprocessing(
 
     if do_merge_lines:
         cues = merge_short_lines(cues)
-        _st(f"[postprocessor] merge_short_lines: {original_count} → {len(cues)} cues")
+        _st(f"[postprocessor] merge_short_lines: {original_count} -> {len(cues)} cues")
 
     if do_balance_lines:
         cues = balance_lines(cues)
