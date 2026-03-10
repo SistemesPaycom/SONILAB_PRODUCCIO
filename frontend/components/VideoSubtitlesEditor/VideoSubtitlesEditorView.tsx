@@ -103,6 +103,22 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const [guionContent, setGuionContent] = useState<string>('');
   const [guionProjectId, setGuionProjectId] = useState<string | null>(null);
 
+  /** Clau localStorage per al guió d'aquest document (persistència local sense backend) */
+  const _localGuionKey = `sonilab_guion_${currentDoc?.id}`;
+
+  /** Desa el guió a localStorage quan no hi ha projecte (per persistir entre sessions) */
+  const handleGuionLoaded = useCallback((text: string) => {
+    setGuionContent(text);
+    // Si no hi ha projecte de backend, persistim localment
+    if (!guionProjectId && currentDoc?.id) {
+      if (text) {
+        localStorage.setItem(_localGuionKey, text);
+      } else {
+        localStorage.removeItem(_localGuionKey);
+      }
+    }
+  }, [guionProjectId, currentDoc?.id, _localGuionKey]);
+
   const [subsOverlayConfig, setSubsOverlayConfig] = useState<OverlayConfig>({
     show: true,
     position: 'bottom',
@@ -182,26 +198,44 @@ const handleSyncMedia = useCallback((doc: Document) => {
 
   // ── Carrega el guió vinculat al projecte (si n'hi ha) ─────────────────────
   useEffect(() => {
-    if (!useBackend || !currentDoc?.id) return;
+    if (!currentDoc?.id) return;
     let cancelled = false;
 
     void (async () => {
       try {
-        // 1. Obtenim el projecte a partir del document SRT
-        const project = await api.getProjectBySrt(currentDoc.id).catch(() => null);
-        if (cancelled || !project?.id) return;
+        if (useBackend) {
+          // 1. Obtenim el projecte a partir del document SRT
+          const project = await api.getProjectBySrt(currentDoc.id).catch(() => null);
+          if (cancelled) return;
 
-        setGuionProjectId(project.id);
+          if (project?.id) {
+            setGuionProjectId(project.id);
 
-        // 2. Si el projecte té guió, el carregem
-        if (project.guionDocumentId) {
-          const { text } = await api.getProjectGuion(project.id).catch(() => ({ text: null, guionDocumentId: null }));
-          if (!cancelled && text) {
-            setGuionContent(text);
+            // 2. Si el projecte té guió, el carregem des del backend
+            if (project.guionDocumentId) {
+              const { text } = await api.getProjectGuion(project.id).catch(() => ({ text: null, guionDocumentId: null }));
+              if (!cancelled && text) {
+                setGuionContent(text);
+                return; // ← backend ha carregat el guió, no cal localStorage
+              }
+            }
+          }
+        }
+
+        // 3. Fallback: guió desat localment al navegador
+        if (!cancelled) {
+          const localGuion = localStorage.getItem(`sonilab_guion_${currentDoc.id}`);
+          if (localGuion) {
+            setGuionContent(localGuion);
           }
         }
       } catch {
         // Silenciar errors (doc no és SRT d'un projecte)
+        // Intentar localStorage com a fallback final
+        if (!cancelled) {
+          const localGuion = localStorage.getItem(`sonilab_guion_${currentDoc.id}`);
+          if (localGuion) setGuionContent(localGuion);
+        }
       }
     })();
 
@@ -522,7 +556,8 @@ const handleSave = useCallback(() => {
           onTakeLayout={handleTakeLayout}
           scrollRef={scriptScrollRef}
           projectId={guionProjectId}
-          onGuionLoaded={(text) => setGuionContent(text)}
+          docId={currentDoc?.id}
+          onGuionLoaded={handleGuionLoaded}
         />
         <div className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors" onMouseDown={handleHorizontalMouseDown} />
         <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">

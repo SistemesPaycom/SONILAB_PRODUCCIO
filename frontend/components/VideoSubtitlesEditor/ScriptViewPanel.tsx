@@ -17,17 +17,26 @@ interface ScriptViewPanelProps {
   pageWidth: string;
   onTakeLayout: (num: number, y: number) => void;
   scrollRef: React.RefObject<HTMLElement>;
-  /** Si s'ha carregat des d'un projecte, conté l'ID per permetre pujar guions */
+  /** Si s'ha carregat des d'un projecte, conté l'ID per permetre pujar guions al backend */
   projectId?: string | null;
+  /** ID del document SRT actual — per persistir el guió a localStorage quan no hi ha projecte */
+  docId?: string | null;
   /** Callback cridat quan s'ha pujat/actualitzat el guió correctament */
   onGuionLoaded?: (text: string) => void;
+}
+
+/** Clau localStorage per guardar el guió d'un document concret (sense projecte de backend) */
+function _localGuionKey(docId: string) {
+  return `sonilab_guion_${docId}`;
 }
 
 /**
  * Panell esquerre del VideoSubtitlesEditorView: mostra el guió original
  * (script, CSV o columnes) en mode no editable per a la sincronització.
- * Si el projecte té ID de projecte i no hi ha contingut, mostra un botó
- * per pujar/associar el guió.
+ *
+ * Permet pujar/associar el guió en dos modes:
+ *   ① Amb projecte (projectId):  desa al backend via API.
+ *   ② Sense projecte (docId):   desa a localStorage per a persistència local.
  */
 export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
   width,
@@ -42,6 +51,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
   onTakeLayout,
   scrollRef,
   projectId,
+  docId,
   onGuionLoaded,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -49,23 +59,40 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
   const [uploadErr, setUploadErr] = useState<string | null>(null);
 
   const hasContent = content?.trim().length > 0;
+  // Mostra el botó si hi ha un projecte de backend O un docId local
+  const canLink = Boolean(projectId || docId);
+  // Indica que el guió s'ha desat localment (sense projecte de backend)
+  const isLocalOnly = !projectId && hasContent && Boolean(docId);
 
   const handleUploadGuion = async (file: File) => {
-    if (!projectId) return;
     setUploading(true);
     setUploadErr(null);
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (ext === 'txt') {
-        const text = await file.text();
-        await api.setProjectGuion(projectId, text, file.name);
+      const text = await file.text();
+
+      if (projectId) {
+        // ── Mode backend: desa al projecte ───────────────────────────────
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (ext === 'txt') {
+          await api.setProjectGuion(projectId, text, file.name);
+          onGuionLoaded?.(text);
+        } else {
+          // DOCX/PDF: el backend extreu el text
+          await api.uploadProjectGuionFile(projectId, file);
+          const { text: extractedText } = await api.getProjectGuion(projectId);
+          if (extractedText) onGuionLoaded?.(extractedText);
+        }
+      } else if (docId) {
+        // ── Mode local: desa a localStorage ──────────────────────────────
+        // Nota: per a DOCX/PDF sense backend no podem extreure text,
+        // però el TXT funciona directament.
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (ext !== 'txt') {
+          setUploadErr('Sense projecte de backend, només es poden vincular fitxers .txt');
+          return;
+        }
+        localStorage.setItem(_localGuionKey(docId), text);
         onGuionLoaded?.(text);
-      } else {
-        // DOCX/PDF: el backend extreu el text
-        await api.uploadProjectGuionFile(projectId, file);
-        // Tornem a obtenir el text per mostrar-lo
-        const { text } = await api.getProjectGuion(projectId);
-        if (text) onGuionLoaded?.(text);
       }
     } catch (e: any) {
       setUploadErr(e?.message || 'Error pujant el guió');
@@ -74,18 +101,47 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
     }
   };
 
+  const handleClearLocalGuion = () => {
+    if (!docId) return;
+    localStorage.removeItem(_localGuionKey(docId));
+    onGuionLoaded?.('');
+  };
+
   return (
     <div style={{ width: `${width}%` }} className="flex flex-col min-w-0 h-full border-r border-gray-950">
       <header className="flex-shrink-0 h-11 border-b border-gray-700 bg-gray-800/80 flex items-center px-4 gap-3">
-        <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-500 flex-1">Guió Original</h3>
+        <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-500 flex-1">
+          Guió Original
+        </h3>
 
-        {/* Botó per pujar/canviar guió (visible quan hi ha projectId) */}
-        {projectId && (
+        {/* Indicador de guió local (sense sincronització al backend) */}
+        {isLocalOnly && (
+          <span
+            className="text-[9px] text-amber-400/70 bg-amber-900/20 border border-amber-700/30 px-1.5 py-0.5 rounded"
+            title="El guió s'ha desat localment al navegador. No es sincronitza amb el servidor."
+          >
+            local
+          </span>
+        )}
+
+        {/* Botó per esborrar el guió local */}
+        {isLocalOnly && (
+          <button
+            className="text-[9px] text-gray-600 hover:text-red-400 transition-colors"
+            onClick={handleClearLocalGuion}
+            title="Eliminar guió local"
+          >
+            ✕
+          </button>
+        )}
+
+        {/* Botó per pujar/canviar guió */}
+        {canLink && (
           <>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".docx,.pdf,.txt"
+              accept={projectId ? '.docx,.pdf,.txt' : '.txt'}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -97,9 +153,13 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
               className="text-[9px] text-gray-500 hover:text-blue-300 bg-gray-700/50 hover:bg-blue-900/30 border border-gray-600/50 px-2 py-0.5 rounded transition-colors disabled:opacity-40"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              title="Pujar o canviar el guió del projecte (DOCX, PDF, TXT)"
+              title={
+                projectId
+                  ? 'Pujar o canviar el guió del projecte (DOCX, PDF, TXT)'
+                  : 'Vincular un guió TXT (es desarà al navegador)'
+              }
             >
-              {uploading ? '⏳ Pujant…' : hasContent ? '↑ Canviar guió' : '↑ Pujar guió'}
+              {uploading ? '⏳ Processant…' : hasContent ? '↑ Canviar guió' : '↑ Vincular guió'}
             </button>
           </>
         )}
@@ -116,22 +176,25 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
         data-script-scroll-container="true"
         className="flex-grow overflow-y-auto flex flex-col items-center min-h-0 bg-[#111827] px-4 pb-12 pt-0 custom-scrollbar"
       >
-        {!hasContent && projectId ? (
-          // Estat buit — mostra instruccions per pujar el guió
+        {!hasContent ? (
+          // Estat buit — mostra instruccions per vincular el guió
           <div className="flex flex-col items-center justify-center h-full gap-4 text-center pb-16">
             <div className="text-4xl opacity-20">📄</div>
             <div className="text-sm font-bold text-gray-500">Cap guió associat</div>
             <div className="text-xs text-gray-600 max-w-[200px]">
-              Puja el guió del doblatge (DOCX, PDF o TXT) per comparar-lo
-              amb els subtítols i detectar discrepàncies.
+              {projectId
+                ? 'Puja el guió del doblatge (DOCX, PDF o TXT) per comparar-lo amb els subtítols i detectar discrepàncies.'
+                : 'Vincular un guió TXT per comparar-lo amb els subtítols. Es desarà al navegador.'}
             </div>
-            <button
-              className="px-4 py-2 rounded-lg bg-blue-700/50 hover:bg-blue-600/60 border border-blue-600/50 text-blue-200 text-xs font-bold transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? '⏳ Processant…' : '↑ Seleccionar guió'}
-            </button>
+            {canLink && (
+              <button
+                className="px-4 py-2 rounded-lg bg-blue-700/50 hover:bg-blue-600/60 border border-blue-600/50 text-blue-200 text-xs font-bold transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? '⏳ Processant…' : '↑ Seleccionar guió'}
+              </button>
+            )}
           </div>
         ) : (
           <div
