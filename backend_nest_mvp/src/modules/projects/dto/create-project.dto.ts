@@ -7,6 +7,10 @@ export class TranscriptionSettingsDto {
   model?: string;
 
   @IsOptional()
+  @IsIn(['faster-whisper', 'whisperx'])
+  engine?: string;
+
+  @IsOptional()
   @IsIn(['VE', 'VCAT'])
   profile?: string;
 
@@ -31,6 +35,10 @@ export class TranscriptionSettingsDto {
   @IsOptional()
   @IsBoolean()
   offline?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  timingFix?: boolean;
 }
 
 export class CreateProjectDto {
