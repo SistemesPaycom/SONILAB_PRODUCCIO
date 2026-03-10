@@ -230,5 +230,139 @@ if (exists) {
       isLocked: false,
     } as any);
   }
+
+  /**
+   * Extrae texto plano de un buffer DOCX o PDF usando Python.
+   * Devuelve el texto extraído (formato del guión intacto).
+   */
+  async extractTextFromFile(buffer: Buffer, originalName: string): Promise<string> {
+    const ext = path.extname(originalName).toLowerCase();
+    const tmpPath = path.join(
+      require('os').tmpdir(),
+      `guion_upload_${Date.now()}${ext}`,
+    );
+    fs.writeFileSync(tmpPath, buffer);
+
+    try {
+      const pythonExec = this.config.get<string>('PYTHON_EXEC', 'python');
+      const { execSync } = require('child_process');
+
+      let script: string;
+      if (ext === '.docx') {
+        script = `
+import sys, zipfile, re
+from xml.etree import ElementTree as ET
+def extract_docx(path):
+    ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    with zipfile.ZipFile(path) as zf:
+        xml = zf.read('word/document.xml')
+    root = ET.fromstring(xml)
+    lines = []
+    for p in root.iter(f'{ns}p'):
+        text = ''.join((r.text or '') for r in p.iter(f'{ns}t'))
+        lines.append(text)
+    # eliminar lineas completamente vacias al principio/final y colapsar multiples vacias
+    result = []
+    prev_empty = False
+    for line in lines:
+        if not line.strip():
+            if not prev_empty and result:
+                result.append('')
+            prev_empty = True
+        else:
+            result.append(line)
+            prev_empty = False
+    print('\\n'.join(result).strip())
+extract_docx(sys.argv[1])
+`.trim();
+      } else if (ext === '.pdf') {
+        script = `
+import sys
+try:
+    import pdfminer.high_level as hl
+    text = hl.extract_text(sys.argv[1])
+    print(text.strip())
+except ImportError:
+    try:
+        import subprocess
+        r = subprocess.run(['pdftotext', sys.argv[1], '-'], capture_output=True, text=True)
+        print(r.stdout.strip())
+    except Exception:
+        print('ERROR: No se puede extraer texto del PDF. Instala pdfminer.six o pdftotext.')
+        sys.exit(1)
+`.trim();
+      } else {
+        // .txt u otro: leer directamente
+        return fs.readFileSync(tmpPath, 'utf-8');
+      }
+
+      const scriptPath = path.join(require('os').tmpdir(), `guion_extract_${Date.now()}.py`);
+      fs.writeFileSync(scriptPath, script, 'utf-8');
+
+      const result = execSync(`${pythonExec} "${scriptPath}" "${tmpPath}"`, {
+        encoding: 'utf-8',
+        timeout: 30000,
+      });
+
+      fs.unlinkSync(scriptPath);
+      return result.trim();
+    } finally {
+      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    }
+  }
+
+  /**
+   * Vincula o actualiza el contenido del guión de un proyecto.
+   * Crea un Document de tipo 'guion' en la carpeta del proyecto si no existe.
+   */
+  async setGuionContent(
+    ownerId: string,
+    projectId: string,
+    guionText: string,
+    guionName?: string,
+  ): Promise<{ guionDocumentId: string }> {
+    const project = await this.getProject(ownerId, projectId);
+
+    if (project.guionDocumentId) {
+      // Actualizar documento existente
+      await this.library.updateDocument(ownerId, project.guionDocumentId, {
+        contentByLang: { raw: guionText },
+      } as any);
+      return { guionDocumentId: project.guionDocumentId };
+    }
+
+    // Crear nuevo documento de guión
+    const docName = guionName || `guion_${projectId}.txt`;
+    const guionDoc = await this.library.createDocument(ownerId, {
+      name: docName,
+      parentId: project.folderId,
+      sourceType: 'guion',
+      contentByLang: { raw: guionText },
+      isLocked: false,
+    } as any);
+
+    await this.projectModel.updateOne(
+      { _id: projectId, ownerId },
+      { $set: { guionDocumentId: guionDoc.id } },
+    );
+
+    return { guionDocumentId: guionDoc.id };
+  }
+
+  /**
+   * Obtiene el contenido de texto del guión vinculado al proyecto.
+   */
+  async getGuionContent(ownerId: string, projectId: string): Promise<{ text: string | null; guionDocumentId: string | null }> {
+    const project = await this.getProject(ownerId, projectId);
+    if (!project.guionDocumentId) return { text: null, guionDocumentId: null };
+
+    try {
+      const doc = await this.library.getDocument(ownerId, project.guionDocumentId);
+      const text = (doc as any).contentByLang?.['raw'] || null;
+      return { text, guionDocumentId: project.guionDocumentId };
+    } catch {
+      return { text: null, guionDocumentId: project.guionDocumentId };
+    }
+  }
 }
 

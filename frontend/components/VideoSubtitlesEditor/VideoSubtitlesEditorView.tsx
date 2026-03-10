@@ -24,6 +24,7 @@ import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
 import { api } from '../../services/api';
 import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges';
 import { linkSegmentsToTakeRanges } from '../../utils/SubtitlesEditor/segmentTakeLinker';
+import { buildTakeDialogMap, applyGuionDiff } from '../../utils/SubtitlesEditor/segmentGuionDiff';
 
 type EditorView = 'script' | 'csv';
 
@@ -97,6 +98,10 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const scriptScrollRef = useRef<HTMLElement>(null);
   const takeLayoutRef = useRef<Map<number, number>>(new Map());
   const activeTakeByTimeRef = useRef<number | null>(null);
+
+  // ── Guió vinculat al projecte ─────────────────────────────────────────────
+  const [guionContent, setGuionContent] = useState<string>('');
+  const [guionProjectId, setGuionProjectId] = useState<string | null>(null);
 
   const [subsOverlayConfig, setSubsOverlayConfig] = useState<OverlayConfig>({
     show: true,
@@ -174,6 +179,34 @@ const handleSyncMedia = useCallback((doc: Document) => {
       }
       dispatch({ type: 'CLEAR_SYNC_REQUEST' });
   }, [syncRequest, dispatch, state.documents, handleSyncMedia, handleSyncSubtitles]);
+
+  // ── Carrega el guió vinculat al projecte (si n'hi ha) ─────────────────────
+  useEffect(() => {
+    if (!useBackend || !currentDoc?.id) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        // 1. Obtenim el projecte a partir del document SRT
+        const project = await api.getProjectBySrt(currentDoc.id).catch(() => null);
+        if (cancelled || !project?.id) return;
+
+        setGuionProjectId(project.id);
+
+        // 2. Si el projecte té guió, el carregem
+        if (project.guionDocumentId) {
+          const { text } = await api.getProjectGuion(project.id).catch(() => ({ text: null, guionDocumentId: null }));
+          if (!cancelled && text) {
+            setGuionContent(text);
+          }
+        }
+      } catch {
+        // Silenciar errors (doc no és SRT d'un projecte)
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [currentDoc?.id, useBackend]);
 useEffect(() => {
   if (!autosave || !useBackend || !isEditing) return;
 
@@ -204,6 +237,21 @@ useEffect(() => {
   const linkedSegments = useMemo(() => {
     return linkSegmentsToTakeRanges(segments, takeRanges);
   }, [segments, takeRanges]);
+
+  // ── Diff guió vs SRT ──────────────────────────────────────────────────────
+  // Usem el guioContent carregat des del projecte si n'hi ha,
+  // o bé el contingut del document actual com a fallback (per als guions oberts directament).
+  const effectiveGuionContent = guionContent || currentContent;
+
+  const takeDialogMap = useMemo(
+    () => buildTakeDialogMap(effectiveGuionContent),
+    [effectiveGuionContent],
+  );
+
+  const linkedSegmentsWithDiff = useMemo(
+    () => applyGuionDiff(linkedSegments, takeDialogMap),
+    [linkedSegments, takeDialogMap],
+  );
 
   const handleTakeLayout = useCallback((num: number, y: number) => {
     takeLayoutRef.current.set(num, y);
@@ -249,7 +297,7 @@ useEffect(() => {
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
     setActiveSegmentId(numericId);
     if (syncSubsEnabled && videoRef.current) {
-      const segment = linkedSegments.find((s) => s.id === numericId);
+      const segment = linkedSegmentsWithDiff.find((s) => s.id === numericId);
       if (segment) onSeek(Math.max(0, segment.startTime - 0.05));
 
     }
@@ -436,12 +484,12 @@ const handleSave = useCallback(() => {
     useHorizontalPanelResize(bottomContainerRef as React.RefObject<HTMLElement>, 50, 20, 80);
 
   const activeSegmentForPlayer = useMemo(() => {
-    const seg = linkedSegments.find((s: Segment) => currentTime >= s.startTime && currentTime < s.endTime);
+    const seg = linkedSegmentsWithDiff.find((s: Segment) => currentTime >= s.startTime && currentTime < s.endTime);
     return seg ? { id: seg.id, startTime: seg.startTime, endTime: seg.endTime, originalText: seg.originalText, translatedText: '' } : null;
   }, [linkedSegments, currentTime]);
 
   const playerProps = {
-    isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments: linkedSegments, activeId: activeSegmentId,
+    isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments: linkedSegmentsWithDiff, activeId: activeSegmentId,
     activeSegment: subsOverlayConfig.show ? activeSegmentForPlayer : null,
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
     onTimeUpdate: setCurrentTime, onDurationChange: setDuration, onPlay: () => setIsPlaying(true), onPause: () => setIsPlaying(false), onTogglePlay, onJumpSegment,
@@ -463,7 +511,7 @@ const handleSave = useCallback(() => {
       <div ref={bottomContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
         <ScriptViewPanel
           width={leftPanelWidth}
-          content={currentContent}
+          content={effectiveGuionContent}
           csvContent={currentCsvContent}
           editorView={editorView}
           layout={layout}
@@ -473,12 +521,14 @@ const handleSave = useCallback(() => {
           pageWidth={pageWidth}
           onTakeLayout={handleTakeLayout}
           scrollRef={scriptScrollRef}
+          projectId={guionProjectId}
+          onGuionLoaded={(text) => setGuionContent(text)}
         />
         <div className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors" onMouseDown={handleHorizontalMouseDown} />
         <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">
            <SubtitlesEditor
             title="Subtítols SRT"
-            segments={linkedSegments}
+            segments={linkedSegmentsWithDiff}
             activeId={activeSegmentId}
             isEditable={isEditing}
             onSegmentChange={handleSegmentChange}

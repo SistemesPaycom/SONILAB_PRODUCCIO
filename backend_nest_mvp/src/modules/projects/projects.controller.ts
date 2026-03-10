@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequestUser } from '../../common/types/request-user';
@@ -42,5 +53,48 @@ export class ProjectsController {
   @Get('/:id')
   get(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.projects.getProject(user.userId, id);
+  }
+
+  // ─── Guión ────────────────────────────────────────────────────────────────
+
+  /** Obtiene el contenido del guión vinculado al proyecto */
+  @Get('/:id/guion')
+  getGuion(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+    return this.projects.getGuionContent(user.userId, id);
+  }
+
+  /** Vincula/actualiza el guión pasando el texto en JSON */
+  @Post('/:id/guion')
+  setGuion(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { text: string; name?: string },
+  ) {
+    if (!body?.text?.trim()) throw new BadRequestException('text is required');
+    return this.projects.setGuionContent(user.userId, id, body.text, body.name);
+  }
+
+  /**
+   * Sube un archivo DOCX / PDF / TXT y extrae el texto automáticamente.
+   * Almacena el guión vinculado al proyecto.
+   */
+  @Post('/:id/guion/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGuion(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    const allowed = ['.docx', '.pdf', '.txt'];
+    const ext = require('path').extname(file.originalname).toLowerCase();
+    if (!allowed.includes(ext)) {
+      throw new BadRequestException(`Formato no admitido. Usa: ${allowed.join(', ')}`);
+    }
+
+    const text = await this.projects.extractTextFromFile(file.buffer, file.originalname);
+    if (!text?.trim()) throw new BadRequestException('No se pudo extraer texto del archivo');
+
+    return this.projects.setGuionContent(user.userId, id, text, file.originalname);
   }
 }

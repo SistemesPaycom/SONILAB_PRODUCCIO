@@ -217,4 +217,66 @@ async purgeFolder(id: string) {
 async purgeDocument(id: string) {
   return request(`/documents/${id}/purge`, { method: 'DELETE' });
 },
+
+  // ─── Guión de proyecto ───────────────────────────────────────────────────
+
+  /** Obtiene el texto del guión vinculado a un proyecto */
+  async getProjectGuion(projectId: string): Promise<{ text: string | null; guionDocumentId: string | null }> {
+    return request(`/projects/${projectId}/guion`);
+  },
+
+  /** Vincula/actualiza el guión de un proyecto pasando texto plano */
+  async setProjectGuion(projectId: string, text: string, name?: string): Promise<{ guionDocumentId: string }> {
+    return request(`/projects/${projectId}/guion`, {
+      method: 'POST',
+      body: { text, name },
+    });
+  },
+
+  /** Sube un archivo DOCX/PDF/TXT y lo vincula como guión del proyecto */
+  async uploadProjectGuionFile(
+    projectId: string,
+    file: File,
+    onProgress?: (pct: number) => void,
+  ): Promise<{ guionDocumentId: string }> {
+    const token = getToken();
+    const fd = new FormData();
+    fd.append('file', file);
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_URL}/projects/${projectId}/guion/upload`, true);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
+      };
+
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.onload = () => {
+        if (xhr.status === 401) {
+          setToken(null);
+          window.dispatchEvent(new Event('AUTH_REQUIRED'));
+          reject(new Error('Unauthorized'));
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          try {
+            const data = JSON.parse(xhr.responseText || '{}');
+            reject(new Error(data?.message || `HTTP ${xhr.status}`));
+          } catch {
+            reject(new Error(`HTTP ${xhr.status}`));
+          }
+          return;
+        }
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error('Invalid JSON response'));
+        }
+      };
+
+      xhr.send(fd);
+    });
+  },
 };

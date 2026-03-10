@@ -61,6 +61,10 @@ export const CreateProjectModal: React.FC<{
   const [scriptText, setScriptText] = useState('');
   const [scriptFile, setScriptFile] = useState<File | null>(null);
 
+  // guion del projecte (opcional — per a comparació a l'editor SRT)
+  const [guionFile, setGuionFile] = useState<File | null>(null);
+  const [guionPreviewText, setGuionPreviewText] = useState<string>('');
+
   // import srt
   const [srtFile, setSrtFile] = useState<File | null>(null);
 
@@ -115,10 +119,36 @@ export const CreateProjectModal: React.FC<{
     dispatch({ type: 'TRIGGER_SYNC_REQUEST', payload: { docId: mediaDocId, type: 'media' } });
   };
 
-  // Carga el archivo de guion como texto en el estado
+  // Carga el archivo de guion (script-align) como texto
   const handleScriptFileChange = (file: File) => {
     setScriptFile(file);
     void file.text().then((text) => setScriptText(text));
+  };
+
+  // Selecciona el guion del projecte (DOCX/PDF/TXT) per a comparació
+  const handleGuionFileChange = (file: File) => {
+    setGuionFile(file);
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'txt') {
+      // TXT: podem mostrar una previsualització immediata
+      void file.text().then((text) => setGuionPreviewText(text.slice(0, 300)));
+    } else {
+      // DOCX/PDF: l'extracció es farà al backend
+      setGuionPreviewText('');
+    }
+  };
+
+  // Puja el guio al projecte (cridat després de crear el projecte)
+  const uploadGuionToProject = async (projectId: string) => {
+    if (!guionFile) return;
+    const ext = guionFile.name.split('.').pop()?.toLowerCase();
+    if (ext === 'txt') {
+      const text = await guionFile.text();
+      await api.setProjectGuion(projectId, text, guionFile.name);
+    } else {
+      // DOCX/PDF: puja el fitxer al backend per extreure text
+      await api.uploadProjectGuionFile(projectId, guionFile);
+    }
   };
 
   const createByTranscribe = () => {
@@ -179,6 +209,13 @@ export const CreateProjectModal: React.FC<{
           await sleep(1000);
         }
 
+        // Si hi ha guió, l'associem al projecte
+        if (guionFile) {
+          await uploadGuionToProject(res.project.id).catch((e) => {
+            console.warn('Guion upload failed (non-fatal):', e);
+          });
+        }
+
         await reloadTree();
 
         onClose();
@@ -210,8 +247,14 @@ export const CreateProjectModal: React.FC<{
         });
 
         const srtDocId = res?.srtDocument?.id;
-        const mediaDocId = res?.project?.mediaDocumentId || mediaId;
         if (!srtDocId) throw new Error('Respuesta inválida al importar SRT');
+
+        // Si hi ha guió, l'associem al projecte
+        if (guionFile && res.project?.id) {
+          await uploadGuionToProject(res.project.id).catch((e) => {
+            console.warn('Guion upload failed (non-fatal):', e);
+          });
+        }
 
         await reloadTree();
 
@@ -319,6 +362,49 @@ export const CreateProjectModal: React.FC<{
                 />
               </div>
             )}
+
+            {/* Guió opcional (per a comparació a l'editor SRT) — disponible sempre */}
+            <div className="border border-dashed border-gray-700 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold text-gray-300">Guió del doblatge</span>
+                <span className="text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">opcional</span>
+              </div>
+              <div className="text-[11px] text-gray-500 mb-2">
+                Associa el guió al projecte per comparar-lo amb els subtítols a l'editor.
+                S'accepta DOCX, PDF o TXT.
+              </div>
+              <label className="text-xs text-gray-300 font-semibold cursor-pointer">
+                <input
+                  type="file"
+                  accept=".docx,.pdf,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleGuionFileChange(f);
+                    e.currentTarget.value = '';
+                  }}
+                />
+                <span className="inline-block px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 border border-gray-600 text-gray-200">
+                  Seleccionar fitxer…
+                </span>
+              </label>
+              {guionFile && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[11px] text-green-400 font-mono truncate max-w-[180px]">{guionFile.name}</span>
+                  <button
+                    className="text-[10px] text-gray-500 hover:text-red-400"
+                    onClick={() => { setGuionFile(null); setGuionPreviewText(''); }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+              {guionPreviewText && (
+                <div className="mt-2 text-[10px] text-gray-500 font-mono bg-gray-800 rounded p-2 max-h-16 overflow-hidden">
+                  {guionPreviewText}…
+                </div>
+              )}
+            </div>
 
             {/* Script para Script-Align */}
             {tab === 'transcribe' && engine === 'script-align' && (

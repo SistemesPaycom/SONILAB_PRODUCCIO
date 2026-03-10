@@ -14,7 +14,7 @@ Thumbs.db
 **/.env.local
 
 # Media / storage
-
+./subtitleedit-main/
 
 # Python
 **/__pycache__/

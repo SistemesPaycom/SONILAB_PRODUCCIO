@@ -409,10 +409,21 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
     <div
       ref={containerRef}
       className={`relative flex flex-col p-2 border-b border-gray-800 transition-all duration-200 ${
-        isActive ? 'bg-blue-600/10 ring-1 ring-inset ring-blue-500/30' : 'hover:bg-gray-800/30'
+        isActive
+          ? 'bg-blue-600/10 ring-1 ring-inset ring-blue-500/30'
+          : segment.hasDiff
+          ? 'bg-red-900/10 hover:bg-red-900/20'
+          : 'hover:bg-gray-800/30'
       } cursor-pointer group`}
       onClick={() => onClick(segment.id)}
     >
+      {/* Indicador lateral vermell quan hasDiff */}
+      {segment.hasDiff && !isActive && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500/70"
+          title="Discrepància amb el guió"
+        />
+      )}
       <div
         className="grid items-stretch"
         style={{
@@ -423,12 +434,22 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
       >
         {Array.from({ length: maxLines }).map((_, i) => (
           <React.Fragment key={i}>
-            {/* Columna 1: Només TAKE */}
-            <div style={gridCellStyle} className="flex items-center px-2">
+            {/* Columna 1: TAKE + indicador DIFF */}
+            <div style={gridCellStyle} className="flex items-center px-2 gap-1">
               {i === 0 && (
-                <span className="font-black text-blue-400 text-[10px] truncate">
-                  {segment.primaryTakeNum ? `TK${segment.primaryTakeNum}` : ''}
-                </span>
+                <>
+                  <span className="font-black text-blue-400 text-[10px] truncate">
+                    {segment.primaryTakeNum ? `TK${segment.primaryTakeNum}` : ''}
+                  </span>
+                  {segment.hasDiff && (
+                    <span
+                      className="text-[8px] font-black text-red-400 bg-red-900/30 px-0.5 rounded leading-none"
+                      title="Discrepància detectada entre el subtítol i el guió"
+                    >
+                      DIFF
+                    </span>
+                  )}
+                </>
               )}
             </div>
 

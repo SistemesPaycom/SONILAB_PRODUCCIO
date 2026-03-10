@@ -24,6 +24,9 @@ export class Project {
   settings: Record<string, any>;
 
   @Prop({ type: String, default: null })
+  guionDocumentId: string | null;
+
+  @Prop({ type: String, default: null })
 lastError: string | null;
 }
 
