@@ -7,7 +7,7 @@ export class TranscriptionSettingsDto {
   model?: string;
 
   @IsOptional()
-  @IsIn(['faster-whisper', 'whisperx'])
+  @IsIn(['faster-whisper', 'whisperx', 'purfview-xxl'])
   engine?: string;
 
   @IsOptional()

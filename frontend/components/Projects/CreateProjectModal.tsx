@@ -15,6 +15,12 @@ const MODEL_LABELS: Record<string, string> = {
   'large-v3-turbo': 'large-v3-turbo — rápido y alta calidad',
 };
 
+const ENGINE_LABELS: Record<string, string> = {
+  'faster-whisper': 'faster-whisper — timestamps nativos',
+  'purfview-xxl': 'Purfview XXL — + post-procesado',
+  'whisperx': 'whisperx — alineación externa',
+};
+
 function isMediaDoc(d: Document) {
   const st = (d.sourceType || '').toLowerCase();
   return MEDIA_EXTS.includes(st);
@@ -306,14 +312,19 @@ export const CreateProjectModal: React.FC<{
             <div className="text-xs font-bold text-gray-400">Configuración Whisper</div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="col-span-2">
                 <div className="text-xs text-gray-400 mb-1">Motor</div>
                 <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
                   value={engine} onChange={(e) => setEngine(e.target.value)}>
-                  {(options?.engines || ['faster-whisper', 'whisperx']).map((eng: string) => (
-                    <option key={eng} value={eng}>{eng}</option>
+                  {(options?.engines || ['faster-whisper', 'purfview-xxl', 'whisperx']).map((eng: string) => (
+                    <option key={eng} value={eng}>{ENGINE_LABELS[eng] ?? eng}</option>
                   ))}
                 </select>
+                {engine === 'purfview-xxl' && (
+                  <div className="mt-1 text-xs text-blue-400 bg-blue-900/30 rounded px-2 py-1">
+                    Purfview XXL: usa faster-whisper + post-procesado (fix casing, puntuación, fusión de líneas) — equivalente a SubtitleEdit Purfview's Faster-Whisper-XXL
+                  </div>
+                )}
               </div>
 
               <div>

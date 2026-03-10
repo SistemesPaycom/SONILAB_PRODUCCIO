@@ -420,11 +420,20 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
   onChangePage={(p) => { setPage(p); setOpenDocId(null); setOpenMode(null); setIsEditing(false); }}
         />
         {!isLibraryCollapsed && (
-            <div 
+            <div
                 onMouseDown={handleMouseDown}
                 className="absolute top-0 right-0 w-2 h-full cursor-col-resize z-50 group bg-transparent"
             />
         )}
+        {/* Botón toggle siempre visible en el borde derecho */}
+        <button
+          onClick={() => setIsLibraryCollapsed(!isLibraryCollapsed)}
+          title={isLibraryCollapsed ? 'Expandir librería' : 'Colapsar librería'}
+          className="absolute top-1/2 -right-3 -translate-y-1/2 z-[60] w-6 h-10 flex items-center justify-center rounded-r-md bg-gray-700 hover:bg-blue-600 text-gray-300 hover:text-white transition-colors shadow-lg border border-gray-600 hover:border-blue-500"
+          style={{ fontSize: '10px' }}
+        >
+          {isLibraryCollapsed ? '›' : '‹'}
+        </button>
       </aside>
       <section className="flex-1 flex flex-col min-w-0 bg-[#020617]">
         {renderMainContent()}

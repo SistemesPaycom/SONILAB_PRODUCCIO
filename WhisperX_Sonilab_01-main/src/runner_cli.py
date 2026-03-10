@@ -25,11 +25,50 @@ def main():
     # =============== NUEVOS PARÁMETROS v2 ===============
     p.add_argument(
         "--engine",
-        default="whisperx",
-        choices=["whisperx", "faster-whisper"],
-        help="Motor de transcripción: whisperx (defecto) o faster-whisper. "
-             "faster-whisper da word timestamps nativos para TODOS los idiomas "
-             "(incluido catalán) y soporta large-v3-turbo."
+        default="faster-whisper",
+        choices=["whisperx", "faster-whisper", "purfview-xxl"],
+        help=(
+            "Motor de transcripción:\n"
+            "  whisperx      — WhisperX + align pyannote\n"
+            "  faster-whisper — Faster-Whisper con word timestamps nativos\n"
+            "  purfview-xxl  — Faster-Whisper + post-procesado SubtitleEdit "
+            "(fix casing, periods, merge/balance lines)"
+        )
+    )
+    p.add_argument(
+        "--postprocess",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Activar post-procesado de texto (fix casing, periods, merge lines). "
+             "Se activa automáticamente con engine=purfview-xxl."
+    )
+    p.add_argument(
+        "--no-postprocess-casing",
+        dest="postprocess_casing",
+        action="store_false",
+        default=True,
+        help="Desactivar fix casing en el post-procesado."
+    )
+    p.add_argument(
+        "--no-postprocess-periods",
+        dest="postprocess_periods",
+        action="store_false",
+        default=True,
+        help="Desactivar add_periods en el post-procesado."
+    )
+    p.add_argument(
+        "--no-postprocess-merge",
+        dest="postprocess_merge",
+        action="store_false",
+        default=True,
+        help="Desactivar merge_short_lines en el post-procesado."
+    )
+    p.add_argument(
+        "--no-postprocess-balance",
+        dest="postprocess_balance",
+        action="store_false",
+        default=True,
+        help="Desactivar balance_lines en el post-procesado."
     )
     p.add_argument(
         "--timing-fix",
@@ -63,10 +102,15 @@ def main():
     device_pref = (args.device or "cpu").strip().lower()
     offline_mode = bool(args.offline)
 
-    # Nuevos parámetros
-    engine = (args.engine or "whisperx").strip().lower()
+    # Parámetros de motor y post-procesado
+    engine = (args.engine or "faster-whisper").strip().lower()
     enable_timing_fix = bool(args.timing_fix)
     timing_fix_threshold = float(args.timing_fix_threshold)
+    postprocess = bool(args.postprocess) or engine == "purfview-xxl"
+    postprocess_casing = bool(args.postprocess_casing)
+    postprocess_periods = bool(args.postprocess_periods)
+    postprocess_merge = bool(args.postprocess_merge)
+    postprocess_balance = bool(args.postprocess_balance)
 
     def status_cb(msg: str):
         # Esto lo puede leer Node luego si quieres (logs)
@@ -83,10 +127,14 @@ def main():
         device_pref,
         offline_mode=offline_mode,
         status_cb=status_cb,
-        # Nuevos parámetros
         engine=engine,
         enable_timing_fix=enable_timing_fix,
         timing_fix_threshold=timing_fix_threshold,
+        postprocess=postprocess,
+        postprocess_fix_casing=postprocess_casing,
+        postprocess_add_periods=postprocess_periods,
+        postprocess_merge_lines=postprocess_merge,
+        postprocess_balance_lines=postprocess_balance,
     )
 
     # Vuestro pipeline devuelve tupla de paths:
@@ -132,10 +180,10 @@ def main():
         "device": device_pref,
         "offline": offline_mode,
         "diarization": bool(args.diarization),
-        # Nuevos campos v2
         "engine": engine,
         "timing_fix": enable_timing_fix,
         "timing_fix_threshold": timing_fix_threshold,
+        "postprocess": postprocess,
     }
     print(json.dumps(result, ensure_ascii=False))
 

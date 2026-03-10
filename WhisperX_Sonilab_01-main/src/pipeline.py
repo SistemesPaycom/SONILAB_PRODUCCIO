@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-pipeline.py — WhisperX pipeline (v2 — con mejoras de timestamps):
+pipeline.py — WhisperX pipeline (v3 — tres motores):
 - extracción WAV
 - transcripción + align (word_segments) — ahora con cadena de fallbacks
 - (opcional) motor Faster-Whisper como alternativa a WhisperX
+- (opcional) motor Purfview-XXL: Faster-Whisper + post-procesado SubtitleEdit
 - (opcional) diarización pyannote
 - construcción de cues + timings + SRT
-- (NUEVO) post-procesado de timings por forma de onda (WhisperTimingFixer)
-- debugs: _words.csv/_words.txt, _cues_debug.csv, _subs_speakers.csv, _diarization_error.txt
+- post-procesado de timings por forma de onda (WhisperTimingFixer)
+- post-procesado de texto (fix casing, periods, merge/balance lines)
 
-Cambios v2:
-- Integración de timing_fixer.py (port de SubtitleEdit WhisperTimingFixer)
-- Soporte para motor Faster-Whisper (faster_whisper_engine.py)
-- Cadena de fallbacks de alineación mejorada para catalán y otros idiomas
-- Parámetro engine="whisperx"|"faster-whisper" para elegir motor
-- Parámetro enable_timing_fix para activar/desactivar el ajuste por forma de onda
+Motores disponibles:
+  "whisperx"     — WhisperX + align pyannote (preciso con alineación)
+  "faster-whisper" — Faster-Whisper con word timestamps nativos
+  "purfview-xxl"  — Faster-Whisper + post-procesado al estilo SubtitleEdit
 """
 
 import os
@@ -67,8 +66,11 @@ from debug_io import (
     write_subs_speakers_csv,
 )
 
-# NUEVO: timing fixer (port de SubtitleEdit)
+# timing fixer (port de SubtitleEdit)
 from timing_fixer import fix_timings_with_waveform
+
+# post-procesado de texto (al estilo AudioToTextPostProcessor de SubtitleEdit)
+from postprocessor import apply_postprocessing
 
 # ------------------------------------------------------------
 # Paths (proyecto)
@@ -174,10 +176,16 @@ def pipeline_generate(
     device_pref: str,
     offline_mode: bool = False,
     status_cb=None,
-    # NUEVOS parámetros v2
-    engine: str = "whisperx",         # "whisperx" o "faster-whisper"
-    enable_timing_fix: bool = True,   # activar ajuste de timings por forma de onda
-    timing_fix_threshold: float = 7.0, # umbral de silencio para el timing fixer
+    # Motor: "whisperx" | "faster-whisper" | "purfview-xxl"
+    engine: str = "faster-whisper",
+    enable_timing_fix: bool = True,
+    timing_fix_threshold: float = 7.0,
+    # Post-procesado texto (purfview-xxl activa todo por defecto)
+    postprocess: bool = False,
+    postprocess_fix_casing: bool = True,
+    postprocess_add_periods: bool = True,
+    postprocess_merge_lines: bool = True,
+    postprocess_balance_lines: bool = True,
 ):
     offline_mode = bool(offline_mode)
 
@@ -271,11 +279,16 @@ def pipeline_generate(
         _status(f"Idioma transcripción: {language or 'auto'}")
         _status(f"Motor de transcripción: {engine}")
 
+        # purfview-xxl usa faster-whisper internamente + postprocessing activado
+        use_faster_whisper = engine in ("faster-whisper", "purfview-xxl")
+        if engine == "purfview-xxl":
+            postprocess = True  # siempre activar postprocess en modo purfview-xxl
+
         # ================================================================
         # TRANSCRIPCIÓN + ALINEACIÓN
         # ================================================================
 
-        if engine == "faster-whisper":
+        if use_faster_whisper:
             # ----- Motor: Faster-Whisper -----
             _status(f"Usando Faster-Whisper con modelo {model_size}...")
             word_segments_raw, segments, detected_lang = _transcribe_faster_whisper(
@@ -407,6 +420,21 @@ def pipeline_generate(
             _status("Ajuste de timings por forma de onda completado.")
         elif enable_timing_fix:
             _status("AVISO: No se pudo aplicar timing_fixer (audio_arr no disponible).")
+
+        # ================================================================
+        # POST-PROCESADO DE TEXTO (purfview-xxl o postprocess=True)
+        # ================================================================
+        if postprocess:
+            _status(f"Aplicando post-procesado de texto (engine={engine})...")
+            cues = apply_postprocessing(
+                cues=cues,
+                do_fix_casing=postprocess_fix_casing,
+                do_add_periods=postprocess_add_periods,
+                do_merge_lines=postprocess_merge_lines,
+                do_balance_lines=postprocess_balance_lines,
+                status_cb=_status,
+            )
+            _status("Post-procesado de texto completado.")
 
         # Debug02
         # write_cues_debug(cues, out_base, rules)

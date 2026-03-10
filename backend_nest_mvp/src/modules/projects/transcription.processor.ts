@@ -107,6 +107,12 @@ export class TranscriptionProcessor {
         args.push('--no-timing-fix');
       }
 
+      // purfview-xxl activa postprocess automáticamente en el runner,
+      // pero lo pasamos explícitamente para que quede en el log
+      if (engine === 'purfview-xxl') {
+        args.push('--postprocess');
+      }
+
       if (language) args.push('--language', language);
       if (offline) args.push('--offline');
 
