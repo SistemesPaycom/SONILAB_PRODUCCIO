@@ -54,24 +54,28 @@ export class TranscriptionProcessor {
 
       // 3) Defaults desde .env y merge con settings del job
       const defaults = {
-        model: this.config.get<string>('WHISPERX_MODEL', 'small'),
+        model: this.config.get<string>('WHISPERX_MODEL', 'large-v3'),
+        engine: this.config.get<string>('WHISPERX_ENGINE', 'faster-whisper'),
         profile: this.config.get<string>('WHISPERX_PROFILE', 'VE'),
         language: this.config.get<string>('WHISPERX_LANGUAGE', ''),
         batchSize: Number(this.config.get<string>('WHISPERX_BATCH_SIZE', '8')),
         device: this.config.get<string>('WHISPERX_DEVICE', 'cpu'),
         diarization: envBool(this.config.get<string>('WHISPERX_DIARIZATION'), true),
         offline: envBool(this.config.get<string>('WHISPERX_OFFLINE'), false),
+        timingFix: envBool(this.config.get<string>('WHISPERX_TIMING_FIX'), true),
       };
 
       const s = { ...defaults, ...(job.data.settings || project.settings || {}) };
 
-      const model = String(s.model || 'small');
+      const model = String(s.model || 'large-v3');
+      const engine = String(s.engine || 'faster-whisper');
       const profile = String(s.profile || 'VE');
       const language = String(s.language || '');
       const batchSize = String(s.batchSize ?? 8);
       const device = String(s.device || 'cpu');
       const diarization = Boolean(s.diarization);
       const offline = Boolean(s.offline);
+      const timingFix = s.timingFix !== false;
 
       const pythonExe = this.config.get<string>('WHISPERX_PYTHON', 'python');
       const runnerPath = this.config.get<string>('WHISPERX_RUNNER');
@@ -94,6 +98,14 @@ export class TranscriptionProcessor {
         '--device',
         device,
       ];
+
+      args.push('--engine', engine);
+
+      if (timingFix) {
+        args.push('--timing-fix');
+      } else {
+        args.push('--no-timing-fix');
+      }
 
       if (language) args.push('--language', language);
       if (offline) args.push('--offline');

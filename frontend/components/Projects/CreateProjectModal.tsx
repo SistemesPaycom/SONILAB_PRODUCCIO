@@ -40,13 +40,15 @@ export const CreateProjectModal: React.FC<{
 
   // settings
   const [options, setOptions] = useState<any>(null);
-  const [model, setModel] = useState('small');
+  const [model, setModel] = useState('large-v3');
+  const [engine, setEngine] = useState('faster-whisper');
   const [profile, setProfile] = useState('VE');
   const [language, setLanguage] = useState('ca');
   const [device, setDevice] = useState<'cpu' | 'cuda'>('cpu');
   const [batchSize, setBatchSize] = useState(8);
   const [diarization, setDiarization] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [timingFix, setTimingFix] = useState(true);
 
   // import srt
   const [srtFile, setSrtFile] = useState<File | null>(null);
@@ -67,13 +69,15 @@ export const CreateProjectModal: React.FC<{
         setOptions(opt);
 
         const d = opt?.defaults || {};
-        setModel(d.model || 'small');
+        setModel(d.model || 'large-v3');
+        setEngine(d.engine || 'faster-whisper');
         setProfile(d.profile || 'VE');
         setLanguage(d.language || 'ca');
         setDevice((d.device || 'cpu') as any);
         setBatchSize(Number(d.batchSize || 8));
         setDiarization(!!d.diarization);
         setOffline(!!d.offline);
+        setTimingFix(d.timingFix !== false);
       } catch (e: any) {
         // no bloquea el modal si falla options
         console.warn(e);
@@ -85,12 +89,14 @@ export const CreateProjectModal: React.FC<{
 
   const settings = {
     model,
+    engine,
     profile,
     language,
     batchSize,
     device,
     diarization,
     offline,
+    timingFix,
   };
 
   const triggerAutoSyncMedia = (mediaDocId: string) => {
@@ -111,7 +117,8 @@ export const CreateProjectModal: React.FC<{
           mediaDocumentId: mediaId,
           settings,
         });
-
+        await reloadTree();
+        onClose()
         const jobId = res?.job?.id;
         const srtDocId = res?.srtDocument?.id;
         const mediaDocId = res?.project?.mediaDocumentId || mediaId;
@@ -156,8 +163,7 @@ export const CreateProjectModal: React.FC<{
         await reloadTree();
 
         onClose();
-        onOpenDocument(srtDocId, 'editor-video-subs', true);
-        triggerAutoSyncMedia(mediaDocId);
+       
       } catch (e: any) {
         setErr(e?.message || 'Error creando proyecto');
       } finally {
@@ -191,8 +197,7 @@ export const CreateProjectModal: React.FC<{
         await reloadTree();
 
         onClose();
-        onOpenDocument(srtDocId, 'editor-video-subs', true);
-        triggerAutoSyncMedia(mediaDocId);
+        
       } catch (e: any) {
         setErr(e?.message || 'Error importando SRT');
       } finally {
@@ -298,9 +303,19 @@ export const CreateProjectModal: React.FC<{
           </div>
 
           <div className="space-y-3">
-            <div className="text-xs font-bold text-gray-400">Configuración WhisperX</div>
+            <div className="text-xs font-bold text-gray-400">Configuración Whisper</div>
 
             <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Motor</div>
+                <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
+                  value={engine} onChange={(e) => setEngine(e.target.value)}>
+                  {(options?.engines || ['faster-whisper', 'whisperx']).map((eng: string) => (
+                    <option key={eng} value={eng}>{eng}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <div className="text-xs text-gray-400 mb-1">Modelo</div>
                 <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
@@ -343,6 +358,11 @@ export const CreateProjectModal: React.FC<{
                 </select>
               </div>
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input type="checkbox" checked={timingFix} onChange={(e) => setTimingFix(e.target.checked)} />
+              Auto-ajuste de timings (waveform)
+            </label>
 
             <label className="flex items-center gap-2 text-sm text-gray-200">
               <input type="checkbox" checked={diarization} onChange={(e) => setDiarization(e.target.checked)} />

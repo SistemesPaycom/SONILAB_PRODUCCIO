@@ -1,11 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-pipeline.py — WhisperX pipeline:
+pipeline.py — WhisperX pipeline (v2 — con mejoras de timestamps):
 - extracción WAV
-- transcripción + align (word_segments)
+- transcripción + align (word_segments) — ahora con cadena de fallbacks
+- (opcional) motor Faster-Whisper como alternativa a WhisperX
 - (opcional) diarización pyannote
 - construcción de cues + timings + SRT
+- (NUEVO) post-procesado de timings por forma de onda (WhisperTimingFixer)
 - debugs: _words.csv/_words.txt, _cues_debug.csv, _subs_speakers.csv, _diarization_error.txt
+
+Cambios v2:
+- Integración de timing_fixer.py (port de SubtitleEdit WhisperTimingFixer)
+- Soporte para motor Faster-Whisper (faster_whisper_engine.py)
+- Cadena de fallbacks de alineación mejorada para catalán y otros idiomas
+- Parámetro engine="whisperx"|"faster-whisper" para elegir motor
+- Parámetro enable_timing_fix para activar/desactivar el ajuste por forma de onda
 """
 
 import os
@@ -58,6 +67,9 @@ from debug_io import (
     write_subs_speakers_csv,
 )
 
+# NUEVO: timing fixer (port de SubtitleEdit)
+from timing_fixer import fix_timings_with_waveform
+
 # ------------------------------------------------------------
 # Paths (proyecto)
 # ------------------------------------------------------------
@@ -108,6 +120,46 @@ def get_device_and_compute_type(device_pref: str):
 
 
 # ============================================================
+# Transcripción con Faster-Whisper (alternativa a WhisperX)
+# ============================================================
+
+def _transcribe_faster_whisper(
+    wav_path: str,
+    model_size: str,
+    device: str,
+    compute_type: str,
+    language: Optional[str],
+    rules: SubtitleRules,
+    status_cb=None,
+):
+    """
+    Usa Faster-Whisper como motor de transcripción.
+    Devuelve (word_segments, segments, detected_language).
+    """
+    from faster_whisper_engine import (
+        transcribe_with_faster_whisper,
+        get_initial_prompt_for_language,
+    )
+
+    initial_prompt = get_initial_prompt_for_language(language)
+
+    word_segments, segments, detected_lang = transcribe_with_faster_whisper(
+        audio_path=wav_path,
+        model_size=model_size,
+        device=device,
+        compute_type=compute_type,
+        language=language,
+        beam_size=5,
+        word_timestamps=True,
+        vad_filter=True,
+        initial_prompt=initial_prompt,
+        status_cb=status_cb,
+    )
+
+    return word_segments, segments, detected_lang
+
+
+# ============================================================
 # Pipeline principal
 # ============================================================
 
@@ -120,8 +172,12 @@ def pipeline_generate(
     batch_size: int,
     hf_token: str,
     device_pref: str,
-    offline_mode: bool = False,   # <- default offline
+    offline_mode: bool = False,
     status_cb=None,
+    # NUEVOS parámetros v2
+    engine: str = "whisperx",         # "whisperx" o "faster-whisper"
+    enable_timing_fix: bool = True,   # activar ajuste de timings por forma de onda
+    timing_fix_threshold: float = 7.0, # umbral de silencio para el timing fixer
 ):
     offline_mode = bool(offline_mode)
 
@@ -213,32 +269,64 @@ def pipeline_generate(
             language = {"VE": "es", "VCAT": "ca"}.get(profile)
 
         _status(f"Idioma transcripción: {language or 'auto'}")
+        _status(f"Motor de transcripción: {engine}")
 
-        _status(f"Cargando WhisperX ({model_size}) en {device}...")
-        model = load_whisperx_model(model_size, device, compute_type, language=language)
+        # ================================================================
+        # TRANSCRIPCIÓN + ALINEACIÓN
+        # ================================================================
 
-        audio_arr = whisperx.load_audio(wav_path)
+        if engine == "faster-whisper":
+            # ----- Motor: Faster-Whisper -----
+            _status(f"Usando Faster-Whisper con modelo {model_size}...")
+            word_segments_raw, segments, detected_lang = _transcribe_faster_whisper(
+                wav_path=wav_path,
+                model_size=model_size,
+                device=device,
+                compute_type=compute_type,
+                language=language,
+                rules=rules,
+                status_cb=_status,
+            )
+            _used_fallback = False  # Faster-Whisper da word timestamps nativos
 
-        _status("Transcribiendo (WhisperX)...")
-        result = transcribe_audio(model, audio_arr, batch_size, language, chunk_size=15)
-        segs = result.get("segments", []) or []
-        if segs:
-            max_dur = max(float(s["end"]) - float(s["start"]) for s in segs)
-            _status(f"VAD segments: {len(segs)} | max_dur={max_dur:.2f}s")
+            # Cargar audio como numpy para diarización y timing fixer
+            audio_arr = whisperx.load_audio(wav_path)
 
+            # Si no hay suficientes word_segments, usar fallback
+            if not word_segments_raw or len(word_segments_raw) < 3:
+                _status("Faster-Whisper no generó suficientes word_segments. Fallback.")
+                _used_fallback = True
 
-        lang_for_align = language or result.get("language") or ("es" if profile == "VE" else "ca")
+        else:
+            # ----- Motor: WhisperX (por defecto) -----
+            _status(f"Cargando WhisperX ({model_size}) en {device}...")
+            model = load_whisperx_model(model_size, device, compute_type, language=language)
 
-        word_segments_raw, _used_fallback = align_words(
-            result=result,
-            audio_arr=audio_arr,
-            device=device,
-            language_code=lang_for_align,
-            status_cb=_status,
-        )
-        if _used_fallback:
-            raise RuntimeError("ALIGN FAILED -> no genero SRT porque los timecodes pueden salir mal. "
-                       "Revisa cache/modelos alignment y recursos.")
+            audio_arr = whisperx.load_audio(wav_path)
+
+            _status("Transcribiendo (WhisperX)...")
+            result = transcribe_audio(model, audio_arr, batch_size, language, chunk_size=15)
+            segs = result.get("segments", []) or []
+            if segs:
+                max_dur = max(float(s["end"]) - float(s["start"]) for s in segs)
+                _status(f"VAD segments: {len(segs)} | max_dur={max_dur:.2f}s")
+
+            lang_for_align = language or result.get("language") or ("es" if profile == "VE" else "ca")
+
+            word_segments_raw, _used_fallback = align_words(
+                result=result,
+                audio_arr=audio_arr,
+                device=device,
+                language_code=lang_for_align,
+                status_cb=_status,
+                allow_fallback=True,  # NUEVO: permite cadena completa de fallbacks
+            )
+
+            if _used_fallback:
+                _status("AVISO: Alineación word-level usó fallback por segmentos. "
+                        "Los timestamps pueden ser menos precisos. "
+                        "El ajuste por forma de onda (timing_fixer) intentará compensar.")
+
         # ------------------------
         # Diarización (opcional)
         # ------------------------
@@ -272,9 +360,6 @@ def pipeline_generate(
             diar_segs, mapping = map_speakers_to_interlocutors(diar_segs)
             _status(f"Diarización: {len(mapping)} interlocutores detectados (InterlocutorXX).")
 
-            # Debug04
-            # speakers_map_path = write_speakers_map(mapping, out_base)
-
             _status("Asignando interlocutores a palabras...")
             word_segments_raw = assign_speakers_to_words(word_segments_raw, diar_segs)
 
@@ -304,6 +389,24 @@ def pipeline_generate(
         cues = explode_cues_by_speaker_turns(cues, rules)
 
         cues = apply_timings_and_format(cues, rules)
+
+        # ================================================================
+        # NUEVO: Ajuste de timings por forma de onda (WhisperTimingFixer)
+        # ================================================================
+        if enable_timing_fix and audio_arr is not None:
+            _status("Aplicando ajuste de timings por forma de onda (WhisperTimingFixer)...")
+            cues = fix_timings_with_waveform(
+                cues=cues,
+                audio_arr=audio_arr,
+                sample_rate=16000,
+                min_duration_ms=max(rules.min_duration * 1000, 600.0),
+                max_duration_ms=rules.max_duration * 1000,
+                pct_threshold=timing_fix_threshold,
+                status_cb=_status,
+            )
+            _status("Ajuste de timings por forma de onda completado.")
+        elif enable_timing_fix:
+            _status("AVISO: No se pudo aplicar timing_fixer (audio_arr no disponible).")
 
         # Debug02
         # write_cues_debug(cues, out_base, rules)

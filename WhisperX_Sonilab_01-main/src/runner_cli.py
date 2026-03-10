@@ -12,7 +12,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--input", required=True, help="Ruta del video/audio")
     p.add_argument("--output_dir", default="", help="Carpeta donde COPIAR el SRT final (opcional)")
-    p.add_argument("--model", default="small", help="Modelo whisper: small/medium/large-v2...")
+    p.add_argument("--model", default="small", help="Modelo whisper: small/medium/large-v2/large-v3/large-v3-turbo...")
     p.add_argument("--profile", default="VE", help="Perfil: VE / VCAT (según vuestro pipeline)")
     p.add_argument("--language", default="", help="Idioma (ej: es). Vacío = auto")
     p.add_argument("--batch_size", type=int, default=8, help="Batch size (CPU: mejor 4-8)")
@@ -21,6 +21,30 @@ def main():
     p.add_argument("--offline", action="store_true", help="Forzar modo offline (usar caché local HF)")
     # Python 3.9+: permite --diarization / --no-diarization
     p.add_argument("--diarization", action=argparse.BooleanOptionalAction, default=True, help="Activar diarización")
+
+    # =============== NUEVOS PARÁMETROS v2 ===============
+    p.add_argument(
+        "--engine",
+        default="whisperx",
+        choices=["whisperx", "faster-whisper"],
+        help="Motor de transcripción: whisperx (defecto) o faster-whisper. "
+             "faster-whisper da word timestamps nativos para TODOS los idiomas "
+             "(incluido catalán) y soporta large-v3-turbo."
+    )
+    p.add_argument(
+        "--timing-fix",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Activar ajuste de timings por forma de onda (WhisperTimingFixer). "
+             "Analiza el audio real para alinear inicio/fin de subtítulos a silencios."
+    )
+    p.add_argument(
+        "--timing-fix-threshold",
+        type=float,
+        default=7.0,
+        help="Umbral de silencio para timing fixer (0-100). Menor = más agresivo. Defecto: 7.0"
+    )
+
     args = p.parse_args()
 
     inp = Path(args.input).resolve()
@@ -39,6 +63,11 @@ def main():
     device_pref = (args.device or "cpu").strip().lower()
     offline_mode = bool(args.offline)
 
+    # Nuevos parámetros
+    engine = (args.engine or "whisperx").strip().lower()
+    enable_timing_fix = bool(args.timing_fix)
+    timing_fix_threshold = float(args.timing_fix_threshold)
+
     def status_cb(msg: str):
         # Esto lo puede leer Node luego si quieres (logs)
         print(f"[STATUS] {msg}", flush=True)
@@ -54,6 +83,10 @@ def main():
         device_pref,
         offline_mode=offline_mode,
         status_cb=status_cb,
+        # Nuevos parámetros
+        engine=engine,
+        enable_timing_fix=enable_timing_fix,
+        timing_fix_threshold=timing_fix_threshold,
     )
 
     # Vuestro pipeline devuelve tupla de paths:
@@ -99,6 +132,10 @@ def main():
         "device": device_pref,
         "offline": offline_mode,
         "diarization": bool(args.diarization),
+        # Nuevos campos v2
+        "engine": engine,
+        "timing_fix": enable_timing_fix,
+        "timing_fix_threshold": timing_fix_threshold,
     }
     print(json.dumps(result, ensure_ascii=False))
 

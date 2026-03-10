@@ -1,7 +1,10 @@
-import { env } from "process";
-
 // frontend/services/api.ts
-const API_URL = (process.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const FALLBACK_API_URL =
+  typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : 'http://localhost:8000';
+
+const API_URL = (process.env.VITE_API_URL || FALLBACK_API_URL).replace(/\/$/, '');
 const TOKEN_KEY = 'sonilab_token';
 
 export function getToken(): string | null {
@@ -113,7 +116,6 @@ async listProjects() {
 
   // Media
  async uploadMedia(file: File, onProgress?: (pct: number) => void) {
-  const API_URL = (process.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
   const token = getToken(); // tu helper actual
 
   const fd = new FormData();

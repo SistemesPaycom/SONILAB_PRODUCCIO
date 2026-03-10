@@ -93,6 +93,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const [wavePeaks, setWavePeaks] = useState<WavePeakData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
 
   const [zoomH, setZoomH] = useState(MIN_ZOOM_INICI_H);
   const [zoomV, setZoomV] = useState(MIN_ZOOM_INICI_V);
@@ -362,7 +363,7 @@ const flushPendingUpdate = useCallback(() => {
           ctx.lineWidth = isActiveSeg ? 1.5 : 1;
           ctx.strokeRect(x1, boxY, x2 - x1, boxH);
 
-          if (x2 - x1 > 40) {
+        /*   if (x2 - x1 > 40) {
             ctx.save();
             ctx.beginPath();
             ctx.rect(x1 + 4, boxY, x2 - x1 - 8, boxH);
@@ -376,7 +377,7 @@ const flushPendingUpdate = useCallback(() => {
             lines.slice(0, 2).forEach((line, i) => ctx.fillText(line, x1 + 6, boxY + 4 + i * 12));
 
             ctx.restore();
-          }
+          } */
         });
       }
 
