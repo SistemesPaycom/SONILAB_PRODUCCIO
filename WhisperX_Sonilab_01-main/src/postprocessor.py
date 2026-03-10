@@ -29,6 +29,67 @@ PERIOD_GAP_ALWAYS_MS = 1250  # pausa donde siempre se añade punto
 MERGE_MAX_GAP_MS = 120       # gap máximo entre dos cues para fusionarlos
 
 
+# ─── Corrección de artefactos de tokenización ────────────────────────────────
+
+def fix_text_artifacts(cues: List[Dict]) -> List[Dict]:
+    """
+    Corrige artefactos de tokenización de Whisper en el texto ensamblado.
+
+    Problemas que soluciona:
+    - Apóstrofes con espacio (catalán/español):
+        "l 'Illa"    -> "l'Illa"
+        "d 'aquí"    -> "d'aquí"
+        "m 'ha"      -> "m'ha"
+        "N 'he"      -> "N'he"
+    - Números con espacio antes de separador decimal/miles:
+        "3 .000"     -> "3.000"
+        "12 ,5"      -> "12,5"
+    - Clíticos verbales pospuestos con espacio:
+        "quedar -se" -> "quedar-se"
+        "anar -hi"   -> "anar-hi"
+
+    Se aplica para TODOS los motores (no solo purfview-xxl).
+    """
+    # Clíticos pospuestos comunes del catalán y español
+    _VERB_CLITICS = (
+        "se", "te", "me", "nos", "vos", "us",  # reflexivos
+        "hi", "ne", "en",                        # catalán
+        "li", "los", "les", "la", "lo",          # pronominales
+    )
+    _clitic_pattern = re.compile(
+        r"(\w) -(" + "|".join(_VERB_CLITICS) + r")\b",
+        re.IGNORECASE,
+    )
+
+    result = []
+    for cue in cues:
+        text = cue.get("text") or cue.get("lines", "")
+        if isinstance(text, list):
+            text = "\n".join(text)
+        text = text.strip()
+
+        if text:
+            # 1) Apóstrofes catalanes/españoles con espacio o salto de línea
+            #    "l 'Illa" -> "l'Illa"   (clíticos: l, d, m, s, n, t)
+            text = re.sub(r"\b([lLdDmMsSnNtT])[ \n]'", r"\1'", text)
+
+            # 2) Números con espacio antes de punto decimal o separador de miles
+            #    "3 .000" -> "3.000",  "12 ,5" -> "12,5"
+            text = re.sub(r"(\d) \.(\d)", r"\1.\2", text)
+            text = re.sub(r"(\d) ,(\d)", r"\1,\2", text)
+
+            # 3) Clíticos verbales pospuestos: "quedar -se" -> "quedar-se"
+            text = _clitic_pattern.sub(r"\1-\2", text)
+
+        new_cue = dict(cue)
+        if "text" in cue:
+            new_cue["text"] = text
+        elif "lines" in cue:
+            new_cue["lines"] = text
+        result.append(new_cue)
+    return result
+
+
 # ─── Helpers internos ────────────────────────────────────────────────────────
 
 def _ends_sentence(text: str) -> bool:
@@ -360,6 +421,10 @@ def apply_postprocessing(
 
     original_count = len(cues)
     _st(f"[postprocessor] Inicio: {original_count} cues")
+
+    # Siempre: corregir artefactos de tokenización (apóstrofes, números, clíticos)
+    cues = fix_text_artifacts(cues)
+    _st("[postprocessor] fix_text_artifacts: OK")
 
     if do_merge_lines:
         cues = merge_short_lines(cues)

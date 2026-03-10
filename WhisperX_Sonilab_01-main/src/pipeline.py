@@ -70,7 +70,7 @@ from debug_io import (
 from timing_fixer import fix_timings_with_waveform
 
 # post-procesado de texto (al estilo AudioToTextPostProcessor de SubtitleEdit)
-from postprocessor import apply_postprocessing
+from postprocessor import apply_postprocessing, fix_text_artifacts
 
 # ------------------------------------------------------------
 # Paths (proyecto)
@@ -404,7 +404,14 @@ def pipeline_generate(
         cues = apply_timings_and_format(cues, rules)
 
         # ================================================================
-        # NUEVO: Ajuste de timings por forma de onda (WhisperTimingFixer)
+        # Corrección de artefactos de tokenización (TODOS los motores)
+        # "l 'Illa" -> "l'Illa", "3 .000" -> "3.000", "quedar -se" -> "quedar-se"
+        # ================================================================
+        _status("Corrigiendo artefactos de texto (apóstrofes, números, clíticos)...")
+        cues = fix_text_artifacts(cues)
+
+        # ================================================================
+        # Ajuste de timings por forma de onda (WhisperTimingFixer)
         # ================================================================
         if enable_timing_fix and audio_arr is not None:
             _status("Aplicando ajuste de timings por forma de onda (WhisperTimingFixer)...")

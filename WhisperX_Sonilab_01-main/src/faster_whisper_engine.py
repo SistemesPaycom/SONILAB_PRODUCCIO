@@ -19,6 +19,44 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 
+# Clíticos catalanes/españoles que producen apóstrofe con la palabra siguiente
+# Ej: l'Illa, d'aquí, m'ha, s'estava, n'hi, t'has
+_CATALAN_CLITICS = {"l", "d", "m", "s", "n", "t"}
+
+
+def _merge_apostrophe_tokens(word_segments: List[Dict]) -> List[Dict]:
+    """
+    Fusiona tokens de apóstrofe catalán/español con el token anterior.
+
+    Faster-Whisper tokeniza "l'Illa" como ["l", "'Illa"] (dos tokens),
+    lo que produce "l 'Illa" al ensamblar con espacios.
+    Este paso los une en un único token: ["l'Illa"].
+
+    También maneja el caso donde el clítico tiene puntuación espuria al final,
+    p. ej. ["L.", "'Únic"] → ["L'Únic"] (artefacto de Whisper al detectar abreviatura).
+    """
+    if not word_segments:
+        return word_segments
+
+    result: List[Dict] = []
+    for ws in word_segments:
+        word = ws.get("word", "").strip()
+        # ¿El token empieza con apóstrofe y tiene contenido real después?
+        if result and word.startswith("'") and len(word) > 1:
+            prev_raw = result[-1]["word"].strip()
+            # Quitar puntuación final para comprobar si es clítico
+            prev_clean = re.sub(r"[.!?,;:]+$", "", prev_raw).lower()
+            if prev_clean in _CATALAN_CLITICS:
+                # Fusionar: eliminar puntuación espuria del clítico + unir con el token
+                merged = dict(result[-1])
+                merged["word"] = re.sub(r"[.!?,;:]+$", "", prev_raw) + word
+                merged["end"] = ws["end"]
+                result[-1] = merged
+                continue
+        result.append(dict(ws))
+    return result
+
+
 def transcribe_with_faster_whisper(
     audio_path: str,
     model_size: str = "large-v3-turbo",
@@ -127,6 +165,13 @@ def transcribe_with_faster_whisper(
         _status("Generando word_segments aproximados desde segmentos...")
         word_segments = _approx_words_from_segments(segments)
 
+    # Fusionar tokens de apóstrofe: "l" + "'Illa" -> "l'Illa"
+    # Evita espacios erróneos al ensamblar (l 'Illa, d 'aquí, m 'ha, etc.)
+    before_merge = len(word_segments)
+    word_segments = _merge_apostrophe_tokens(word_segments)
+    if len(word_segments) < before_merge:
+        _status(f"Apostrophe merge: {before_merge} -> {len(word_segments)} tokens")
+
     # Limpiar modelo de memoria
     del model
     try:
@@ -184,7 +229,10 @@ def get_initial_prompt_for_language(language: Optional[str]) -> Optional[str]:
     """
     prompts = {
         "es": "Transcripción de subtítulos en español de España, con puntuación correcta.",
-        "ca": "Transcripció de subtítols en català, amb la puntuació correcta.",
+        "ca": (
+            "Transcripció de subtítols en català, amb puntuació i apòstrofs correctes. "
+            "Exemples d'apòstrof: l'Illa, d'aquí, s'ha, m'ha, n'hi, t'has, l'home, d'aquesta."
+        ),
         "en": "Subtitle transcription in English, with correct punctuation.",
     }
     return prompts.get(language)
