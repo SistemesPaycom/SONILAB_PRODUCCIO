@@ -8,13 +8,13 @@ export class AuthService {
 
   async register(email: string, password: string) {
     const user = await this.users.create(email, password);
-    const accessToken = await this.jwt.signAsync({ sub: user.id, email: user.email });
+    const accessToken = await this.jwt.signAsync({ sub: user.id, email: user.email, role: user.role });
     return { user, accessToken };
   }
 
   async login(email: string, password: string) {
     const user = await this.users.validate(email, password);
-    const accessToken = await this.jwt.signAsync({ sub: user.id, email: user.email });
+    const accessToken = await this.jwt.signAsync({ sub: user.id, email: user.email, role: user.role });
     return { user, accessToken };
   }
 }

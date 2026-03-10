@@ -44,7 +44,7 @@ export class TranscriptionProcessor {
       await this.projects.updateProject(projectId, { status: 'processing', lastError: null } as any);
 
       // 1) Cargar proyecto y ruta real del vídeo/audio en disco
-      const project = await this.projects.getProject(ownerId, projectId);
+      const project = await this.projects.getProject(projectId);
       const mediaPath = await this.projects.getMediaPath(ownerId, project.mediaDocumentId);
 
       // 2) Preparar salida dentro del backend: MEDIA_ROOT/projects/<projectId>/whisperx
@@ -65,7 +65,7 @@ export class TranscriptionProcessor {
         timingFix: envBool(this.config.get<string>('WHISPERX_TIMING_FIX'), true),
       };
 
-      const s = { ...defaults, ...(job.data.settings || project.settings || {}) };
+      const s: typeof defaults & Record<string, any> = { ...defaults, ...(job.data.settings || project.settings || {}) };
 
       const model = String(s.model || 'large-v3');
       const engine = String(s.engine || 'faster-whisper');

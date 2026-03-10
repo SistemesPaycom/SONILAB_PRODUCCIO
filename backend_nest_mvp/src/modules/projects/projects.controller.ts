@@ -22,10 +22,10 @@ import { CreateProjectFromExistingDto } from './dto/create-project-from-existing
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
-  // ✅ NUEVO: listado
+  /** Lista TODOS los proyectos (todos los usuarios comparten el espacio) */
   @Get()
-  list(@CurrentUser() user: RequestUser) {
-    return this.projects.listProjects(user.userId);
+  list() {
+    return this.projects.listProjects();
   }
 
   @Post()
@@ -46,42 +46,34 @@ export class ProjectsController {
 
   // ✅ IMPORTANTE: esta ruta debe ir ANTES que /:id
   @Get('/by-srt/:srtDocumentId')
-  getBySrt(@CurrentUser() user: RequestUser, @Param('srtDocumentId') srtDocumentId: string) {
-    return this.projects.getProjectBySrt(user.userId, srtDocumentId);
+  getBySrt(@Param('srtDocumentId') srtDocumentId: string) {
+    return this.projects.getProjectBySrt(srtDocumentId);
   }
 
   @Get('/:id')
-  get(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-    return this.projects.getProject(user.userId, id);
+  get(@Param('id') id: string) {
+    return this.projects.getProject(id);
   }
 
   // ─── Guión ────────────────────────────────────────────────────────────────
 
-  /** Obtiene el contenido del guión vinculado al proyecto */
   @Get('/:id/guion')
-  getGuion(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-    return this.projects.getGuionContent(user.userId, id);
+  getGuion(@Param('id') id: string) {
+    return this.projects.getGuionContent(id);
   }
 
-  /** Vincula/actualiza el guión pasando el texto en JSON */
   @Post('/:id/guion')
   setGuion(
-    @CurrentUser() user: RequestUser,
     @Param('id') id: string,
     @Body() body: { text: string; name?: string },
   ) {
     if (!body?.text?.trim()) throw new BadRequestException('text is required');
-    return this.projects.setGuionContent(user.userId, id, body.text, body.name);
+    return this.projects.setGuionContent(id, body.text, body.name);
   }
 
-  /**
-   * Sube un archivo DOCX / PDF / TXT y extrae el texto automáticamente.
-   * Almacena el guión vinculado al proyecto.
-   */
   @Post('/:id/guion/upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadGuion(
-    @CurrentUser() user: RequestUser,
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
@@ -95,6 +87,6 @@ export class ProjectsController {
     const text = await this.projects.extractTextFromFile(file.buffer, file.originalname);
     if (!text?.trim()) throw new BadRequestException('No se pudo extraer texto del archivo');
 
-    return this.projects.setGuionContent(user.userId, id, text, file.originalname);
+    return this.projects.setGuionContent(id, text, file.originalname);
   }
 }

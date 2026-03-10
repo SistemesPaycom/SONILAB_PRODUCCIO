@@ -22,6 +22,44 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 
+# ── Detecció de format SONILAB ────────────────────────────────────────────────
+_SONILAB_PATTERN = re.compile(
+    r'TAKE\s*#?\s*\d+|^\*REPICAR\*|^\*[A-ZÀ-Ü][^*]*\*\s*\(',
+    re.MULTILINE | re.IGNORECASE,
+)
+
+def _is_sonilab_guion(text: str) -> bool:
+    """Detecta si el text sembla un guió SONILAB (té TAKE / REPICAR / *CHAR*(offset))."""
+    return bool(_SONILAB_PATTERN.search(text))
+
+
+def _prepare_script_text(script_text: str, status_cb=None) -> str:
+    """
+    Si el text és un guió SONILAB (format CCMA/doblatge),
+    extreu únicament les línies de diàleg netes.
+    Si no, el retorna tal qual (per compatibilitat amb text pla).
+    """
+    def _status(msg: str):
+        if callable(status_cb):
+            status_cb(msg)
+
+    if not _is_sonilab_guion(script_text):
+        return script_text.strip()
+
+    try:
+        from parse_guion import parse_guion_for_alignment
+        clean = parse_guion_for_alignment(script_text)
+        _status(
+            f"Script-align: guió SONILAB detectat — "
+            f"{len(script_text.splitlines())} línies entrada → "
+            f"{len(clean.splitlines())} línies de diàleg net"
+        )
+        return clean
+    except ImportError:
+        _status("Script-align: AVÍS — parse_guion.py no trobat, usant text en brut")
+        return script_text.strip()
+
+
 def align_script_to_audio(
     audio_path: str,
     script_text: str,
@@ -52,6 +90,16 @@ def align_script_to_audio(
     def _status(msg: str):
         if callable(status_cb):
             status_cb(msg)
+
+    # ------------------------------------------------------------------ #
+    # 0. Normalitzar el text del guió (si és format SONILAB, netejar)    #
+    # ------------------------------------------------------------------ #
+    script_text = _prepare_script_text(script_text, status_cb=status_cb)
+    if not script_text.strip():
+        raise ValueError(
+            "El guió no conté diàleg útil després de l'anàlisi. "
+            "Comprova que el fitxer sigui un guió de doblatge vàlid."
+        )
 
     # ------------------------------------------------------------------ #
     # 1. ASR rápido — solo para detectar fronteras de segmentos de habla  #

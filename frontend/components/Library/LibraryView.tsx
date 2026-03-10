@@ -13,6 +13,8 @@ import OpenWithModal from './OpenWithModal';
 import ImportFilesModal from '../Import/ImportFilesModal';
 import { api } from '@/services/api';
 import { CreateProjectModal } from '../Projects/CreateProjectModal';
+import { useAuth } from '../../context/Auth/AuthContext';
+import { AdminPanel } from '../Admin/AdminPanel';
 
 type OpenMode = 'editor' | 'lector' | 'editor-video' | 'editor-video-subs';
 
@@ -63,6 +65,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenNotifications,
 }) => {
   const { state, dispatch, currentItems, currentFolder,useBackend, createFolderRemote, createDocumentRemote, uploadMediaRemote, reloadTree } = useLibrary();
+  const { isAdmin } = useAuth();
  const { view, sortBy, sortOrder, selectedIds, folders, translationTasks, transcriptionTasks } = state;
 
   const [isCreateFolderModalOpen, setCreateFolderModalOpen] = useState(false);
@@ -75,6 +78,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [isRenameModalOpen, setRenameModalOpen] = useState(false);
 const [renameValue, setRenameValue] = useState('');
 const [page, setPage] = useState<'library'|'media'|'projects'>('library');
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [nameColWidth, setNameColWidth] = useState(200);
   const [formatColWidth, setFormatColWidth] = useState(100);
@@ -605,12 +609,20 @@ const itemsToRender = currentItems.filter((item) => {
           <span className={isCollapsed ? 'hidden' : 'inline'}>Tasques IA</span>
           {activeTasksCount > 0 && <span className={`absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-gray-900 ${isCollapsed ? 'scale-75' : ''}`}>{activeTasksCount}</span>}
         </button>
+        {isAdmin && (
+          <button onClick={() => setIsAdminPanelOpen(true)} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} bg-amber-700/40 text-amber-300 hover:bg-amber-700/60`} title="Administració d'usuaris">
+            <span className="text-base">👥</span>
+            <span className={isCollapsed ? 'hidden' : 'inline'}>Administrador</span>
+          </button>
+        )}
         <button onClick={onOpenSettings} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} bg-gray-700 text-gray-200 hover:bg-gray-600`} title="Configuració">
           <Icons.Settings className={isCollapsed ? 'w-5 h-5' : 'w-5 h-5'} />
           <span className={isCollapsed ? 'hidden' : 'inline'}>Configuració</span>
         </button>
       </div>
       
+      {isAdminPanelOpen && <AdminPanel onClose={() => setIsAdminPanelOpen(false)} />}
+
       <ConfirmationModal 
         isOpen={showPermanentDeleteConfirm}
         onClose={() => setShowPermanentDeleteConfirm(false)}

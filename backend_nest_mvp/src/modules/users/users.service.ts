@@ -8,13 +8,13 @@ import { User, UserDocument } from './schemas/user.schema';
 export class UsersService {
   constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
 
-  async create(email: string, password: string) {
+  async create(email: string, password: string, role: 'admin' | 'user' = 'user') {
     const exists = await this.userModel.findOne({ email: email.toLowerCase() }).lean();
     if (exists) throw new ConflictException('Email already registered');
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await this.userModel.create({ email: email.toLowerCase(), passwordHash });
-    return { id: user._id.toString(), email: user.email };
+    const user = await this.userModel.create({ email: email.toLowerCase(), passwordHash, role });
+    return { id: user._id.toString(), email: user.email, role: user.role };
   }
 
   async validate(email: string, password: string) {
@@ -24,18 +24,39 @@ export class UsersService {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
 
-    return { id: user._id.toString(), email: user.email };
+    return { id: user._id.toString(), email: user.email, role: user.role };
   }
-async findById(id: string) {
+
+  async findById(id: string) {
     const user = await this.userModel.findById(id).lean();
     if (!user) return null;
     const { passwordHash, ...safe } = user as any;
-    // convertir _id a id para API
     return { id: (user as any)._id.toString(), ...safe };
   }
 
+  async findAll() {
+    const users = await this.userModel.find().sort({ createdAt: -1 }).lean();
+    return users.map((u: any) => {
+      const { passwordHash, ...safe } = u;
+      return { id: u._id.toString(), ...safe };
+    });
+  }
+
+  async createByAdmin(email: string, password: string, name?: string, role: 'admin' | 'user' = 'user') {
+    const exists = await this.userModel.findOne({ email: email.toLowerCase() }).lean();
+    if (exists) throw new ConflictException('Email already registered');
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await this.userModel.create({
+      email: email.toLowerCase(),
+      passwordHash,
+      name,
+      role,
+    });
+    return { id: user._id.toString(), email: user.email, name: user.name, role: user.role };
+  }
+
   async update(id: string, updates: { name?: string; email?: string; preferences?: any }) {
-    // si cambia email, validar duplicado
     if (updates.email) {
       const exists = await this.userModel.findOne({ email: updates.email.toLowerCase(), _id: { $ne: id } }).lean();
       if (exists) throw new ConflictException('Email already registered');
@@ -50,5 +71,4 @@ async findById(id: string) {
     const { passwordHash, ...safe } = updated as any;
     return { id: (updated as any)._id.toString(), ...safe };
   }
-
 }

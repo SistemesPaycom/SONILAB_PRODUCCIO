@@ -7,6 +7,8 @@ type AuthContextValue = {
   authed: boolean;
   reason: AuthReason;
   me: any | null;
+  role: string;
+  isAdmin: boolean;
   refreshMe: () => Promise<void>;
   markAuthed: () => void;
   logout: () => void;
@@ -25,11 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     try {
-      // Si todavía no has añadido /auth/me en frontend, esto no rompe:
-      // simplemente fallará y lo ignoramos.
-      const fn = (api as any).me as undefined | (() => Promise<any>);
-      if (!fn) return;
-      const profile = await fn();
+      const profile = await api.me();
       setMe(profile);
     } catch {
       // no bloquear UX por un /me temporalmente roto
@@ -63,9 +61,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (authed) void refreshMe();
   }, [authed, refreshMe]);
 
+  const role = me?.role ?? 'user';
+  const isAdmin = role === 'admin';
+
   const value = useMemo<AuthContextValue>(
-    () => ({ authed, reason, me, refreshMe, markAuthed, logout }),
-    [authed, reason, me, refreshMe, markAuthed, logout],
+    () => ({ authed, reason, me, role, isAdmin, refreshMe, markAuthed, logout }),
+    [authed, reason, me, role, isAdmin, refreshMe, markAuthed, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

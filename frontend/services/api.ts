@@ -81,6 +81,15 @@ export const api = {
       body: { email, password },
     });
   },
+  async me() {
+    return request<{ id: string; email: string; name?: string; role: string }>(`/auth/me`);
+  },
+  async adminListUsers() {
+    return request<any[]>(`/auth/admin/users`);
+  },
+  async adminCreateUser(payload: { email: string; password: string; name?: string; role?: 'admin' | 'user' }) {
+    return request<any>(`/auth/admin/users`, { method: 'POST', body: payload });
+  },
 async listProjects() {
   return request<any[]>(`/projects`);
 },

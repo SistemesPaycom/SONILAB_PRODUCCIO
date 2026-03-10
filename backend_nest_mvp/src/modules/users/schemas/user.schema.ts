@@ -18,6 +18,9 @@ export class User {
   // nuevo (opcional): almacena preferencias libres
   @Prop({ type: Object, default: {} })
   preferences?: any;
+
+  @Prop({ type: String, enum: ['admin', 'user'], default: 'user' })
+  role: 'admin' | 'user';
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

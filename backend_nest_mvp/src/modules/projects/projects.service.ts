@@ -70,8 +70,8 @@ async createProjectFromExisting(
   };
 }
 
-async listProjects(ownerId: string) {
-  const rows = await this.projectModel.find({ ownerId }).sort({ createdAt: -1 }).lean();
+async listProjects() {
+  const rows = await this.projectModel.find().sort({ createdAt: -1 }).lean();
   return rows.map((p: any) => ({ ...p, id: p._id.toString() }));
 }
   /**
@@ -197,21 +197,20 @@ if (exists) {
     };
   }
 
-  async getProject(ownerId: string, id: string) {
-    const project = await this.projectModel.findOne({ _id: id, ownerId }).lean();
+  async getProject(id: string) {
+    const project = await this.projectModel.findOne({ _id: id }).lean();
     if (!project) throw new NotFoundException('Project not found');
     return { ...project, id: project._id.toString() };
   }
 
-  async getProjectBySrt(ownerId: string, srtDocumentId: string) {
-    // ✅ FIX: el campo es srtDocumentId
-    const project = await this.projectModel.findOne({ ownerId, srtDocumentId }).lean();
+  async getProjectBySrt(srtDocumentId: string) {
+    const project = await this.projectModel.findOne({ srtDocumentId }).lean();
     if (!project) throw new NotFoundException('Project not found for this SRT');
     return { ...project, id: project._id.toString() };
   }
 
-  async getJob(ownerId: string, id: string) {
-    const job = await this.jobModel.findOne({ _id: id, ownerId }).lean();
+  async getJob(id: string) {
+    const job = await this.jobModel.findOne({ _id: id }).lean();
     if (!job) throw new NotFoundException('Job not found');
     return { ...job, id: job._id.toString() };
   }
@@ -316,12 +315,12 @@ except ImportError:
    * Crea un Document de tipo 'guion' en la carpeta del proyecto si no existe.
    */
   async setGuionContent(
-    ownerId: string,
     projectId: string,
     guionText: string,
     guionName?: string,
   ): Promise<{ guionDocumentId: string }> {
-    const project = await this.getProject(ownerId, projectId);
+    const project = await this.getProject(projectId);
+    const ownerId = (project as any).ownerId;
 
     if (project.guionDocumentId) {
       // Actualizar documento existente
@@ -342,7 +341,7 @@ except ImportError:
     } as any);
 
     await this.projectModel.updateOne(
-      { _id: projectId, ownerId },
+      { _id: projectId },
       { $set: { guionDocumentId: guionDoc.id } },
     );
 
@@ -352,8 +351,9 @@ except ImportError:
   /**
    * Obtiene el contenido de texto del guión vinculado al proyecto.
    */
-  async getGuionContent(ownerId: string, projectId: string): Promise<{ text: string | null; guionDocumentId: string | null }> {
-    const project = await this.getProject(ownerId, projectId);
+  async getGuionContent(projectId: string): Promise<{ text: string | null; guionDocumentId: string | null }> {
+    const project = await this.getProject(projectId);
+    const ownerId = (project as any).ownerId;
     if (!project.guionDocumentId) return { text: null, guionDocumentId: null };
 
     try {
