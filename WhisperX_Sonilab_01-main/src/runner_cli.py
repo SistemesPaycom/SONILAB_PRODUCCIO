@@ -33,13 +33,21 @@ def main():
     p.add_argument(
         "--engine",
         default="faster-whisper",
-        choices=["whisperx", "faster-whisper", "purfview-xxl"],
+        choices=["whisperx", "faster-whisper", "purfview-xxl", "script-align"],
         help=(
             "Motor de transcripción:\n"
             "  whisperx      — WhisperX + align pyannote\n"
             "  faster-whisper — Faster-Whisper con word timestamps nativos\n"
-            "  purfview-xxl  — Faster-Whisper + post-procesado SubtitleEdit "
-            "(fix casing, periods, merge/balance lines)"
+            "  purfview-xxl  — Faster-Whisper + post-procesado SubtitleEdit\n"
+            "  script-align  — Forced alignment con guion conocido (requiere --script-file)"
+        )
+    )
+    p.add_argument(
+        "--script-file",
+        default="",
+        help=(
+            "Ruta al archivo de texto con el guion completo. "
+            "Solo se usa con --engine script-align."
         )
     )
     p.add_argument(
@@ -119,6 +127,16 @@ def main():
     postprocess_merge = bool(args.postprocess_merge)
     postprocess_balance = bool(args.postprocess_balance)
 
+    # Guion (para engine=script-align)
+    script_text = ""
+    script_file = (args.script_file or "").strip()
+    if script_file:
+        script_file_path = Path(script_file).resolve()
+        if not script_file_path.exists():
+            raise FileNotFoundError(f"No existe script-file: {script_file_path}")
+        script_text = script_file_path.read_text(encoding="utf-8")
+        print(f"[STATUS] Guion cargado desde {script_file_path} ({len(script_text)} chars)", flush=True)
+
     def status_cb(msg: str):
         # Esto lo puede leer Node luego si quieres (logs)
         print(f"[STATUS] {msg}", flush=True)
@@ -135,6 +153,7 @@ def main():
         offline_mode=offline_mode,
         status_cb=status_cb,
         engine=engine,
+        script_text=script_text or None,
         enable_timing_fix=enable_timing_fix,
         timing_fix_threshold=timing_fix_threshold,
         postprocess=postprocess,
@@ -188,6 +207,7 @@ def main():
         "offline": offline_mode,
         "diarization": bool(args.diarization),
         "engine": engine,
+        "script_file": script_file,
         "timing_fix": enable_timing_fix,
         "timing_fix_threshold": timing_fix_threshold,
         "postprocess": postprocess,

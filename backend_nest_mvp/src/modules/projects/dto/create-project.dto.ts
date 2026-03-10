@@ -7,7 +7,7 @@ export class TranscriptionSettingsDto {
   model?: string;
 
   @IsOptional()
-  @IsIn(['faster-whisper', 'whisperx', 'purfview-xxl'])
+  @IsIn(['faster-whisper', 'whisperx', 'purfview-xxl', 'script-align'])
   engine?: string;
 
   @IsOptional()
@@ -39,6 +39,10 @@ export class TranscriptionSettingsDto {
   @IsOptional()
   @IsBoolean()
   timingFix?: boolean;
+
+  @IsOptional()
+  @IsString()
+  scriptText?: string;
 }
 
 export class CreateProjectDto {

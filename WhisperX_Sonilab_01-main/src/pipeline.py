@@ -176,8 +176,10 @@ def pipeline_generate(
     device_pref: str,
     offline_mode: bool = False,
     status_cb=None,
-    # Motor: "whisperx" | "faster-whisper" | "purfview-xxl"
+    # Motor: "whisperx" | "faster-whisper" | "purfview-xxl" | "script-align"
     engine: str = "faster-whisper",
+    # Guion (solo para engine="script-align")
+    script_text: Optional[str] = None,
     enable_timing_fix: bool = True,
     timing_fix_threshold: float = 7.0,
     # Post-procesado texto (purfview-xxl activa todo por defecto)
@@ -288,7 +290,27 @@ def pipeline_generate(
         # TRANSCRIPCIÓN + ALINEACIÓN
         # ================================================================
 
-        if use_faster_whisper:
+        if engine == "script-align":
+            # ----- Motor: Script-Align (forced alignment con guion) -----
+            if not script_text or not script_text.strip():
+                raise ValueError(
+                    "engine='script-align' requiere script_text (el texto del guion)."
+                )
+            _status("Motor: script-align — alineación forzada con guion conocido.")
+            from script_align_engine import align_script_to_audio
+
+            word_segments_raw, segments, detected_lang = align_script_to_audio(
+                audio_path=wav_path,
+                script_text=script_text,
+                language=language,
+                device=device,
+                compute_type=compute_type,
+                status_cb=_status,
+            )
+            _used_fallback = False
+            audio_arr = whisperx.load_audio(wav_path)
+
+        elif use_faster_whisper:
             # ----- Motor: Faster-Whisper -----
             _status(f"Usando Faster-Whisper con modelo {model_size}...")
             word_segments_raw, segments, detected_lang = _transcribe_faster_whisper(

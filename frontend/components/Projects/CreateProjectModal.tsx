@@ -19,6 +19,7 @@ const ENGINE_LABELS: Record<string, string> = {
   'faster-whisper': 'faster-whisper — timestamps nativos',
   'purfview-xxl': 'Purfview XXL — + post-procesado',
   'whisperx': 'whisperx — alineación externa',
+  'script-align': 'Script-Align — alineación con guion (máxima calidad)',
 };
 
 function isMediaDoc(d: Document) {
@@ -55,6 +56,10 @@ export const CreateProjectModal: React.FC<{
   const [diarization, setDiarization] = useState(false);
   const [offline, setOffline] = useState(false);
   const [timingFix, setTimingFix] = useState(true);
+
+  // script-align
+  const [scriptText, setScriptText] = useState('');
+  const [scriptFile, setScriptFile] = useState<File | null>(null);
 
   // import srt
   const [srtFile, setSrtFile] = useState<File | null>(null);
@@ -103,11 +108,17 @@ export const CreateProjectModal: React.FC<{
     diarization,
     offline,
     timingFix,
+    ...(engine === 'script-align' && scriptText.trim() ? { scriptText: scriptText.trim() } : {}),
   };
 
   const triggerAutoSyncMedia = (mediaDocId: string) => {
-    // Esto dispara el mecanismo ya existente de syncRequest
     dispatch({ type: 'TRIGGER_SYNC_REQUEST', payload: { docId: mediaDocId, type: 'media' } });
+  };
+
+  // Carga el archivo de guion como texto en el estado
+  const handleScriptFileChange = (file: File) => {
+    setScriptFile(file);
+    void file.text().then((text) => setScriptText(text));
   };
 
   const createByTranscribe = () => {
@@ -115,6 +126,8 @@ export const CreateProjectModal: React.FC<{
       setErr(null);
       if (!name.trim()) return setErr('Falta el nombre del proyecto');
       if (!mediaId) return setErr('Selecciona un vídeo');
+      if (engine === 'script-align' && !scriptText.trim())
+        return setErr('Script-Align requiere el texto del guion');
 
       setBusy(true);
       try {
@@ -148,18 +161,18 @@ export const CreateProjectModal: React.FC<{
         for (let i = 0; i < 600; i++) { // hasta ~10 min
           const j = await api.getJob(jobId);
           const progress = Number(j.progress || 0);
-  setJobProgress(progress);
-           dispatch({
-    type: 'UPDATE_TRANSCRIPTION_TASK',
-    payload: {
-      id: jobId,
-      patch: {
-        status: j.status,
-        progress,
-        error: j.error || null,
-      },
-    },
-  });
+          setJobProgress(progress);
+          dispatch({
+            type: 'UPDATE_TRANSCRIPTION_TASK',
+            payload: {
+              id: jobId,
+              patch: {
+                status: j.status,
+                progress,
+                error: j.error || null,
+              },
+            },
+          });
 
           if (j.status === 'done') break;
           if (j.status === 'error') throw new Error(j.error || 'Job error');
@@ -169,7 +182,7 @@ export const CreateProjectModal: React.FC<{
         await reloadTree();
 
         onClose();
-       
+
       } catch (e: any) {
         setErr(e?.message || 'Error creando proyecto');
       } finally {
@@ -203,7 +216,7 @@ export const CreateProjectModal: React.FC<{
         await reloadTree();
 
         onClose();
-        
+
       } catch (e: any) {
         setErr(e?.message || 'Error importando SRT');
       } finally {
@@ -306,6 +319,47 @@ export const CreateProjectModal: React.FC<{
                 />
               </div>
             )}
+
+            {/* Script para Script-Align */}
+            {tab === 'transcribe' && engine === 'script-align' && (
+              <div>
+                <div className="text-xs font-bold text-gray-400 mb-1">
+                  Guion del doblaje
+                  <span className="ml-1 text-red-400">*</span>
+                </div>
+                <label className="block mb-2 text-xs text-gray-400 cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".txt,.srt,.vtt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleScriptFileChange(f);
+                      e.currentTarget.value = '';
+                    }}
+                  />
+                  <span className="inline-block px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 border border-gray-600 text-gray-200">
+                    Cargar desde archivo (.txt / .srt)
+                  </span>
+                  {scriptFile && (
+                    <span className="ml-2 text-green-400">{scriptFile.name}</span>
+                  )}
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100 text-xs font-mono resize-none"
+                  rows={6}
+                  placeholder="Pega aquí el texto del guion o carga un archivo..."
+                  value={scriptText}
+                  onChange={(e) => {
+                    setScriptText(e.target.value);
+                    if (scriptFile) setScriptFile(null);
+                  }}
+                />
+                <div className="text-xs text-gray-500 mt-1">
+                  {scriptText.trim().split(/\s+/).filter(Boolean).length} palabras
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -316,7 +370,7 @@ export const CreateProjectModal: React.FC<{
                 <div className="text-xs text-gray-400 mb-1">Motor</div>
                 <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
                   value={engine} onChange={(e) => setEngine(e.target.value)}>
-                  {(options?.engines || ['faster-whisper', 'purfview-xxl', 'whisperx']).map((eng: string) => (
+                  {(options?.engines || ['faster-whisper', 'purfview-xxl', 'whisperx', 'script-align']).map((eng: string) => (
                     <option key={eng} value={eng}>{ENGINE_LABELS[eng] ?? eng}</option>
                   ))}
                 </select>
@@ -325,17 +379,26 @@ export const CreateProjectModal: React.FC<{
                     Purfview XXL: usa faster-whisper + post-procesado (fix casing, puntuación, fusión de líneas) — equivalente a SubtitleEdit Purfview's Faster-Whisper-XXL
                   </div>
                 )}
+                {engine === 'script-align' && (
+                  <div className="mt-1 text-xs text-green-400 bg-green-900/30 rounded px-2 py-1">
+                    Script-Align: no transcribe — alinea el texto del guion al audio con WhisperX.
+                    El texto final es el del guion (100% preciso). Requiere el guion del doblaje.
+                  </div>
+                )}
               </div>
 
-              <div>
-                <div className="text-xs text-gray-400 mb-1">Modelo</div>
-                <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
-                  value={model} onChange={(e) => setModel(e.target.value)}>
-                  {(options?.models || ['tiny','base','small','medium','large-v2','large-v3','large-v3-turbo']).map((m: string) => (
-                    <option key={m} value={m}>{MODEL_LABELS[m] ?? m}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Modelo: no relevante para script-align (usa "small" internamente para VAD) */}
+              {engine !== 'script-align' && (
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">Modelo</div>
+                  <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
+                    value={model} onChange={(e) => setModel(e.target.value)}>
+                    {(options?.models || ['tiny','base','small','medium','large-v2','large-v3','large-v3-turbo']).map((m: string) => (
+                      <option key={m} value={m}>{MODEL_LABELS[m] ?? m}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <div className="text-xs text-gray-400 mb-1">Perfil</div>
@@ -353,21 +416,25 @@ export const CreateProjectModal: React.FC<{
                   value={language} onChange={(e) => setLanguage(e.target.value)} placeholder="ca / es / en" />
               </div>
 
-              <div>
-                <div className="text-xs text-gray-400 mb-1">Batch</div>
-                <input type="number" min={1} max={64}
-                  className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
-                  value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} />
-              </div>
+              {engine !== 'script-align' && (
+                <>
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1">Batch</div>
+                    <input type="number" min={1} max={64}
+                      className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
+                      value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} />
+                  </div>
 
-              <div>
-                <div className="text-xs text-gray-400 mb-1">Device</div>
-                <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
-                  value={device} onChange={(e) => setDevice(e.target.value as any)}>
-                  <option value="cpu">cpu</option>
-                  <option value="cuda">cuda</option>
-                </select>
-              </div>
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1">Device</div>
+                    <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
+                      value={device} onChange={(e) => setDevice(e.target.value as any)}>
+                      <option value="cpu">cpu</option>
+                      <option value="cuda">cuda</option>
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
 
             <label className="flex items-center gap-2 text-sm text-gray-200">
@@ -375,15 +442,19 @@ export const CreateProjectModal: React.FC<{
               Auto-ajuste de timings (waveform)
             </label>
 
-            <label className="flex items-center gap-2 text-sm text-gray-200">
-              <input type="checkbox" checked={diarization} onChange={(e) => setDiarization(e.target.checked)} />
-              Diarización
-            </label>
+            {engine !== 'script-align' && (
+              <>
+                <label className="flex items-center gap-2 text-sm text-gray-200">
+                  <input type="checkbox" checked={diarization} onChange={(e) => setDiarization(e.target.checked)} />
+                  Diarización
+                </label>
 
-            <label className="flex items-center gap-2 text-sm text-gray-200">
-              <input type="checkbox" checked={offline} onChange={(e) => setOffline(e.target.checked)} />
-              Offline
-            </label>
+                <label className="flex items-center gap-2 text-sm text-gray-200">
+                  <input type="checkbox" checked={offline} onChange={(e) => setOffline(e.target.checked)} />
+                  Offline
+                </label>
+              </>
+            )}
 
             {busy && (
               <div className="mt-2">
@@ -408,7 +479,7 @@ export const CreateProjectModal: React.FC<{
                   onClick={createByTranscribe}
                   className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold disabled:opacity-60"
                 >
-                  Transcribir
+                  {engine === 'script-align' ? 'Alinear guion' : 'Transcribir'}
                 </button>
               ) : (
                 <button

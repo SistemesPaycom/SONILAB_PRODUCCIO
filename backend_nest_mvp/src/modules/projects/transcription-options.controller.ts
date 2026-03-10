@@ -14,7 +14,7 @@ export class TranscriptionOptionsController {
   options() {
     return {
       models: ['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3', 'large-v3-turbo'],
-      engines: ['faster-whisper', 'purfview-xxl', 'whisperx'],
+      engines: ['faster-whisper', 'purfview-xxl', 'whisperx', 'script-align'],
       profiles: ['VE', 'VCAT'],
       defaults: {
         model: this.config.get('WHISPERX_MODEL', 'large-v3'),

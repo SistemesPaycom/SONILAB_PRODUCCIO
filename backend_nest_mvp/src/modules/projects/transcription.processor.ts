@@ -76,6 +76,7 @@ export class TranscriptionProcessor {
       const diarization = Boolean(s.diarization);
       const offline = Boolean(s.offline);
       const timingFix = s.timingFix !== false;
+      const scriptText = String(s.scriptText || '').trim();
 
       const pythonExe = this.config.get<string>('WHISPERX_PYTHON', 'python');
       const runnerPath = this.config.get<string>('WHISPERX_RUNNER');
@@ -121,6 +122,14 @@ export class TranscriptionProcessor {
 
       if (hfToken) args.push('--hf_token', hfToken);
 
+      // Script-align: escribir el guion a un archivo temporal y pasarlo al runner
+      let scriptFilePath: string | null = null;
+      if (engine === 'script-align' && scriptText) {
+        scriptFilePath = path.join(outDir, '_script_input.txt');
+        await fsp.writeFile(scriptFilePath, scriptText, 'utf-8');
+        args.push('--script-file', scriptFilePath);
+      }
+
       await this.projects.updateJob(jobId, { progress: 15 } as any);
       job.progress(15);
 
@@ -159,6 +168,11 @@ export class TranscriptionProcessor {
         child.on('error', (err) => reject(err));
         child.on('close', (code) => resolve({ stdout: stdoutBuf, stderr: stderrBuf, exitCode: code ?? 0 }));
       });
+
+      // Limpiar archivo de guion temporal
+      if (scriptFilePath && fs.existsSync(scriptFilePath)) {
+        try { fs.unlinkSync(scriptFilePath); } catch (_) {}
+      }
 
       if (exitCode !== 0) {
         throw new Error(`WhisperX failed (exit ${exitCode}). STDERR:\n${stderr || '(empty)'}`);
