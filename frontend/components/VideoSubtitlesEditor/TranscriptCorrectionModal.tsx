@@ -10,7 +10,7 @@
  *  4. L'usuari pot "Aplicar" (guarda) o "Descartar"
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api } from '../../services/api';
 
 // ─────────────────────── Tipus ────────────────────────────────────────────────
@@ -84,11 +84,14 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
   onApply,
   hasGuion,
 }) => {
-  const [threshold, setThreshold] = useState(0.45);
-  const [window, setWindow] = useState(8);
-  const [llmMode, setLlmMode] = useState<string>('off');
+  // Mode principal: "fuzzy" (ràpid, sense LLM) o "take-llm" (IA per TAKE)
+  const [method, setMethod] = useState<'fuzzy' | 'take-llm'>('fuzzy');
   const [llmModel, setLlmModel] = useState<string>('llama3.1');
   const [allowSplit, setAllowSplit] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Opcions avançades (fuzzy)
+  const [threshold, setThreshold] = useState(0.45);
+  const [windowSize, setWindowSize] = useState(8);
   const [correctionOptions, setCorrectionOptions] = useState<CorrectionOptions | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,14 +108,21 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
     setError(null);
     setResult(null);
     try {
-      const res = await api.correctTranscript(projectId, { threshold, window, llmMode, llmModel, allowSplit });
+      const res = await api.correctTranscript(projectId, {
+        threshold,
+        window: windowSize,
+        llmMode: method === 'take-llm' ? 'off' : 'off',
+        llmModel,
+        allowSplit,
+        method,
+      });
       setResult(res);
     } catch (e: any) {
       setError(e?.message || 'Error durant la correcció');
     } finally {
       setIsRunning(false);
     }
-  }, [projectId, threshold, window, llmMode, llmModel]);
+  }, [projectId, threshold, windowSize, llmModel, allowSplit, method]);
 
   const handleApply = useCallback(async () => {
     if (!result) return;
@@ -180,113 +190,93 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
 
           {/* Configuració */}
           {hasGuion && !result && (
-            <div className="p-5 space-y-5">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                  Sensibilitat de correcció — {Math.round(threshold * 100)}%
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range" min={0.2} max={0.9} step={0.05}
-                    value={threshold}
-                    onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                    className="flex-1 accent-blue-500"
-                  />
-                  <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
-                    {threshold <= 0.35 ? 'agressiu' : threshold <= 0.55 ? 'equilibrat' : 'conservador'}
-                  </span>
-                </div>
-                <p className="text-[9px] text-gray-600">
-                  Quin % de paraules en comú cal entre la transcripció i el guió per acceptar una correcció.
-                  <br/>
-                  <span className="text-gray-500">
-                    35–45% = corregeix quasi tot (pot errar en frases molt curtes) ·
-                    55–70% = només corregeix coincidències clares · Recomanat: <b className="text-gray-400">40–50%</b>
-                  </span>
-                </p>
-              </div>
+            <div className="p-5 space-y-4">
 
-              <div className="space-y-1">
-                <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                  Línies del guió a comparar — ±{window}
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range" min={3} max={20} step={1}
-                    value={window}
-                    onChange={(e) => setWindow(parseInt(e.target.value, 10))}
-                    className="flex-1 accent-blue-500"
-                  />
-                  <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
-                    {window <= 5 ? 'precís' : window <= 10 ? 'normal' : 'ampli'}
-                  </span>
-                </div>
-                <p className="text-[9px] text-gray-600">
-                  Per cada subtítol, quantes línies del guió (cap endavant i enrere) es miren per trobar la millor coincidència.
-                  <br/>
-                  <span className="text-gray-500">
-                    ±5 = guions ben alineats · ±8–12 = quan la transcripció s'ha saltat línies o reordenat · &gt;±15 = molt desordenat
-                  </span>
-                </p>
-              </div>
-
-              {/* LLM local (Ollama) */}
+              {/* ── Selecció de mètode ── */}
               <div className="space-y-2">
-                <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                  Motor de correcció
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {(correctionOptions?.llmModes || [
-                    { value: 'off', label: 'Només fuzzy' },
-                    { value: 'fast', label: 'LLM ambigus' },
-                    { value: 'smart', label: 'LLM complet' },
-                  ]).map((mode) => (
-                    <button
-                      key={mode.value}
-                      onClick={() => setLlmMode(mode.value)}
-                      className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-colors ${
-                        llmMode === mode.value
-                          ? 'bg-violet-700/60 border-violet-500/70 text-violet-200'
-                          : 'bg-gray-700/40 border-gray-600/50 text-gray-400 hover:text-gray-200'
-                      }`}
-                    >
-                      {mode.value === 'off' ? '⚡ ' : '🤖 '}{mode.label}
-                    </button>
-                  ))}
+                <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+                  Mètode de correcció
                 </div>
-                {llmMode !== 'off' && (
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={llmModel}
-                      onChange={(e) => setLlmModel(e.target.value)}
-                      className="flex-1 bg-gray-900/60 border border-gray-700 rounded-lg text-xs text-gray-200 px-2 py-1 focus:outline-none focus:border-violet-500"
-                    >
-                      {(correctionOptions?.llmModels || [
-                        { value: 'llama3.1', label: 'Llama 3.1 8B (recomanat)' },
-                        { value: 'qwen2.5', label: 'Qwen 2.5 7B' },
-                        { value: 'mistral', label: 'Mistral 7B' },
-                      ]).map((m) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
-                    <span
-                      className="text-[9px] text-amber-400/80 bg-amber-900/20 border border-amber-700/30 px-1.5 py-0.5 rounded whitespace-nowrap"
-                      title="Requereix Ollama instal·lat i en marxa a http://127.0.0.1:11434"
-                    >
-                      Requereix Ollama
-                    </span>
-                  </div>
-                )}
-                {llmMode !== 'off' && (
-                  <p className="text-[9px] text-gray-600">
-                    {llmMode === 'fast'
-                      ? 'LLM s\'activa quan el fuzzy matching és ambigu. Equilibri velocitat / qualitat.'
-                      : 'LLM s\'aplica a tots els candidats. Màxima qualitat, però lent.'}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Fuzzy */}
+                  <button
+                    onClick={() => setMethod('fuzzy')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      method === 'fuzzy'
+                        ? 'bg-blue-900/30 border-blue-500/60 text-white'
+                        : 'bg-gray-900/40 border-gray-700/50 text-gray-400 hover:border-gray-500/60 hover:text-gray-200'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">⚡</div>
+                    <div className="text-[11px] font-black uppercase tracking-tight">
+                      Fuzzy
+                    </div>
+                    <div className="text-[9px] mt-0.5 opacity-70">
+                      Ràpid · Compara paraula a paraula · Sense IA
+                    </div>
+                  </button>
+                  {/* IA per TAKE */}
+                  <button
+                    onClick={() => setMethod('take-llm')}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      method === 'take-llm'
+                        ? 'bg-violet-900/30 border-violet-500/60 text-white'
+                        : 'bg-gray-900/40 border-gray-700/50 text-gray-400 hover:border-gray-500/60 hover:text-gray-200'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">🤖</div>
+                    <div className="text-[11px] font-black uppercase tracking-tight flex items-center gap-1.5">
+                      IA per TAKE
+                      <span className="text-[8px] font-bold bg-violet-700/60 text-violet-200 px-1.5 py-0.5 rounded uppercase tracking-widest">
+                        Recomanat
+                      </span>
+                    </div>
+                    <div className="text-[9px] mt-0.5 opacity-70">
+                      El LLM veu tot el TAKE · Correcció contextual
+                    </div>
+                  </button>
+                </div>
+
+                {/* Descripció del mode seleccionat */}
+                {method === 'fuzzy' && (
+                  <p className="text-[9px] text-gray-500 px-1">
+                    Compara cada subtítol amb les línies del guió usant similitud de text.
+                    Ràpid i funciona sense internet ni GPU extra.
                   </p>
                 )}
+                {method === 'take-llm' && (
+                  <div className="space-y-1.5">
+                    <p className="text-[9px] text-gray-500 px-1">
+                      Envia el guió oficial de cada TAKE + els subtítols corresponents a una IA local (Ollama),
+                      que els compara i corregeix tenint en compte el context complet.
+                      No cal ajustar paràmetres.
+                    </p>
+                    <div className="flex items-center gap-3 px-1">
+                      <select
+                        value={llmModel}
+                        onChange={(e) => setLlmModel(e.target.value)}
+                        className="flex-1 bg-gray-900/60 border border-gray-700 rounded-lg text-xs text-gray-200 px-2 py-1 focus:outline-none focus:border-violet-500"
+                      >
+                        {(correctionOptions?.llmModels || [
+                          { value: 'llama3.1', label: 'Llama 3.1 8B (recomanat)' },
+                          { value: 'qwen2.5', label: 'Qwen 2.5 7B' },
+                          { value: 'mistral', label: 'Mistral 7B' },
+                        ]).map((m) => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                      <span
+                        className="text-[9px] text-amber-400/80 bg-amber-900/20 border border-amber-700/30 px-1.5 py-0.5 rounded whitespace-nowrap"
+                        title="Requereix Ollama instal·lat i en marxa a http://127.0.0.1:11434"
+                      >
+                        Requereix Ollama
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Toggle divisió de personatges */}
+              {/* ── Toggle divisió de personatges ── */}
               <div
                 className={`p-3 rounded-xl border transition-colors cursor-pointer ${
                   allowSplit
@@ -301,19 +291,70 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                       ✂ Dividir subtítols per canvi de personatge
                     </div>
                     <p className="text-[9px] text-gray-500">
-                      Quan el transcriptor ha unit dues rèpliques de personatges DIFERENTS en un sol subtítol,
-                      les separa en dos. Exemple: "Enduriment! Que?" → [RUFFY: "Enduriment!"] + [USOPP: "Que carai?"]
+                      Separa en dos un subtítol que conté veus de dos personatges DIFERENTS.
                     </p>
-                    <p className="text-[9px] text-amber-600/80">
-                      ⚠ Només divideix quan hi ha evidència acústica de les dues veus. Revisa el resultat.
-                    </p>
+                    {allowSplit && (
+                      <p className="text-[9px] text-amber-600/80">
+                        ⚠ Revisa el resultat — només divideix quan hi ha evidència acústica.
+                      </p>
+                    )}
                   </div>
                   <div className={`ml-3 flex-shrink-0 w-8 h-4 rounded-full transition-colors ${allowSplit ? 'bg-amber-500' : 'bg-gray-600'}`}>
-                    <div className={`w-3.5 h-3.5 bg-white rounded-full mt-0.25 transition-transform ${allowSplit ? 'translate-x-4' : 'translate-x-0.5'}`} style={{ marginTop: '1px', transform: allowSplit ? 'translateX(17px)' : 'translateX(1px)' }} />
+                    <div className="w-3.5 h-3.5 bg-white rounded-full" style={{ marginTop: '1px', transform: allowSplit ? 'translateX(17px)' : 'translateX(1px)', transition: 'transform 0.15s' }} />
                   </div>
                 </div>
               </div>
 
+              {/* ── Opcions avançades (fuzzy) ── */}
+              {method === 'fuzzy' && (
+                <div>
+                  <button
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    <span className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
+                    Opcions avançades
+                  </button>
+                  {showAdvanced && (
+                    <div className="mt-3 space-y-4 pl-3 border-l border-gray-700/50">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">
+                          Sensibilitat — {Math.round(threshold * 100)}%
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range" min={0.2} max={0.9} step={0.05}
+                            value={threshold}
+                            onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                            className="flex-1 accent-blue-500"
+                          />
+                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
+                            {threshold <= 0.35 ? 'agressiu' : threshold <= 0.55 ? 'equilibrat' : 'conservador'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">
+                          Finestra de cerca — ±{windowSize}
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range" min={3} max={20} step={1}
+                            value={windowSize}
+                            onChange={(e) => setWindowSize(parseInt(e.target.value, 10))}
+                            className="flex-1 accent-blue-500"
+                          />
+                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
+                            {windowSize <= 5 ? 'precís' : windowSize <= 10 ? 'normal' : 'ampli'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Regles ── */}
               <div className="p-3 bg-gray-900/40 rounded-xl border border-gray-700/50 text-[9px] text-gray-500 space-y-1">
                 <div className="font-bold text-gray-400 uppercase tracking-widest mb-1">Regles de correcció</div>
                 <div>• <span className="text-gray-300">Mai s'eliminen línies</span> de la transcripció</div>

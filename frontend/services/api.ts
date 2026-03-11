@@ -303,7 +303,7 @@ async purgeDocument(id: string) {
   /** Corregeix la transcripció SRT del projecte usant el guió vinculat */
   async correctTranscript(
     projectId: string,
-    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string; allowSplit?: boolean } = {},
+    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string; allowSplit?: boolean; method?: string } = {},
   ): Promise<{
     correctedSrt: string;
     changes: Array<{

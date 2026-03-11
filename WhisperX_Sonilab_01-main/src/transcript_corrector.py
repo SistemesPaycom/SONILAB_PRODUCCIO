@@ -718,6 +718,167 @@ def _format_corrected_text(guion_text: str, original_text: str) -> str:
     return clean
 
 
+# ─────────────────────── Mode IA per TAKE ─────────────────────────────────────
+
+def _correct_take_with_llm(
+    model: str,
+    take_num: int,
+    guion_cues: List[GuionCue],
+    srt_segs: List[SrtSegment],
+    timeout: int = 90,
+) -> dict:
+    """
+    Envia el guió d'un TAKE i els seus subtítols al LLM per corregir-los en context.
+    El LLM compara tot el TAKE alhora: detecta errors, paraules mal transcrites,
+    canvis de personatge, etc.
+
+    Retorna {seg_idx: text_corregit} o {} si LLM no disponible/error.
+    """
+    if not guion_cues or not srt_segs:
+        return {}
+
+    # Construir el bloc del guió per a aquest TAKE
+    guion_block = '\n'.join(
+        f"  {c.speaker}: {c.text}"
+        for c in guion_cues
+    )
+
+    # Construir el bloc de subtítols (sense timecodes — el LLM no els ha de tocar)
+    srt_block = '\n'.join(
+        f"  [{s.idx}] {s.text}"
+        for s in srt_segs
+    )
+
+    prompt = (
+        f"Ets un corrector de subtítols de doblatge. "
+        f"Et dono el guió oficial i la transcripció automàtica del TAKE #{take_num}.\n\n"
+        f"GUIÓ OFICIAL (TAKE #{take_num}):\n{guion_block}\n\n"
+        f"TRANSCRIPCIÓ AUTOMÀTICA (subtítols):\n{srt_block}\n\n"
+        f"TASCA: Corregeix el text de la transcripció per fer-lo coincidir amb el guió.\n"
+        f"NORMES ESTRICTES:\n"
+        f"- No canviïs els números de subtítol\n"
+        f"- No eliminis cap subtítol\n"
+        f"- No afegeixis subtítols nous (els timecodes son els originals)\n"
+        f"- Si un subtítol conté dues rèpliques de personatges DIFERENTS, pots separar-les\n"
+        f"- Respon ÚNICAMENT amb JSON, sense cap text addicional\n\n"
+        f"FORMAT DE RESPOSTA: [{{'idx': N, 'text': 'text corregit'}}, ...]\n"
+        f"Inclou NOMÉS els subtítols que canvien. Si un subtítol ja és correcte, no l'incloguis.\n\n"
+        f"JSON:"
+    )
+
+    response = _call_ollama(model, prompt, timeout=timeout)
+    if not response:
+        return {}
+
+    # Extreure el JSON de la resposta (el LLM pot afegir text al voltant)
+    try:
+        json_match = re.search(r'\[[\s\S]*\]', response)
+        if not json_match:
+            return {}
+        data = json.loads(json_match.group())
+        result = {}
+        for item in data:
+            if isinstance(item, dict) and 'idx' in item and 'text' in item:
+                idx = int(item['idx'])
+                text = str(item['text']).strip()
+                if text:
+                    result[idx] = text
+        return result
+    except Exception:
+        return {}
+
+
+def align_and_correct_by_take(
+    transcription_segs: List[SrtSegment],
+    guion_cues: List[GuionCue],
+    llm_model: str = "llama3.1",
+    allow_split: bool = False,
+) -> Tuple[List[SrtSegment], List[ChangeRecord]]:
+    """
+    Mode IA per TAKE: agrupa els cues del guió per take_num, assigna
+    els segments SRT a cada TAKE per temps, i deixa que el LLM faci
+    la comparació completa de cada TAKE.
+
+    Molt més simple per a l'usuari: no cal ajustar threshold ni finestra.
+    El LLM veu el context complet del TAKE (com faria un humà).
+
+    Falls back a no-change si el LLM no respon per un TAKE concret.
+    """
+    # ── 1. Agrupar cues per TAKE ──────────────────────────────────────────────
+    takes_cues: dict = {}  # take_num → List[GuionCue]
+    for cue in guion_cues:
+        takes_cues.setdefault(cue.take_num, []).append(cue)
+
+    # ── 2. Calcular rang temporal de cada TAKE a partir dels abs_time ─────────
+    # (take_start és el mínim abs_time del TAKE, take_end és el mínim del TAKE següent)
+    sorted_take_nums = sorted(takes_cues.keys())
+    take_time_ranges: List[Tuple[int, float, float]] = []  # (take_num, start_s, end_s)
+
+    for i, tn in enumerate(sorted_take_nums):
+        cues_for_take = takes_cues[tn]
+        t_start = min(c.abs_time for c in cues_for_take)
+        if i + 1 < len(sorted_take_nums):
+            next_cues = takes_cues[sorted_take_nums[i + 1]]
+            t_end = min(c.abs_time for c in next_cues)
+        else:
+            t_end = float('inf')
+        take_time_ranges.append((tn, t_start, t_end))
+
+    # ── 3. Assignar segments SRT al seu TAKE per temps ────────────────────────
+    seg_to_take: dict = {}  # seg.idx → take_num
+    for seg in transcription_segs:
+        for tn, t_start, t_end in take_time_ranges:
+            # Marge de 10s per a les discrepàncies entre guió i transcripció
+            if seg.start_s >= t_start - 10 and seg.start_s < t_end:
+                seg_to_take[seg.idx] = tn
+                break
+
+    # ── 4. Per cada TAKE, cridar el LLM ──────────────────────────────────────
+    corrected_map: dict = {}  # seg.idx → text nou
+    changes: List[ChangeRecord] = []
+
+    for tn, t_start, t_end in take_time_ranges:
+        take_segs = [s for s in transcription_segs if seg_to_take.get(s.idx) == tn]
+        cues = takes_cues.get(tn, [])
+        if not take_segs or not cues:
+            continue
+
+        llm_result = _correct_take_with_llm(llm_model, tn, cues, take_segs)
+
+        for seg in take_segs:
+            new_text = llm_result.get(seg.idx)
+            if new_text and new_text.strip() != seg.text.strip():
+                corrected_map[seg.idx] = new_text.strip()
+                # Inferir speaker del primer cue del TAKE
+                speaker = cues[0].speaker if cues else ''
+                changes.append(ChangeRecord(
+                    seg_idx=seg.idx,
+                    start=seg.start,
+                    end=seg.end,
+                    original=seg.text,
+                    corrected=new_text.strip(),
+                    guion_speaker=speaker,
+                    guion_text=', '.join(c.text for c in cues[:3]),
+                    score=1.0,
+                    method='take_llm',
+                ))
+
+    # ── 5. Construir llista final de segments ─────────────────────────────────
+    corrected: List[SrtSegment] = []
+    for seg in transcription_segs:
+        new_text = corrected_map.get(seg.idx, seg.text)
+        corrected.append(SrtSegment(
+            idx=seg.idx,
+            start=seg.start,
+            end=seg.end,
+            text=new_text,
+            start_s=seg.start_s,
+            end_s=seg.end_s,
+        ))
+
+    return corrected, changes
+
+
 # ─────────────────────── Generació JSON de canvis ─────────────────────────────
 
 def build_changes_json(changes: List[ChangeRecord]) -> dict:
@@ -743,11 +904,15 @@ def correct_transcript(
     llm_mode: str = "off",
     llm_model: str = "llama3.1",
     allow_split: bool = False,
+    method: str = "fuzzy",   # "fuzzy" | "take-llm"
 ) -> dict:
     """
     Pipeline complet: llegeix SRT + guió, corregeix, escriu outputs.
 
-    Returns: resum {'total_segments', 'changed', 'unchanged', 'changes_json_path', 'srt_path'}
+    method="fuzzy"    → corrector per segment amb similitud (threshold/window)
+    method="take-llm" → LLM compara TAKE complet (sense threshold/window manual)
+
+    Returns: resum {'total_segments', 'changed', 'unchanged'}
     """
     # --- Llegir inputs ---
     srt_text = Path(srt_path).read_text(encoding='utf-8', errors='replace')
@@ -759,8 +924,12 @@ def correct_transcript(
     if verbose:
         print(f'[corrector] Segments transcripció: {len(segments)}', file=sys.stderr)
         print(f'[corrector] Cues guió: {len(guion_cues)}', file=sys.stderr)
-        print(f'[corrector] Threshold: {threshold}, window: {window}', file=sys.stderr)
-        print(f'[corrector] LLM mode: {llm_mode}, model: {llm_model}', file=sys.stderr)
+        print(f'[corrector] Mètode: {method}', file=sys.stderr)
+        if method == 'fuzzy':
+            print(f'[corrector] Threshold: {threshold}, window: {window}', file=sys.stderr)
+            print(f'[corrector] LLM mode: {llm_mode}, model: {llm_model}', file=sys.stderr)
+        else:
+            print(f'[corrector] LLM model (take): {llm_model}', file=sys.stderr)
         if not _HAS_RAPIDFUZZ:
             print('[corrector] AVÍS: rapidfuzz no disponible, usant difflib (menys precís)', file=sys.stderr)
 
@@ -773,25 +942,27 @@ def correct_transcript(
         print('[corrector] Divisió per canvi de personatge: ACTIVADA', file=sys.stderr)
 
     # --- Alinear i corregir ---
-    corrected_segs, changes = align_and_correct(
-        segments, guion_cues,
-        threshold=threshold, window=window,
-        llm_mode=llm_mode, llm_model=llm_model,
-        allow_split=allow_split,
-    )
-
-    # Verificació de seguretat: sense allow_split mai eliminem segments
-    # Amb allow_split podem tenir MÉS segments (divisions), mai menys
-    if not allow_split:
-        assert len(corrected_segs) == len(segments), (
-            f'ERROR CRÍTIC: nombre de segments diferent! '
-            f'Original={len(segments)}, Corregit={len(corrected_segs)}'
+    if method == 'take-llm':
+        # Mode IA per TAKE: el LLM compara el TAKE complet (guió + SRT) d'un cop
+        corrected_segs, changes = align_and_correct_by_take(
+            segments, guion_cues,
+            llm_model=llm_model,
+            allow_split=allow_split,
         )
     else:
-        assert len(corrected_segs) >= len(segments), (
-            f'ERROR CRÍTIC: segments eliminats! '
-            f'Original={len(segments)}, Corregit={len(corrected_segs)}'
+        # Mode fuzzy: comparació per segment amb threshold/window
+        corrected_segs, changes = align_and_correct(
+            segments, guion_cues,
+            threshold=threshold, window=window,
+            llm_mode=llm_mode, llm_model=llm_model,
+            allow_split=allow_split,
         )
+
+    # Verificació de seguretat: mai eliminar segments
+    assert len(corrected_segs) >= len(segments), (
+        f'ERROR CRÍTIC: segments eliminats! '
+        f'Original={len(segments)}, Corregit={len(corrected_segs)}'
+    )
 
     if verbose:
         print(f'[corrector] Canvis aplicats: {len(changes)}/{len(segments)}', file=sys.stderr)
@@ -872,6 +1043,16 @@ def main() -> None:
             'dues rèpliques en un sol subtítol. Per defecte desactivat (conservador).'
         )
     )
+    parser.add_argument(
+        '--method', dest='method', default='fuzzy',
+        choices=['fuzzy', 'take-llm'],
+        help=(
+            'Mètode de correcció: '
+            '"fuzzy" = comparació per segment (threshold/window, default), '
+            '"take-llm" = LLM analitza el TAKE complet de guió + SRT d\'un cop '
+            '(no requereix ajustar threshold/window, requereix Ollama)'
+        )
+    )
 
     args = parser.parse_args()
 
@@ -888,6 +1069,7 @@ def main() -> None:
             llm_mode=args.llm_mode,
             llm_model=args.llm_model,
             allow_split=args.allow_split,
+            method=args.method,
         )
         print(json.dumps(result, ensure_ascii=False))
     except Exception as e:

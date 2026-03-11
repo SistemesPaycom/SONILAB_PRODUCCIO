@@ -375,7 +375,7 @@ except ImportError:
    */
   async correctTranscript(
     projectId: string,
-    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string; allowSplit?: boolean } = {},
+    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string; allowSplit?: boolean; method?: string } = {},
   ): Promise<{
     correctedSrt: string;
     changes: any[];
@@ -435,10 +435,12 @@ except ImportError:
         ? options.llmMode : 'off';
       const llmModel = options.llmModel || 'llama3.1';
       const allowSplit = options.allowSplit === true;
+      const method = options.method && ['fuzzy', 'take-llm'].includes(options.method)
+        ? options.method : 'fuzzy';
 
-      // Timeout dinàmic: LLM local pot trigar minuts per segment
-      // off (rapidfuzz) → 90s | fast (LLM casos ambigus) → 10 min | smart (LLM tots) → 20 min
-      const timeoutMs = llmMode === 'smart' ? 1_200_000 : llmMode === 'fast' ? 600_000 : 90_000;
+      // Timeout dinàmic: LLM local pot trigar minuts per segment / TAKE
+      // fuzzy (rapidfuzz) → 90s | take-llm → 20 min (múltiples crides Ollama per TAKE)
+      const timeoutMs = method === 'take-llm' ? 1_200_000 : llmMode === 'smart' ? 1_200_000 : llmMode === 'fast' ? 600_000 : 90_000;
 
       const { execFile } = require('child_process');
       const { promisify } = require('util');
@@ -456,6 +458,7 @@ except ImportError:
           '--window', String(window),
           '--llm-mode', llmMode,
           '--llm-model', llmModel,
+          '--method', method,
           ...(allowSplit ? ['--allow-split'] : []),
         ],
         { encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
