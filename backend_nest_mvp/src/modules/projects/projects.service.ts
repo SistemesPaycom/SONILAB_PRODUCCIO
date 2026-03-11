@@ -381,7 +381,6 @@ except ImportError:
     changes: any[];
     summary: { totalSegments: number; changed: number; unchanged: number };
   }> {
-    const { execSync } = require('child_process');
     const os = require('os');
 
     const project = await this.getProject(projectId);
@@ -436,9 +435,28 @@ except ImportError:
         ? options.llmMode : 'off';
       const llmModel = options.llmModel || 'llama3.1';
 
-      const rawOutput = execSync(
-        `${pythonExec} "${correctorScript}" --srt "${srtTmp}" --guion "${guionTmp}" --out-srt "${outSrtTmp}" --out-json "${outJsonTmp}" --threshold ${threshold} --window ${window} --llm-mode ${llmMode} --llm-model ${llmModel}`,
-        { encoding: 'utf-8', timeout: 60000 },
+      // Timeout dinàmic: LLM local pot trigar minuts per segment
+      // off (rapidfuzz) → 90s | fast (LLM casos ambigus) → 10 min | smart (LLM tots) → 20 min
+      const timeoutMs = llmMode === 'smart' ? 1_200_000 : llmMode === 'fast' ? 600_000 : 90_000;
+
+      const { execFile } = require('child_process');
+      const { promisify } = require('util');
+      const execFileAsync = promisify(execFile);
+
+      const { stdout: rawOutput } = await execFileAsync(
+        pythonExec,
+        [
+          correctorScript,
+          '--srt', srtTmp,
+          '--guion', guionTmp,
+          '--out-srt', outSrtTmp,
+          '--out-json', outJsonTmp,
+          '--threshold', String(threshold),
+          '--window', String(window),
+          '--llm-mode', llmMode,
+          '--llm-model', llmModel,
+        ],
+        { encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
       );
 
       const summary = JSON.parse(rawOutput.trim());

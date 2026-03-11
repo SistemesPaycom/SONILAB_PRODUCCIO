@@ -59,7 +59,7 @@ LLM_MODELS = {
 }
 
 
-def _call_ollama(model: str, prompt: str, timeout: int = 15) -> Optional[str]:
+def _call_ollama(model: str, prompt: str, timeout: int = 60) -> Optional[str]:
     """Crida Ollama API (http://127.0.0.1:11434). Retorna la resposta o None si error."""
     payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode()
     req = urllib.request.Request(
