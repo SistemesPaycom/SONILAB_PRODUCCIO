@@ -279,23 +279,23 @@ useEffect(() => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
   };
 }, [autosave, useBackend, isEditing, subsHistory.present, currentDoc.id, dispatch]);
+  // ── Guió efectiu: el guió vinculat al projecte té prioritat sobre el contingut del doc SRT ──
+  const effectiveGuionContent = guionContent || currentContent;
+
   const takeRanges = useMemo(() => {
+    // IMPORTANT: usar el guió (effectiveGuionContent) i NO el SRT (currentContent),
+    // ja que els marcadors TAKE i timecodes estan al guió, no al SRT.
     return buildTakeRangesFromScript({
-      content: currentContent || '',
+      content: effectiveGuionContent || '',
       takeStartMarginSeconds: takeStartMargin,
       takeEndMarginSeconds: takeMargin,
       durationSeconds: duration,
     });
-  }, [currentContent, duration, takeMargin, takeStartMargin]);
+  }, [effectiveGuionContent, duration, takeMargin, takeStartMargin]);
 
   const linkedSegments = useMemo(() => {
     return linkSegmentsToTakeRanges(segments, takeRanges);
   }, [segments, takeRanges]);
-
-  // ── Diff guió vs SRT ──────────────────────────────────────────────────────
-  // Usem el guioContent carregat des del projecte si n'hi ha,
-  // o bé el contingut del document actual com a fallback (per als guions oberts directament).
-  const effectiveGuionContent = guionContent || currentContent;
 
   const takeDialogMap = useMemo(
     () => buildTakeDialogMap(effectiveGuionContent),
@@ -350,12 +350,20 @@ useEffect(() => {
   const handleSegmentClick = useCallback((id: Id) => {
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
     setActiveSegmentId(numericId);
-    if (syncSubsEnabled && videoRef.current) {
-      const segment = linkedSegmentsWithDiff.find((s) => s.id === numericId);
-      if (segment) onSeek(Math.max(0, segment.startTime - 0.05));
-
+    const segment = linkedSegmentsWithDiff.find((s) => s.id === numericId);
+    // Sync vídeo
+    if (syncSubsEnabled && videoRef.current && segment) {
+      onSeek(Math.max(0, segment.startTime - 0.05));
     }
-  }, [linkedSegments, syncSubsEnabled, onSeek]);
+    // Sync guió: scroll immediat al TAKE vinculat (independentment del vídeo)
+    if (isScriptLinked && segment?.primaryTakeNum !== undefined) {
+      const yPos = takeLayoutRef.current.get(segment.primaryTakeNum);
+      if (yPos !== undefined && scriptScrollRef.current) {
+        scriptScrollRef.current.scrollTo({ top: yPos, behavior: 'smooth' });
+        activeTakeByTimeRef.current = segment.primaryTakeNum;
+      }
+    }
+  }, [linkedSegmentsWithDiff, syncSubsEnabled, onSeek, isScriptLinked]);
 
   const onJumpSegment = useCallback((direction: 'prev' | 'next') => {
     if (takeRanges.length === 0) return;
