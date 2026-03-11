@@ -88,6 +88,7 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
   const [window, setWindow] = useState(8);
   const [llmMode, setLlmMode] = useState<string>('off');
   const [llmModel, setLlmModel] = useState<string>('llama3.1');
+  const [allowSplit, setAllowSplit] = useState(false);
   const [correctionOptions, setCorrectionOptions] = useState<CorrectionOptions | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +105,7 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
     setError(null);
     setResult(null);
     try {
-      const res = await api.correctTranscript(projectId, { threshold, window, llmMode, llmModel });
+      const res = await api.correctTranscript(projectId, { threshold, window, llmMode, llmModel, allowSplit });
       setResult(res);
     } catch (e: any) {
       setError(e?.message || 'Error durant la correcció');
@@ -182,49 +183,50 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
             <div className="p-5 space-y-5">
               <div className="space-y-1">
                 <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                  Threshold de similitud
+                  Sensibilitat de correcció — {Math.round(threshold * 100)}%
                 </label>
                 <div className="flex items-center gap-3">
                   <input
-                    type="range"
-                    min={0.2}
-                    max={0.9}
-                    step={0.05}
+                    type="range" min={0.2} max={0.9} step={0.05}
                     value={threshold}
                     onChange={(e) => setThreshold(parseFloat(e.target.value))}
                     className="flex-1 accent-blue-500"
                   />
-                  <span className="text-sm font-mono text-blue-300 w-10 text-right">
-                    {Math.round(threshold * 100)}%
+                  <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
+                    {threshold <= 0.35 ? 'agressiu' : threshold <= 0.55 ? 'equilibrat' : 'conservador'}
                   </span>
                 </div>
                 <p className="text-[9px] text-gray-600">
-                  Similitud mínima entre la transcripció i el guió per substituir el text.
-                  Valor baix → més substitucions (menys selectiu). Valor alt → menys però més segures.
+                  Quin % de paraules en comú cal entre la transcripció i el guió per acceptar una correcció.
+                  <br/>
+                  <span className="text-gray-500">
+                    35–45% = corregeix quasi tot (pot errar en frases molt curtes) ·
+                    55–70% = només corregeix coincidències clares · Recomanat: <b className="text-gray-400">40–50%</b>
+                  </span>
                 </p>
               </div>
 
               <div className="space-y-1">
                 <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                  Finestra de cerca
+                  Línies del guió a comparar — ±{window}
                 </label>
                 <div className="flex items-center gap-3">
                   <input
-                    type="range"
-                    min={3}
-                    max={20}
-                    step={1}
+                    type="range" min={3} max={20} step={1}
                     value={window}
                     onChange={(e) => setWindow(parseInt(e.target.value, 10))}
                     className="flex-1 accent-blue-500"
                   />
-                  <span className="text-sm font-mono text-blue-300 w-10 text-right">
-                    ±{window}
+                  <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
+                    {window <= 5 ? 'precís' : window <= 10 ? 'normal' : 'ampli'}
                   </span>
                 </div>
                 <p className="text-[9px] text-gray-600">
-                  Quantes línies del guió es busquen per cada segment de la transcripció.
-                  Valor més alt → millor per a guions desordenats, però pot donar falses coincidències.
+                  Per cada subtítol, quantes línies del guió (cap endavant i enrere) es miren per trobar la millor coincidència.
+                  <br/>
+                  <span className="text-gray-500">
+                    ±5 = guions ben alineats · ±8–12 = quan la transcripció s'ha saltat línies o reordenat · &gt;±15 = molt desordenat
+                  </span>
                 </p>
               </div>
 
@@ -284,10 +286,38 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                 )}
               </div>
 
+              {/* Toggle divisió de personatges */}
+              <div
+                className={`p-3 rounded-xl border transition-colors cursor-pointer ${
+                  allowSplit
+                    ? 'bg-amber-900/20 border-amber-700/50'
+                    : 'bg-gray-900/40 border-gray-700/50'
+                }`}
+                onClick={() => setAllowSplit((v) => !v)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className={`text-[9px] font-black uppercase tracking-widest ${allowSplit ? 'text-amber-400' : 'text-gray-400'}`}>
+                      ✂ Dividir subtítols per canvi de personatge
+                    </div>
+                    <p className="text-[9px] text-gray-500">
+                      Quan el transcriptor ha unit dues rèpliques de personatges DIFERENTS en un sol subtítol,
+                      les separa en dos. Exemple: "Enduriment! Que?" → [RUFFY: "Enduriment!"] + [USOPP: "Que carai?"]
+                    </p>
+                    <p className="text-[9px] text-amber-600/80">
+                      ⚠ Només divideix quan hi ha evidència acústica de les dues veus. Revisa el resultat.
+                    </p>
+                  </div>
+                  <div className={`ml-3 flex-shrink-0 w-8 h-4 rounded-full transition-colors ${allowSplit ? 'bg-amber-500' : 'bg-gray-600'}`}>
+                    <div className={`w-3.5 h-3.5 bg-white rounded-full mt-0.25 transition-transform ${allowSplit ? 'translate-x-4' : 'translate-x-0.5'}`} style={{ marginTop: '1px', transform: allowSplit ? 'translateX(17px)' : 'translateX(1px)' }} />
+                  </div>
+                </div>
+              </div>
+
               <div className="p-3 bg-gray-900/40 rounded-xl border border-gray-700/50 text-[9px] text-gray-500 space-y-1">
                 <div className="font-bold text-gray-400 uppercase tracking-widest mb-1">Regles de correcció</div>
                 <div>• <span className="text-gray-300">Mai s'eliminen línies</span> de la transcripció</div>
-                <div>• <span className="text-gray-300">Mai s'afegeixen línies</span> noves</div>
+                <div>• {allowSplit ? <span className="text-amber-300">Pot crear línies noves</span> : <span className="text-gray-300">Mai s'afegeixen línies</span>} {allowSplit ? '(divisió per personatge activada)' : 'noves'}</div>
                 <div>• Els <span className="text-gray-300">timecodes originals</span> es preserven sempre</div>
                 <div>• Tots els canvis queden <span className="text-gray-300">registrats</span> per a revisió</div>
               </div>

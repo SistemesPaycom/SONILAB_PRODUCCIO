@@ -184,11 +184,23 @@ def parse_srt(srt_text: str) -> List[SrtSegment]:
 
 
 def serialize_srt(segments: List[SrtSegment]) -> str:
-    """Serialitza segments a format SRT."""
+    """Serialitza segments a format SRT. Renumera els cues seqüencialment."""
     parts = []
     for i, seg in enumerate(segments, 1):
         parts.append(f"{i}\n{seg.start} --> {seg.end}\n{seg.text}")
     return '\n\n'.join(parts) + '\n'
+
+
+def _seconds_to_tc(seconds: float) -> str:
+    """Converteix segons a format SRT 'HH:MM:SS,mmm'."""
+    seconds = max(0.0, seconds)
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int(round((seconds - int(seconds)) * 1000))
+    if ms >= 1000:
+        ms = 999
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
 # ─────────────────────── Parser Guió SONILAB ──────────────────────────────────
@@ -420,6 +432,97 @@ def _find_best_guion_match(
     return best_idx, best_score
 
 
+def _try_split_segment(
+    seg: SrtSegment,
+    guion_cues: List[GuionCue],
+    best_idx: int,
+    threshold: float,
+) -> Optional[Tuple["SrtSegment", "SrtSegment", "GuionCue", "GuionCue"]]:
+    """
+    Intenta dividir un segment ASR en dos quan conté veus de DOS personatges
+    consecutius del guió. Retorna (seg_a, seg_b, cue_a, cue_b) o None.
+
+    Condicions per dividir:
+      1. El cue 'best_idx+1' existeix i és d'un PERSONATGE DIFERENT
+      2. El segment ASR té >= 4 paraules (massa curt = no dividim)
+      3. Existeix una divisió on part_a sim(cue_a) >= threshold*0.3
+         i part_b sim(cue_b) >= threshold*0.3  (evidència acústica mínima)
+
+    La divisió es fa al punt de paraula que maximitza la suma de similituds.
+    Els timecodes es divideixen proporcionalment al nombre de caràcters.
+
+    NOTA: No divisem si el text del segment és un marcador tècnic o (G).
+    """
+    if best_idx + 1 >= len(guion_cues):
+        return None
+
+    cue_a = guion_cues[best_idx]
+    cue_b = guion_cues[best_idx + 1]
+
+    # Només dividim si els personatges son DIFERENTS
+    if cue_a.speaker.lower() == cue_b.speaker.lower():
+        return None
+
+    # Mínim de paraules per poder dividir
+    words = seg.text.split()
+    if len(words) < 4:
+        return None
+
+    min_score = threshold * 0.30  # evidència acústica mínima per cada part
+
+    best_split_pos = -1
+    best_combined = -1.0
+
+    # Provem totes les divisions possibles (al menys 1 paraula a cada part)
+    for split_pos in range(1, len(words)):
+        part_a_text = ' '.join(words[:split_pos])
+        part_b_text = ' '.join(words[split_pos:])
+
+        score_a = _similarity(part_a_text, cue_a.text)
+        score_b = _similarity(part_b_text, cue_b.text)
+
+        # Ambdues parts han de tenir evidència acústica mínima
+        if score_a < min_score or score_b < min_score:
+            continue
+
+        combined = score_a + score_b
+        if combined > best_combined:
+            best_combined = combined
+            best_split_pos = split_pos
+
+    if best_split_pos < 0:
+        return None
+
+    part_a_text = ' '.join(words[:best_split_pos])
+    part_b_text = ' '.join(words[best_split_pos:])
+
+    # Dividir timecodes proporcionalment als caràcters
+    total_chars = len(seg.text.replace(' ', ''))
+    chars_a = len(part_a_text.replace(' ', ''))
+    ratio = chars_a / total_chars if total_chars > 0 else 0.5
+    duration = seg.end_s - seg.start_s
+    mid_s = seg.start_s + duration * ratio
+    mid_tc = _seconds_to_tc(mid_s)
+
+    seg_a = SrtSegment(
+        idx=seg.idx,
+        start=seg.start,
+        end=mid_tc,
+        text=part_a_text,
+        start_s=seg.start_s,
+        end_s=mid_s,
+    )
+    seg_b = SrtSegment(
+        idx=seg.idx,   # renumerat per serialize_srt
+        start=mid_tc,
+        end=seg.end,
+        text=part_b_text,
+        start_s=mid_s,
+        end_s=seg.end_s,
+    )
+    return seg_a, seg_b, cue_a, cue_b
+
+
 def align_and_correct(
     transcription_segs: List[SrtSegment],
     guion_cues: List[GuionCue],
@@ -427,6 +530,7 @@ def align_and_correct(
     window: int = 8,
     llm_mode: str = "off",
     llm_model: str = "llama3.1",
+    allow_split: bool = False,
 ) -> Tuple[List[SrtSegment], List[ChangeRecord]]:
     """
     Alinea segments de transcripció amb cues del guió i corregeix el text.
@@ -483,6 +587,43 @@ def align_and_correct(
                     method = f'llm_{llm_mode}'
 
         should_replace = fuzzy_match or llm_corrected_text is not None
+
+        # ── Detecció de fusió de personatges (allow_split) ────────────────────
+        # Si el segment ASR ha capturat dues veus consecutives de personatges
+        # DIFERENTS del guió en un sol subtítol, el dividim en dos.
+        # Exemple: "Enduriment! Què." → [RUFFY: "Enduriment!"] + [USOPP: "Que carai?"]
+        # Requisit: evidència acústica mínima a cada part (l'ASR ha captat fragments
+        # d'ambdós personatges). No s'afegeix contingut que no estigui a l'ASR.
+        if allow_split and best_idx is not None and best_idx not in used_guion:
+            split_result = _try_split_segment(seg, guion_cues, best_idx, threshold)
+            if split_result is not None:
+                seg_a, seg_b, cue_a, cue_b = split_result
+                # Corregim el text de cada part amb el seu cue corresponent
+                text_a = _format_corrected_text(cue_a.text, seg_a.text)
+                text_b = _format_corrected_text(cue_b.text, seg_b.text)
+                seg_a = SrtSegment(idx=seg_a.idx, start=seg_a.start, end=seg_a.end,
+                                   text=text_a, start_s=seg_a.start_s, end_s=seg_a.end_s)
+                seg_b = SrtSegment(idx=seg_b.idx, start=seg_b.start, end=seg_b.end,
+                                   text=text_b, start_s=seg_b.start_s, end_s=seg_b.end_s)
+                # Registre de canvi per al segment dividit
+                changes.append(ChangeRecord(
+                    seg_idx=seg.idx,
+                    start=seg.start,
+                    end=seg.end,
+                    original=seg.text,
+                    corrected=f"{text_a} | {text_b}",
+                    guion_speaker=f"{cue_a.speaker} / {cue_b.speaker}",
+                    guion_text=f"{cue_a.text} / {cue_b.text}",
+                    score=round(_similarity(seg.text, cue_a.text + ' ' + cue_b.text), 4),
+                    method='split_speaker',
+                ))
+                used_guion.add(best_idx)
+                used_guion.add(best_idx + 1)
+                if best_idx >= guion_cursor:
+                    guion_cursor = best_idx + 2
+                corrected.append(seg_a)
+                corrected.append(seg_b)
+                continue  # següent segment
 
         if should_replace:
             cue = guion_cues[best_idx]
@@ -601,6 +742,7 @@ def correct_transcript(
     verbose: bool = False,
     llm_mode: str = "off",
     llm_model: str = "llama3.1",
+    allow_split: bool = False,
 ) -> dict:
     """
     Pipeline complet: llegeix SRT + guió, corregeix, escriu outputs.
@@ -627,18 +769,29 @@ def correct_transcript(
     if not guion_cues:
         raise ValueError(f'No s\'han trobat cues al guió: {guion_path}')
 
+    if verbose and allow_split:
+        print('[corrector] Divisió per canvi de personatge: ACTIVADA', file=sys.stderr)
+
     # --- Alinear i corregir ---
     corrected_segs, changes = align_and_correct(
         segments, guion_cues,
         threshold=threshold, window=window,
         llm_mode=llm_mode, llm_model=llm_model,
+        allow_split=allow_split,
     )
 
-    # Verificació de seguretat: mai eliminem ni afegim segments
-    assert len(corrected_segs) == len(segments), (
-        f'ERROR CRÍTIC: nombre de segments diferent! '
-        f'Original={len(segments)}, Corregit={len(corrected_segs)}'
-    )
+    # Verificació de seguretat: sense allow_split mai eliminem segments
+    # Amb allow_split podem tenir MÉS segments (divisions), mai menys
+    if not allow_split:
+        assert len(corrected_segs) == len(segments), (
+            f'ERROR CRÍTIC: nombre de segments diferent! '
+            f'Original={len(segments)}, Corregit={len(corrected_segs)}'
+        )
+    else:
+        assert len(corrected_segs) >= len(segments), (
+            f'ERROR CRÍTIC: segments eliminats! '
+            f'Original={len(segments)}, Corregit={len(corrected_segs)}'
+        )
 
     if verbose:
         print(f'[corrector] Canvis aplicats: {len(changes)}/{len(segments)}', file=sys.stderr)
@@ -711,6 +864,14 @@ def main() -> None:
         '--llm-model', dest='llm_model', default='llama3.1',
         help='Model Ollama a usar (default: llama3.1). Altres: qwen2.5, mistral'
     )
+    parser.add_argument(
+        '--allow-split', dest='allow_split', action='store_true', default=False,
+        help=(
+            'Permet dividir un segment ASR en dos quan detecta que conté veus de '
+            'dos personatges DIFERENTS del guió. Útil quan el transcriptor ha fusionat '
+            'dues rèpliques en un sol subtítol. Per defecte desactivat (conservador).'
+        )
+    )
 
     args = parser.parse_args()
 
@@ -726,6 +887,7 @@ def main() -> None:
             verbose=args.verbose,
             llm_mode=args.llm_mode,
             llm_model=args.llm_model,
+            allow_split=args.allow_split,
         )
         print(json.dumps(result, ensure_ascii=False))
     except Exception as e:

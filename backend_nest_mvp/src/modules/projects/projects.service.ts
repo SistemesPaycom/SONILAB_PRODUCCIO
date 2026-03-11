@@ -375,7 +375,7 @@ except ImportError:
    */
   async correctTranscript(
     projectId: string,
-    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string } = {},
+    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string; allowSplit?: boolean } = {},
   ): Promise<{
     correctedSrt: string;
     changes: any[];
@@ -434,6 +434,7 @@ except ImportError:
       const llmMode = options.llmMode && ['off', 'fast', 'smart'].includes(options.llmMode)
         ? options.llmMode : 'off';
       const llmModel = options.llmModel || 'llama3.1';
+      const allowSplit = options.allowSplit === true;
 
       // Timeout dinàmic: LLM local pot trigar minuts per segment
       // off (rapidfuzz) → 90s | fast (LLM casos ambigus) → 10 min | smart (LLM tots) → 20 min
@@ -455,6 +456,7 @@ except ImportError:
           '--window', String(window),
           '--llm-mode', llmMode,
           '--llm-model', llmModel,
+          ...(allowSplit ? ['--allow-split'] : []),
         ],
         { encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
       );
