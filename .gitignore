@@ -22,6 +22,9 @@ Thumbs.db
 **/.venv/
 **/venv/
 **/venv311/
+**/.venv311/
+**/claude/
+**/.claude/
 
 # HuggingFace / caches
 **/.cache/
@@ -31,3 +34,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+*.bin
+*.pt
+*.safetensors
