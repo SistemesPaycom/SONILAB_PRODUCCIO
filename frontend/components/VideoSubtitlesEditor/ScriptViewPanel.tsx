@@ -4,6 +4,7 @@ import Editor from '../EditorDeGuions/Editor';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
 import { CsvView } from '../EditorDeGuions/CsvView';
 import { api } from '../../services/api';
+import { importStructuredScriptFromFile } from '../../utils/Import/scriptImportPipeline';
 
 interface ScriptViewPanelProps {
   width: number; // percentage
@@ -71,34 +72,24 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
     setUploading(true);
     setUploadErr(null);
     try {
-      const text = await file.text();
+      // ── Pipeline compartit: DOCX/PDF → TXT canònic estructurat ─────────
+      // Usem exactament la mateixa lògica que la importació convencional
+      // (LibraryView.tsx). No hi ha branques paral·leles.
+      const result = await importStructuredScriptFromFile(file);
 
       if (projectId) {
-        // ── Mode backend: desa al projecte ───────────────────────────────
-        const ext = file.name.split('.').pop()?.toLowerCase();
-        if (ext === 'txt') {
-          await api.setProjectGuion(projectId, text, file.name);
-          onGuionLoaded?.(text);
-        } else {
-          // DOCX/RTF/PDF: el backend extreu el text (preserva tabuladors SONILAB)
-          await api.uploadProjectGuionFile(projectId, file);
-          const { text: extractedText } = await api.getProjectGuion(projectId);
-          if (extractedText) onGuionLoaded?.(extractedText);
-        }
+        // ── Mode backend: desa al projecte via api.setProjectGuion ─────────
+        // El TXT canònic resultant es desa com a Document al backend
+        // i es vincula al projecte. Ni el DOCX ni el PDF original s'envien.
+        await api.setProjectGuion(projectId, result.content, result.fileName);
+        onGuionLoaded?.(result.content);
       } else if (docId) {
-        // ── Mode local: desa a localStorage ──────────────────────────────
-        // Nota: per a DOCX/PDF sense backend no podem extreure text,
-        // però el TXT funciona directament.
-        const ext = file.name.split('.').pop()?.toLowerCase();
-        if (ext !== 'txt') {
-          setUploadErr('Sense projecte de backend, només es poden vincular fitxers .txt');
-          return;
-        }
-        localStorage.setItem(_localGuionKey(docId), text);
-        onGuionLoaded?.(text);
+        // ── Mode local: desa a localStorage amb el TXT canònic ────────────
+        localStorage.setItem(_localGuionKey(docId), result.content);
+        onGuionLoaded?.(result.content);
       }
     } catch (e: any) {
-      setUploadErr(e?.message || 'Error pujant el guió');
+      setUploadErr(e?.message || 'Error important el guió');
     } finally {
       setUploading(false);
     }
@@ -155,7 +146,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept={projectId ? '.docx,.rtf,.pdf,.txt' : '.txt'}
+              accept=".docx,.pdf"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -167,11 +158,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
               className="text-[9px] text-gray-500 hover:text-blue-300 bg-gray-700/50 hover:bg-blue-900/30 border border-gray-600/50 px-2 py-0.5 rounded transition-colors disabled:opacity-40"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              title={
-                projectId
-                  ? 'Pujar o canviar el guió del projecte (DOCX, RTF, PDF, TXT)'
-                  : 'Vincular un guió TXT (es desarà al navegador)'
-              }
+              title="Pujar o canviar el guió (DOCX o PDF)"
             >
               {uploading ? '⏳ Processant…' : hasContent ? '↑ Canviar guió' : '↑ Vincular guió'}
             </button>
@@ -196,9 +183,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
             <div className="text-4xl opacity-20">📄</div>
             <div className="text-sm font-bold text-gray-500">Cap guió associat</div>
             <div className="text-xs text-gray-600 max-w-[200px]">
-              {projectId
-                ? 'Puja el guió del doblatge (DOCX, RTF, PDF o TXT) per comparar-lo amb els subtítols i detectar discrepàncies.'
-                : 'Vincular un guió TXT per comparar-lo amb els subtítols. Es desarà al navegador.'}
+              {'Puja el guió del doblatge (DOCX o PDF) per comparar-lo amb els subtítols i detectar discrepàncies.'}
             </div>
             {canLink && (
               <button

@@ -72,3 +72,9 @@ export function convertSrtToSlsf(srtContent: string): string {
   // Convertim la graella generada a SLSF utilitzant el conversor existent del sistema
   return csvToSlsf(csvRows.join('\n'));
 }
+
+/**
+ * Àlies de convertSrtToSlsf amb nomenclatura actualitzada (.txt en comptes de .slsf).
+ * Mantenim convertSrtToSlsf per compatibilitat amb imports existents.
+ */
+export const convertSrtToScriptTxt = convertSrtToSlsf;

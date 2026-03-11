@@ -207,7 +207,8 @@ const goTrash = () => {
         csvContent = scriptToCsv(takes);
       }
       
-      const finalName = (ext === 'pdf' || ext === 'docx') ? `${baseName}.slsf` : originalName;
+      // Nou format: .txt (text pla reestructurat). Els antics .slsf segueixen funcionant per compatibilitat.
+      const finalName = (ext === 'pdf' || ext === 'docx') ? `${baseName}.txt` : originalName;
       
      if (useBackend) {
   if (['mp4', 'wav', 'mov', 'webm', 'ogg', 'mp3', 'm4a'].includes(ext || '')) {

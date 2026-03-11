@@ -9,6 +9,8 @@ import { VideoEditorToolbar } from './VideoEditorToolbar';
 import { VideoPlaybackArea } from './VideoPlaybackArea';
 import ImportFilesModal from '../Import/ImportFilesModal';
 import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges';
+import { parseScript } from '../../utils/EditorDeGuions/scriptParser';
+import { scriptToCsv } from '../../utils/EditorDeGuions/csvConverter';
 import { useLibrary } from '../../context/Library/LibraryContext';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
@@ -59,7 +61,16 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
   const [takeStartMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_START_MARGIN, 2);
 
   const currentContent = currentDoc && activeLang ? currentDoc.contentByLang[activeLang] : '';
-  const currentCsvContent = currentDoc && activeLang ? currentDoc.csvContentByLang[activeLang] : '';
+  // Si csvContentByLang és buit (p.ex. després d'editar des de MONO), el derivem del guió canònic
+  const currentCsvContent = useMemo(() => {
+    if (!currentDoc || !activeLang) return '';
+    const stored = currentDoc.csvContentByLang[activeLang];
+    if (stored) return stored;
+    const content = currentDoc.contentByLang[activeLang] || '';
+    if (!content) return '';
+    const { takes } = parseScript(content);
+    return scriptToCsv(takes);
+  }, [currentDoc, activeLang]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);

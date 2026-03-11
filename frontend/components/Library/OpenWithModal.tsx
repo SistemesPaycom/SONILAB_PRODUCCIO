@@ -34,7 +34,8 @@ const OpenWithModal: React.FC<OpenWithModalProps> = ({ docId, onClose, onOpen })
     const slsfContent = convertSrtToSlsf(srtContent);
     if (!slsfContent) return;
 
-    const newName = doc.name.replace(/\.srt$/i, '') + '.slsf';
+    // Nou format de nom: .txt (el sourceType segueix sent 'slsf' per a detecció interna)
+    const newName = doc.name.replace(/\.srt$/i, '') + '.txt';
 
     if (useBackend) {
       await createDocumentRemote({
@@ -97,6 +98,7 @@ const handleConvertToSsrtlsf = () => {
 
   const isSrt = doc.sourceType?.toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt');
   const isSsrtlsf = doc.sourceType?.toLowerCase() === 'ssrtlsf' || doc.name.toLowerCase().endsWith('.ssrtlsf');
+  // Compatibilitat: detecta tant .slsf (legacy) com .txt amb sourceType='slsf' (nous guions)
   const isSlsf = doc.sourceType?.toLowerCase() === 'slsf' || doc.name.toLowerCase().endsWith('.slsf');
 
   if (isSsrtlsf) {

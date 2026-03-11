@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import { useLibrary } from '../../context/Library/LibraryContext';
 import type { Document, OpenMode } from '../../types';
+import { importStructuredScriptFromFile } from '../../utils/Import/scriptImportPipeline';
 
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
 
@@ -64,6 +65,10 @@ export const CreateProjectModal: React.FC<{
   // guion del projecte (opcional — per a comparació a l'editor SRT)
   const [guionFile, setGuionFile] = useState<File | null>(null);
   const [guionPreviewText, setGuionPreviewText] = useState<string>('');
+  const [guionConverting, setGuionConverting] = useState(false);
+  const [guionConvertErr, setGuionConvertErr] = useState<string | null>(null);
+  // Ref per a accedir al resultat de conversió des de qualsevol tancament async
+  const guionConvertedRef = useRef<{ content: string; fileName: string } | null>(null);
 
   // import srt
   const [srtFile, setSrtFile] = useState<File | null>(null);
@@ -125,29 +130,40 @@ export const CreateProjectModal: React.FC<{
     void file.text().then((text) => setScriptText(text));
   };
 
-  // Selecciona el guion del projecte (DOCX/PDF/TXT) per a comparació
+  // Selecciona el guion del projecte (DOCX/PDF) per a comparació.
+  // Usa el pipeline compartit per convertir immediatament al TXT canònic.
   const handleGuionFileChange = (file: File) => {
     setGuionFile(file);
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext === 'txt') {
-      // TXT: podem mostrar una previsualització immediata
-      void file.text().then((text) => setGuionPreviewText(text.slice(0, 300)));
-    } else {
-      // DOCX/PDF: l'extracció es farà al backend
-      setGuionPreviewText('');
-    }
+    setGuionPreviewText('');
+    setGuionConvertErr(null);
+    guionConvertedRef.current = null;
+    setGuionConverting(true);
+
+    void importStructuredScriptFromFile(file)
+      .then((result) => {
+        guionConvertedRef.current = { content: result.content, fileName: result.fileName };
+        setGuionPreviewText(result.content.slice(0, 300));
+        setGuionConverting(false);
+      })
+      .catch((err: Error) => {
+        setGuionConvertErr(err?.message || 'Error convertint el guió');
+        setGuionConverting(false);
+      });
   };
 
-  // Puja el guio al projecte (cridat després de crear el projecte)
+  // Puja el guió al projecte usant el pipeline compartit front-end.
+  // DOCX/PDF → TXT canònic estructurat → api.setProjectGuion (text + nom .txt).
+  // No s'envia el DOCX/PDF al backend: la conversió és 100% al client.
   const uploadGuionToProject = async (projectId: string) => {
     if (!guionFile) return;
-    const ext = guionFile.name.split('.').pop()?.toLowerCase();
-    if (ext === 'txt') {
-      const text = await guionFile.text();
-      await api.setProjectGuion(projectId, text, guionFile.name);
+    // Usa el resultat de la conversió pre-calculada si està disponible
+    const preConverted = guionConvertedRef.current;
+    if (preConverted) {
+      await api.setProjectGuion(projectId, preConverted.content, preConverted.fileName);
     } else {
-      // DOCX / RTF / PDF: puja el fitxer al backend per extreure text
-      await api.uploadProjectGuionFile(projectId, guionFile);
+      // Fallback: reconverteix si la conversió inicial no havia acabat
+      const result = await importStructuredScriptFromFile(guionFile);
+      await api.setProjectGuion(projectId, result.content, result.fileName);
     }
   };
 
@@ -395,12 +411,13 @@ export const CreateProjectModal: React.FC<{
               </div>
               <div className="text-[11px] text-gray-500 mb-2">
                 Associa el guió al projecte per comparar-lo amb els subtítols a l'editor.
-                S'accepta DOCX, RTF, PDF o TXT.
+                S'accepta <strong className="text-gray-400">DOCX o PDF</strong>.
+                El sistema el converteix automàticament al format intern estructurat (.txt).
               </div>
               <label className="text-xs text-gray-300 font-semibold cursor-pointer">
                 <input
                   type="file"
-                  accept=".docx,.rtf,.pdf,.txt"
+                  accept=".docx,.pdf"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -413,11 +430,22 @@ export const CreateProjectModal: React.FC<{
                 </span>
               </label>
               {guionFile && (
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-green-400 font-mono truncate max-w-[180px]">{guionFile.name}</span>
+                  {guionConverting && (
+                    <span className="text-[10px] text-blue-300 animate-pulse">⏳ Convertint…</span>
+                  )}
+                  {guionConvertErr && (
+                    <span className="text-[10px] text-red-400">{guionConvertErr}</span>
+                  )}
                   <button
                     className="text-[10px] text-gray-500 hover:text-red-400"
-                    onClick={() => { setGuionFile(null); setGuionPreviewText(''); }}
+                    onClick={() => {
+                      setGuionFile(null);
+                      setGuionPreviewText('');
+                      setGuionConvertErr(null);
+                      guionConvertedRef.current = null;
+                    }}
                   >
                     ✕
                   </button>

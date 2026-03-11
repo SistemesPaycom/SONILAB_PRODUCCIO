@@ -15,6 +15,8 @@ import { CsvView } from './components/EditorDeGuions/CsvView';
 import { useDocumentHistory } from './hooks/useDocumentHistory';
 import { DirtyGuardModal } from './components/DirtyGuardModal';
 import { translateScript } from './utils/EditorDeGuions/translator';
+import { csvToSlsf, scriptToCsv } from './utils/EditorDeGuions/csvConverter';
+import { parseScript } from './utils/EditorDeGuions/scriptParser';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import useLocalStorage from './hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from './constants';
@@ -257,6 +259,17 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
   const docContent = useMemo(() => currentDoc?.contentByLang[effectiveLang] || '', [currentDoc, effectiveLang]);
   const history = useDocumentHistory(openDocId || 'temp', docContent);
 
+  // Contingut CSV per a la vista DADES: usa el valor guardat o el deriva del guió canònic si és buit
+  const csvContentToShow = useMemo(() => {
+    if (!currentDoc || !effectiveLang) return '';
+    const stored = currentDoc.csvContentByLang[effectiveLang];
+    if (stored) return stored;
+    const content = currentDoc.contentByLang[effectiveLang] || '';
+    if (!content) return '';
+    const { takes } = parseScript(content);
+    return scriptToCsv(takes);
+  }, [currentDoc, effectiveLang]);
+
   const handleSave = useCallback(() => {
     history.save((data) => {
       if (currentDoc) {
@@ -298,8 +311,18 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
   const handleTextChange = (newText: string, sourceView: 'script' | 'csv' | 'mono') => {
     if (!currentDoc || !isEditing || !effectiveLang) return;
+    if (sourceView === 'csv') {
+      // newText és contingut CSV de CsvView; el convertim a format canònic de guió
+      const canonicalContent = csvToSlsf(newText);
+      history.updateDraft(canonicalContent);
+      history.commit(canonicalContent);
+      dispatch({
+        type: 'UPDATE_DOCUMENT_CONTENTS',
+        payload: { documentId: currentDoc.id, lang: effectiveLang, content: canonicalContent, csvContent: newText }
+      });
+      return;
+    }
     history.updateDraft(newText);
-    if (sourceView === 'csv') history.commit(newText);
     dispatch({
       type: 'UPDATE_DOCUMENT_CONTENTS',
       payload: { documentId: currentDoc.id, lang: effectiveLang, content: newText, csvContent: '' }
@@ -357,13 +380,13 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
       return (
         <main className="flex-grow overflow-y-auto bg-[#0f172a] p-8 flex flex-col items-center custom-scrollbar">
-           <div className="bg-white shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
-              <ColumnView 
-                content={history.present} 
-                setContent={(txt) => handleTextChange(txt, 'script')} 
-                isEditable={false} 
-                col1Width={200} 
-                editorStyles={editorStyles} 
+           <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
+              <ColumnView
+                content={history.present}
+                setContent={(txt) => handleTextChange(txt, 'script')}
+                isEditable={false}
+                col1Width={200}
+                editorStyles={editorStyles}
               />
            </div>
         </main>
@@ -374,9 +397,9 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
       <div className="flex-1 flex flex-col min-h-0">
         <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
         <main className="flex-grow overflow-y-auto bg-[#0f172a] p-8 flex flex-col items-center custom-scrollbar">
-           <div className="bg-white shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
+           <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
               {editorView === 'csv' ? (
-                <CsvView content={currentDoc.csvContentByLang[effectiveLang]} setContent={handleTextChange} isEditable={isEditing} pageWidth={pageWidth} />
+                <CsvView content={csvContentToShow} setContent={handleTextChange} isEditable={isEditing} pageWidth={pageWidth} />
               ) : layout === 'mono' ? (
                 <Editor content={history.present} setContent={(txt) => handleTextChange(txt, 'mono')} isEditable={isEditing} tabSize={tabSize} />
               ) : (

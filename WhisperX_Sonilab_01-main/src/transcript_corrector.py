@@ -208,12 +208,17 @@ def _parse_guion_txt(guion_text: str) -> List[GuionCue]:
                 continue
             # Netejar anchors del text: (10.00s), (00:01:30), etc.
             clean_text = re.sub(r'\(\d[\d:.]*s?\)', '', c.text).strip()
-            result.append(GuionCue(
-                speaker=c.speaker,
-                text=clean_text,
-                abs_time=c.abs_time,
-                take_num=c.take_num,
-            ))
+            if not clean_text:
+                continue
+            # Dividir per ' / ' (canvi de veu dins del cue)
+            for part in _split_slash_cue(clean_text):
+                if part:
+                    result.append(GuionCue(
+                        speaker=c.speaker,
+                        text=part,
+                        abs_time=c.abs_time,
+                        take_num=c.take_num,
+                    ))
         return result
     except Exception:
         pass
@@ -264,13 +269,17 @@ def _parse_guion_fallback(text: str) -> List[GuionCue]:
                 abs_t = int(p[0]) * 3600 + int(p[1]) * 60 + int(p[2])
             # Netejar anchors del text
             clean = anchor_re.sub('', dialog_text).strip()
-            if clean:
-                cues.append(GuionCue(
-                    speaker=speaker,
-                    text=clean,
-                    abs_time=abs_t,
-                    take_num=take_num,
-                ))
+            if not clean:
+                continue
+            # Dividir per ' / ' (canvi de veu dins del mateix cue)
+            for part in _split_slash_cue(clean):
+                if part:
+                    cues.append(GuionCue(
+                        speaker=speaker,
+                        text=part,
+                        abs_time=abs_t,
+                        take_num=take_num,
+                    ))
 
     return cues
 
@@ -278,29 +287,86 @@ def _parse_guion_fallback(text: str) -> List[GuionCue]:
 # ─────────────────────── Normalització de text ─────────────────────────────────
 
 def _normalize(text: str) -> str:
-    """Normalitza per a comparació: minúscules, sense puntuació extra, espais simples."""
+    """Normalitza per a comparació: minúscules, sense puntuació extra, espais simples.
+    La barra ' / ' es tracta com a separador de paraula (no de diàleg aquí)."""
     t = text.lower()
+    # Normalitzem '/' com a espai (per a la comparació; la divisió es fa a _split_slash_cue)
+    t = re.sub(r'\s*/\s*', ' ', t)
     t = re.sub(r"[^\w\sàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ]", " ", t)
     t = re.sub(r'\s+', ' ', t).strip()
     return t
 
 
+def _word_overlap(a: str, b: str) -> float:
+    """Jaccard de conjunts de paraules. Útil com a segunda opinió quan els textos
+    difereixen molt en longitud però comparteixen la majoria de paraules."""
+    wa = set(_normalize(a).split())
+    wb = set(_normalize(b).split())
+    if not wa or not wb:
+        return 0.0
+    return len(wa & wb) / len(wa | wb)
+
+
 def _similarity(a: str, b: str) -> float:
     """
     Retorna similitud [0.0, 1.0] entre dos textos.
-    Usa rapidfuzz si disponible (token_set_ratio, més robust per a reordenament).
+    Usa rapidfuzz si disponible (token_set_ratio, robust per a reordenament).
+    Fallback: combina SequenceMatcher de caràcters + Jaccard de paraules.
     """
     na, nb = _normalize(a), _normalize(b)
     if not na or not nb:
         return 0.0
     if _HAS_RAPIDFUZZ:
-        # token_set_ratio: robust davant inserions/reordenaments
-        return _rfuzz.token_set_ratio(na, nb) / 100.0
+        # token_set_ratio ignora l'ordre i les paraules duplicades
+        char_score = _rfuzz.token_set_ratio(na, nb) / 100.0
     else:
-        return SequenceMatcher(None, na, nb).ratio()
+        # Combinem ratio de seqüència + solapament de paraules per a millor coverage
+        char_score = SequenceMatcher(None, na, nb).ratio()
+        word_score = _word_overlap(a, b)
+        char_score = char_score * 0.6 + word_score * 0.4
+
+    return char_score
+
+
+def _split_slash_cue(text: str) -> List[str]:
+    """
+    Divideix un text de guió que conté ' / ' en parts separades.
+    ' / ' en un guió de doblatge sol indicar que dues veus parlen en seqüència
+    (o és un canvi de personatge dins del mateix cue).
+
+    Exemples:
+      "Hola, com estàs? / Bé, gràcies."  → ["Hola, com estàs?", "Bé, gràcies."]
+      "Sí. / No. / Potser."               → ["Sí.", "No.", "Potser."]
+      "Velocitat / potència"              → ["Velocitat", "potència"]
+
+    Si no hi ha ' / ', retorna llista amb l'element original.
+    Nota: '/' sense espais (ex: "AC/DC") NO es divideix.
+    """
+    # Detectem '/' envoltat d'espais (o al principi/final de la paraula)
+    _SLASH_SEP = re.compile(r'\s/\s')
+    if not _SLASH_SEP.search(text):
+        return [text]
+    parts = [p.strip() for p in _SLASH_SEP.split(text)]
+    return [p for p in parts if p]
 
 
 # ─────────────────────── Motor d'alineament ────────────────────────────────────
+
+def _has_voice(seg: SrtSegment) -> bool:
+    """
+    Heurística: determina si un segment probablement conté veu real.
+    Criteris: text no buit, >= 2 paraules, no és un marcador tècnic.
+    """
+    text = seg.text.strip()
+    if not text:
+        return False
+    words = text.split()
+    if len(words) < 2:
+        return False
+    # Exclou marcadors tècnics típics (♪, -, ...)
+    clean = text.strip('-♪ .')
+    return bool(clean)
+
 
 def _find_best_guion_match(
     seg: SrtSegment,
@@ -314,8 +380,9 @@ def _find_best_guion_match(
 
     Estratègia:
       - Busca dins una finestra [guion_cursor - window//2, guion_cursor + window]
-      - Puntua per similitud de text
-      - Afegeix un petit bonus si el temps del guió s'apropa al del segment
+      - Puntua per similitud de text (token-level + word overlap)
+      - Afegeix un petit bonus temporal si el guió té timestamps fiables
+      - Intenta també solapament parcial per segments llargs vs cues curts
 
     Retorna (índex_cue_guió, score) o (None, 0.0)
     """
@@ -328,12 +395,19 @@ def _find_best_guion_match(
     best_idx: Optional[int] = None
     best_score = -1.0
 
+    seg_words = set(_normalize(seg.text).split())
+
     for i in range(lo, hi):
         cue = guion_cues[i]
         text_score = _similarity(seg.text, cue.text)
 
-        # Bonus temporal: si el temps del guió és proper al segment de transcripció
-        # (no penalitzem massa si no hi ha timestamps fiables al guió)
+        # Bonus de solapament de paraules (ajuda quan un segment és subconjunt del cue)
+        cue_words = set(_normalize(cue.text).split())
+        if seg_words and cue_words:
+            overlap = len(seg_words & cue_words) / max(len(seg_words), len(cue_words))
+            text_score = max(text_score, text_score * 0.7 + overlap * 0.3)
+
+        # Bonus temporal: si el temps del guió és proper al segment
         time_diff = abs(cue.abs_time - seg.start_s)
         time_bonus = max(0.0, 1.0 - time_diff / 60.0) * 0.05  # màxim 5% bonus
 
@@ -379,10 +453,14 @@ def align_and_correct(
             seg, guion_cues, len(corrected), guion_cursor, window
         )
 
+        # Umbral dinàmic: si el segment té veu clara, acceptem un 10% menys de confiança
+        # (la transcripció pot errar paraules però la veu és real i val la pena corregir)
+        effective_threshold = threshold * 0.90 if _has_voice(seg) else threshold
+
         # Determinar si cal substituir via fuzzy
         fuzzy_match = (
             best_idx is not None
-            and best_score >= threshold
+            and best_score >= effective_threshold
             and best_idx not in used_guion
         )
 
@@ -456,25 +534,35 @@ def align_and_correct(
 
 def _format_corrected_text(guion_text: str, original_text: str) -> str:
     """
-    Formata el text corregit adaptant-lo al layout del segment original:
-    - Si l'original era multilineal (2 línies), intentem mantenir 2 línies
-    - Preserva el prefix de guió "- " si l'original el tenia
-    """
-    original_lines = original_text.strip().splitlines()
-    has_dash_prefix = any(l.strip().startswith('- ') for l in original_lines)
+    Formata el text corregit adaptant-lo al layout del segment original.
 
+    Regles:
+    1. Si el text del guió conté ' / ', es converteix a salt de línia (\n).
+       Ex: "Hola / Adéu" → "Hola\nAdéu" (subtítol de 2 línies)
+    2. Si l'original era multilineal (2 línies), intentem mantenir 2 línies
+       buscant un punt de tall natural.
+    3. Cas general: retorna el text net en una línia.
+    """
     # Netejar el text del guió
     clean = guion_text.strip()
 
-    # Si l'original tenia 2 línies, intentem dividir el text del guió
+    # Regla 1: ' / ' en el guió → salt de línia explícit al subtítol
+    _SLASH_SEP = re.compile(r'\s/\s')
+    if _SLASH_SEP.search(clean):
+        parts = [p.strip() for p in _SLASH_SEP.split(clean) if p.strip()]
+        if len(parts) >= 2:
+            # Limitem a 2 línies (el format SRT estàndard no recomana més)
+            return '\n'.join(parts[:2])
+
+    original_lines = original_text.strip().splitlines()
+
+    # Regla 2: si l'original tenia 2 línies, intentem mantenir 2 línies
     if len(original_lines) >= 2:
         words = clean.split()
         if len(words) >= 4:
             mid = len(words) // 2
-            # Busca un punt de tall natural a prop del mig
             best_mid = mid
             for delta in range(0, min(4, mid)):
-                # Preferim tallar after puntuació
                 for d in [delta, -delta]:
                     pos = mid + d
                     if 0 < pos < len(words):

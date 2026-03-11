@@ -1,0 +1,232 @@
+================================================================================
+CLAUDE LOG — REPARACIÓ UI GUIÓ + MIGRACIÓ .slsf → .txt
+================================================================================
+Data/hora  : 2026-03-11
+Autor      : Claude (claude-sonnet-4-6) — sessió automatitzada
+Tasca      : Reparar MONO / DADES, preservar arquitectura DOCX→parser→vistes,
+             canviar extensió .slsf per .txt en guions nous, log de canvis.
+================================================================================
+
+1. RESUM D'OBJECTIU
+───────────────────
+Reparar regresions visuals i de dades en l'editor de guions (SONILAB_PRODUCCIO):
+  A) MONO: text invisible (blanc sobre blanc).
+  B) DADES/CSV: cel·les buides (problema de wiring de dades, no només CSS).
+  C) Canvi de sufix per a nous guions: .slsf → .txt.
+  D) Compatibilitat backward amb fitxers .slsf existents.
+  E) Deixar el pipeline DOCX→normalització→parser→vistes intacte.
+
+================================================================================
+
+2. FITXERS MODIFICATS
+──────────────────────
+
+  ① frontend/components/EditorDeGuions/Editor.tsx
+  ② frontend/App.tsx
+  ③ frontend/components/VideoEditor/VideoEditorView.tsx
+  ④ frontend/components/Library/LibraryView.tsx
+  ⑤ frontend/components/Library/OpenWithModal.tsx
+  ⑥ frontend/utils/EditorDeGuions/csvConverter.ts
+  ⑦ frontend/utils/SubtitlesEditor/srtToSlsf.ts
+  ⑧ CLAUDE_LOG_CAMBIOS_GUIÓN_TXT_UI.txt  ← aquest fitxer (creat nou)
+
+================================================================================
+
+3. CANVIS DETALLATS PER FITXER
+────────────────────────────────
+
+── ① Editor.tsx ──────────────────────────────────────────────────────────────
+PROBLEMA:
+  El textarea usava bg-transparent sense color de text explícit. El component
+  arrel d'App.tsx tenia `text-white` com a color heretat, i el contenidor blanc
+  que embolcalla el textarea NO tenia `text-gray-900`. Resultat: text blanc
+  sobre fons blanc → invisible.
+
+CANVI:
+  Afegit `text-gray-900 caret-gray-900` a la className del textarea.
+
+  Línia canviada:
+    - className="... font-mono text-sm"
+    + className="... font-mono text-sm text-gray-900 caret-gray-900"
+
+  Efecte: el color de text es força explícitament, independentment del tema
+  global fosc de l'aplicació. El caret (cursor d'edició) també es torna visible.
+
+── ② App.tsx ─────────────────────────────────────────────────────────────────
+PROBLEMA A — contenidor sense color de text explícit:
+  Les divs bg-white que embolcallen les vistes editores tenien classe `bg-white`
+  però no `text-gray-900`. Heretaven `text-white` del root div de l'app.
+
+CANVI A — afegit text-gray-900 als dos contenidors:
+  - Mode no-editable (previsualització ColumnView)
+  - Mode editable (Editor / ColumnView / CsvView)
+  Totes dues divs `bg-white` ara també porten `text-gray-900`.
+
+PROBLEMA B — wiring de dades de DADES/CSV:
+  handleTextChange, quan sourceView === 'csv':
+    1. Guardava el text CSV com a `content` (format canònic) — MALAMENT.
+    2. Passava csvContent: '' → esborrava el CSV guardat — MALAMENT.
+  Resultat: `csvContentByLang[lang]` quedava buit i CsvView mostrava taula
+  buida en la pròxima renderització.
+
+CANVI B — handleTextChange reparat per cas 'csv':
+  Quan sourceView === 'csv':
+    1. newText (CSV) → csvToSlsf(newText) → canonicalContent (guió canònic)
+    2. history.updateDraft(canonicalContent)
+    3. history.commit(canonicalContent)
+    4. dispatch UPDATE_DOCUMENT_CONTENTS amb:
+         content: canonicalContent   ← guió canònic com a font de veritat
+         csvContent: newText         ← CSV guardat correctament
+  MONO/COLS no canvien (dispatch amb csvContent: '' com abans).
+
+PROBLEMA C — CsvView reb undefined/buit si csvContentByLang és buit:
+  Quan l'usuari edita des de MONO o COLS, handleTextChange envia csvContent: ''.
+  Això esborra csvContentByLang. En activar la pestanya DADES, CsvView rep ''.
+
+CANVI C — csvContentToShow useMemo:
+  Afegit a nivell de component MainAppContent:
+    const csvContentToShow = useMemo(() => {
+      // Si hi ha valor guardat, usa'l
+      const stored = currentDoc.csvContentByLang[effectiveLang];
+      if (stored) return stored;
+      // Sino, deriva el CSV del contingut canònic en temps real
+      const { takes } = parseScript(content);
+      return scriptToCsv(takes);
+    }, [currentDoc, effectiveLang]);
+  CsvView ara rep `csvContentToShow` en lloc de `csvContentByLang[effectiveLang]`.
+
+IMPORTS afegits a App.tsx:
+  import { csvToSlsf, scriptToCsv } from './utils/EditorDeGuions/csvConverter';
+  import { parseScript } from './utils/EditorDeGuions/scriptParser';
+
+── ③ VideoEditorView.tsx ─────────────────────────────────────────────────────
+PROBLEMA: Igual que App.tsx — currentCsvContent pot ser buit si csvContentByLang
+  ha estat esborrat per edicions des de MONO/COLS.
+
+CANVI: currentCsvContent convertit a useMemo amb fallback:
+  Si csvContentByLang[activeLang] és buit, deriva CSV de contentByLang en temps
+  real via parseScript + scriptToCsv.
+
+IMPORTS afegits:
+  import { parseScript } from '../../utils/EditorDeGuions/scriptParser';
+  import { scriptToCsv } from '../../utils/EditorDeGuions/csvConverter';
+
+── ④ LibraryView.tsx ─────────────────────────────────────────────────────────
+CANVI: Generació de nom de fitxer per a guions importats des de PDF/DOCX:
+  - Antic: `${baseName}.slsf`
+  - Nou:   `${baseName}.txt`
+
+  sourceType continua sent 'slsf' internament (per a detecció en OpenWithModal
+  i altres llocs). Només canvia l'extensió visible del fitxer.
+
+  Compatibilitat backward: els fitxers .slsf existents NO es toquen ni es
+  reanomenen. Continuen oberts correctament perquè la detecció usa sourceType
+  com a discriminador primari.
+
+── ⑤ OpenWithModal.tsx ───────────────────────────────────────────────────────
+CANVI: En convertir un SRT a format de guió (handleConvertToSlsf):
+  - Antic nom del fitxer generat: nom.slsf
+  - Nou nom:                      nom.txt
+  sourceType continua sent 'slsf' → la detecció isSlsf segueix funcionant.
+
+  Afegit comentari explicatiu a isSlsf per documentar la doble detecció
+  (sourceType='slsf' per a nous .txt + .slsf com a extensió legacy).
+
+── ⑥ csvConverter.ts ─────────────────────────────────────────────────────────
+CANVI: Afegit àlies de funció amb nomenclatura actualitzada:
+  export const csvToScriptTxt = csvToSlsf;
+  (csvToSlsf es manté exportat per retrocompatibilitat amb imports existents)
+
+── ⑦ srtToSlsf.ts ────────────────────────────────────────────────────────────
+CANVI: Afegit àlies de funció:
+  export const convertSrtToScriptTxt = convertSrtToSlsf;
+  (convertSrtToSlsf es manté per retrocompatibilitat)
+
+================================================================================
+
+4. BUGS CORREGITS
+──────────────────
+① Text blanc sobre fons blanc en MONO:
+   Root causa: text-white heretat + bg-transparent + contenidor sense
+   text-gray-900 → textarea invisible.
+   Correcció: text-gray-900 forçat al textarea + contenidors.
+
+② Taula DADES buida:
+   Root causa A: handleTextChange per 'csv' guardava CSV com a `content`
+   canònic i buidava csvContentByLang.
+   Correcció A: CSV → csvToSlsf → content canònic; CSV es guarda com csvContent.
+
+   Root causa B: Editar des de MONO/COLS esborra csvContentByLang per csvContent:''.
+   Correcció B: csvContentToShow deriva CSV del contingut canònic si csvContentByLang
+   és buit (fallback en temps real, sense cost de keystroke).
+
+③ Nom de fitxer .slsf en nous guions:
+   Root causa: hardcoded `${baseName}.slsf` en LibraryView i OpenWithModal.
+   Correcció: canviat a `${baseName}.txt`.
+
+================================================================================
+
+5. DECISIONS DE COMPATIBILITAT .slsf → .txt
+─────────────────────────────────────────────
+• sourceType='slsf' ES MANTÉ com a identificador intern. No s'ha canviat.
+• La detecció `isSlsf` en OpenWithModal.tsx usa sourceType com a primari:
+    doc.sourceType?.toLowerCase() === 'slsf'  ← detecta tant .slsf com .txt
+    || doc.name.toLowerCase().endsWith('.slsf') ← fallback legacy
+• Fitxers .slsf existents: COMPATIBLES. S'obren amb les mateixes opcions.
+• Fitxers nous (PDF/DOCX importats): generats com .txt, detectats via sourceType.
+• Conversió SRT→guió: genera .txt amb sourceType='slsf'.
+• csvToSlsf i convertSrtToSlsf: mantinguts com a exports per a imports existents.
+• Funcions noves (àlies): csvToScriptTxt, convertSrtToScriptTxt.
+
+================================================================================
+
+6. QUÈ NO S'HA TOCAT (PRESERVAT INTACTE)
+──────────────────────────────────────────
+• scriptParser.ts: parseScript, TAKE_REGEX, TIMECODE_REGEX, SPEAKER_REGEX,
+  mergeTextContinuations, groupSpeakersWithFollowingText — sense canvis.
+• docxImporter.ts: normalizeDocxRawText, importDocxFile — sense canvis.
+• csvConverter.ts (lògica): scriptToCsv, csvToSlsf — sense canvis funcionals.
+• ColumnView.tsx: sense canvis.
+• CsvView.tsx: sense canvis (els bugs eren de wiring, no del component).
+• scriptParser.ts: sense canvis.
+• Diàlegs simultàneus, timecodes, anotacions entre parèntesis: preservats.
+• Lògica de tabs, historial (undo/redo), guards de navegació: preservats.
+• Pipeline DOCX → normalització → parser → vistes: preservat i funcional.
+
+================================================================================
+
+7. PROVES MANUALS RECOMANADES
+───────────────────────────────
+□ Importar un DOCX de prova → verificar que crea fitxer .txt (no .slsf)
+□ Obrir un fitxer .slsf antic → verificar que funciona i s'obre com a guió
+□ MODO MONO: obrir un guió → verificar que el text és negre i visible
+□ MODO MONO: editar text → verificar que es guarda correctament
+□ MODO COLUMNES: verificar que speakers i diàlegs es veuen bé
+□ MODO DADES: obrir guió → verificar que la taula mostra TAKE/PERSONATGE/TEXT
+□ MODO DADES: editar una cel·la i fer blur → verificar que l'edició es guarda
+□ Canviar de MONO → DADES → MONO → verificar que el contingut és consistent
+□ Editar des de MONO, canviar a DADES → verificar que no queda buit
+□ Editar des de DADES, canviar a MONO → verificar que el guió és correcte
+□ Importar SRT → convertir a guió → verificar nom .txt i que s'obre com a guió
+□ Verificar que undo/redo funciona després d'editar des de DADES
+
+================================================================================
+
+8. PENDENTS I NOTES
+─────────────────────
+• ScriptViewPanel.tsx (VideoSubtitlesEditorView): usa content i csvContent com a
+  props rebuts del pare. El pare (VideoSubtitlesEditorView) s'encarrega de derivar
+  el csvContent. Si calgués, revisar VideoSubtitlesEditorView per a la mateixa
+  millora de fallback que VideoEditorView.
+• La funció handleSave en App.tsx fa dispatch amb csvContent:'' — acceptable
+  perquè csvContentToShow deriva el CSV en temps real si csvContentByLang és buit.
+• LOCAL_STORAGE_KEY en LibraryDataContext.tsx continua sent 'slsf_library_v3'.
+  Es podria migrar en una propera sessió si es vol eliminar completament la
+  referència a 'slsf'.
+• La CLEAR_COMPLETED_TRANSCRIPTION_TASKS action falta en el dispatch routing
+  de LibraryContext (CLEAR_TRANSCRIPTION_TASKS_DONE vs CLEAR_COMPLETED_TRANSCRIPTION_TASKS)
+  — aquest és un bug preexistent no relacionat amb aquesta tasca.
+
+================================================================================
+FI DEL LOG
+================================================================================

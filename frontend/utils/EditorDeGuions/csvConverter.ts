@@ -168,3 +168,10 @@ export function csvToSlsf(csvContent: string): string {
 
   return slsfParts.join('\n------------------------------------------------------------------------------------\n');
 }
+
+/**
+ * Àlies de csvToSlsf amb nomenclatura actualitzada.
+ * Els nous guions s'anomenen .txt internament però el format és el mateix.
+ * Mantenim csvToSlsf per compatibilitat amb imports existents.
+ */
+export const csvToScriptTxt = csvToSlsf;

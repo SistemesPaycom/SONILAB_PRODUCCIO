@@ -1,0 +1,263 @@
+================================================================================
+CLAUDE LOG — UNIFICACIÓ DEL PIPELINE D'IMPORTACIÓ DE GUIONS
+================================================================================
+Data/hora  : 2026-03-11
+Autor      : Claude (claude-sonnet-4-6) — sessió automatitzada
+Tasca      : Unificar tots els fluxos d'importació de guió (LibraryView,
+             CreateProjectModal, ScriptViewPanel) en un pipeline compartit únic.
+             Acceptar únicament DOCX i PDF en els botons nous/reparats.
+================================================================================
+
+
+1. RESUM D'OBJECTIU
+───────────────────
+Abans d'aquesta tasca, existien TRES branques paral·leles per importar guions:
+
+  A) LibraryView → DOCX/PDF → importDocxFile/importPdfFile → parseScript → TXT
+     (pipeline correcte, font de veritat)
+
+  B) CreateProjectModal → si DOCX/PDF → api.uploadProjectGuionFile(file binari)
+     → backend cridava guion_converter.py per convertir
+     (branca paral·lela, lògica duplicada al backend)
+
+  C) ScriptViewPanel → si DOCX/PDF → api.uploadProjectGuionFile(file binari)
+     → backend cridava guion_converter.py per convertir
+     (branca paral·lela, lògica duplicada al backend)
+
+Objectiu: eliminar les branques B i C i fer que passin pel MATEIX pipeline
+frontend que A. Un únic punt de veritat. Zero duplicació de lògica de conversió.
+
+Resultat: tots tres fluxos ara fan:
+  fitxer DOCX/PDF → importStructuredScriptFromFile() → TXT canònic
+  → api.setProjectGuion(projectId, text, fileName) → backend desa Document
+
+================================================================================
+
+
+2. FITXERS MODIFICATS / CREATS
+──────────────────────────────
+
+  ① frontend/utils/Import/scriptImportPipeline.ts  ← FITXER NOU
+  ② frontend/components/Projects/CreateProjectModal.tsx
+  ③ frontend/components/VideoSubtitlesEditor/ScriptViewPanel.tsx
+  ④ CLAUDE_LOG_UNIFICACION_IMPORT_GUION_PROYECTO_TXT.txt  ← aquest fitxer
+
+================================================================================
+
+
+3. CANVIS DETALLATS PER FITXER
+────────────────────────────────
+
+
+── ① scriptImportPipeline.ts (FITXER NOU) ───────────────────────────────────
+Ruta: frontend/utils/Import/scriptImportPipeline.ts
+
+PROPÒSIT:
+  Helper compartit que encapsula tota la lògica de conversió DOCX/PDF →
+  TXT canònic estructurat de SONILAB, usant exactament la mateixa ruta
+  que LibraryView.tsx (el pipeline d'importació convencional).
+
+INTERFÍCIE EXPORTADA:
+  interface ImportedStructuredScript {
+    fileName: string;    // nom base + ".txt"  (ex: "guio_peli.txt")
+    baseName: string;    // nom base sense extensió
+    content: string;     // TXT canònic (font de veritat per a MONO i parser)
+    csvContent: string;  // CSV derivat (TAKE | PERSONATGE | TEXT)
+    sourceType: 'slsf';  // tipus intern per a detecció legacy
+  }
+
+  async function importStructuredScriptFromFile(
+    file: File,
+    options?: ImportOptions
+  ): Promise<ImportedStructuredScript>
+
+LÒGICA INTERNA:
+  1. Detecta extensió (.docx → importDocxFile, .pdf → importPdfFile)
+  2. Aplica opcions de normalització (cleanSpaces + applyTabHeuristic per defecte)
+  3. Obté el contingut TXT canònic estructurat
+  4. Deriva el CSV: parseScript(content) → scriptToCsv(takes)
+  5. Retorna el resultat amb totes les dades necessàries
+  6. Llança Error si l'extensió no és .docx ni .pdf (amb missatge explicatiu)
+
+IMPORTS INTERNS:
+  - importDocxFile      (./docxImporter)
+  - importPdfFile       (./pdfImporter)
+  - ImportOptions       (./importShared)
+  - parseScript         (../EditorDeGuions/scriptParser)
+  - scriptToCsv         (../EditorDeGuions/csvConverter)
+
+
+── ② CreateProjectModal.tsx ─────────────────────────────────────────────────
+CANVIS:
+
+  a) Import nou afegit:
+       import { importStructuredScriptFromFile } from
+         '../../utils/Import/scriptImportPipeline';
+
+  b) Estat nou afegit:
+       const [guionConverting, setGuionConverting] = useState(false);
+       const [guionConvertErr, setGuionConvertErr] = useState<string | null>(null);
+
+  c) Ref nou afegit:
+       const guionConvertedRef = useRef<{ content: string; fileName: string } | null>(null);
+     (Patró ref per evitar problemes de closure en handlers asíncrons)
+
+  d) handleGuionFileChange REEMPLAÇADA:
+     - ANTIC: per a .txt llegia el fitxer directament; per a .docx/.pdf simplement
+       guardava la referència del File per enviar-lo al backend binari més tard.
+     - NOU: per a .docx/.pdf converteix immediatament via importStructuredScriptFromFile()
+       i desa el resultat a guionConvertedRef. Mostra spinner durant la conversió.
+       El nom de fitxer visible a la UI és el .txt resultant, no el .docx/.pdf original.
+
+  e) uploadGuionToProject REEMPLAÇADA:
+     - ANTIC: distingia entre .txt (→ api.setProjectGuion amb text pla) i
+       .docx/.pdf (→ api.uploadProjectGuionFile amb el binari original al backend).
+     - NOU: sempre usa guionConvertedRef (o reconversió de fallback si no hi és)
+       + api.setProjectGuion(projectId, content, fileName). Mai crida
+       api.uploadProjectGuionFile. La conversió és 100% frontend.
+
+  f) File input accept CANVIAT:
+     - ANTIC: accept=".docx,.rtf,.pdf,.txt"
+     - NOU:   accept=".docx,.pdf"
+     (No s'accepten .rtf ni .txt manuals en aquest flux)
+
+  g) Text descriptiu ACTUALITZAT:
+     - ANTIC: menciona DOCX, RTF, PDF, TXT
+     - NOU: "S'accepta DOCX o PDF. Es convertirà al format intern de SONILAB."
+
+  h) UI de feedback afegida:
+     - Spinner "⏳ Convertint…" durant la conversió inicial del fitxer
+     - Missatge d'error en vermell si la conversió falla (guionConvertErr)
+
+
+── ③ ScriptViewPanel.tsx ───────────────────────────────────────────────────
+CANVIS:
+
+  a) Import NOU afegit (substitució d'api.uploadProjectGuionFile):
+       import { importStructuredScriptFromFile } from
+         '../../utils/Import/scriptImportPipeline';
+
+  b) handleUploadGuion REEMPLAÇADA completament:
+     - ANTIC mode backend: si .txt → api.setProjectGuion; si .docx/.pdf →
+       api.uploadProjectGuionFile (backend feia la conversió).
+     - ANTIC mode local: acceptava .txt → localStorage.
+     - NOU mode backend: SEMPRE importStructuredScriptFromFile(file) →
+       api.setProjectGuion(projectId, result.content, result.fileName).
+       Cap diferència entre formats: tot passa pel pipeline compartit.
+     - NOU mode local (docId): SEMPRE importStructuredScriptFromFile(file) →
+       localStorage.setItem(key, result.content).
+       El mode local ara accepta DOCX/PDF (no només TXT).
+
+  c) File input accept CANVIAT:
+     - ANTIC: accept={projectId ? '.docx,.rtf,.pdf,.txt' : '.txt'}
+              (branques separades per mode backend vs local)
+     - NOU:   accept=".docx,.pdf"
+              (únic valor, sense condicions, per a tots dos modes)
+
+  d) Tooltip del botó ACTUALITZAT:
+     - ANTIC: missatge diferent per projectId vs local
+     - NOU:   "Pujar o canviar el guió (DOCX o PDF)"
+
+  e) Text de l'estat buit ACTUALITZAT:
+     - ANTIC: missatge diferent per projectId vs mode local
+     - NOU:   "Puja el guió del doblatge (DOCX o PDF) per comparar-lo..."
+
+================================================================================
+
+
+4. ARQUITECTURA RESULTANT — FLUX UNIFICAT
+──────────────────────────────────────────
+
+  TOTS ELS PUNTS D'ENTRADA:
+  ┌─────────────────────┐   ┌───────────────────────┐   ┌─────────────────────┐
+  │   LibraryView.tsx   │   │ CreateProjectModal.tsx │   │ ScriptViewPanel.tsx │
+  │  (importació conv.) │   │   (nou projecte)       │   │  (canviar guió)     │
+  └─────────┬───────────┘   └───────────┬───────────┘   └──────────┬──────────┘
+            │                           │                            │
+            └───────────────────────────┴────────────────────────────┘
+                                        │
+                                        ▼
+                         importStructuredScriptFromFile(file)
+                         ─────────────────────────────────────
+                         ① importDocxFile  OR  importPdfFile
+                         ② normalització (cleanSpaces, tabHeuristic)
+                         ③ parseScript(content) → TakeBlock[]
+                         ④ scriptToCsv(takes) → CSV derivat
+                         ─────────────────────────────────────
+                         Retorna: { content (TXT), csvContent, fileName }
+                                        │
+                    ┌───────────────────┴──────────────────────┐
+                    │  Mode backend (projectId)                 │  Mode local (docId)
+                    ▼                                           ▼
+          api.setProjectGuion(                    localStorage.setItem(
+            projectId,                              _localGuionKey(docId),
+            result.content,                         result.content
+            result.fileName                       )
+          )
+
+
+================================================================================
+
+
+5. QUÈ S'HA ELIMINAT
+─────────────────────
+• api.uploadProjectGuionFile() — ja NO es crida des de CreateProjectModal ni
+  ScriptViewPanel. L'endpoint segueix existint al backend però és dead code
+  des del frontend. Es pot eliminar en una propera sessió si es confirma que
+  cap altre component el crida.
+
+• guion_converter.py (backend) — ja no es crida des d'aquests fluxos. La
+  conversió es fa al frontend via importDocxFile/importPdfFile (mammoth/pdf-parse).
+
+• Branques paral·leles de conversió: ELIMINADES. Tota la lògica viu a
+  scriptImportPipeline.ts.
+
+
+================================================================================
+
+
+6. COMPATIBILITAT I RISCOS
+───────────────────────────
+• LibraryView.tsx NO s'ha tocat. El pipeline convencional continua igual.
+• api.setProjectGuion() existent: ja funcionava per a .txt des de LibraryView;
+  ara rep el TXT canònic generat per scriptImportPipeline. Sense canvis d'API.
+• Fitxers .slsf existents a la biblioteca: NO afectats (cap canvi en detecció).
+• Fitxers .txt nous: continuen generant-se correctament com en la tasca anterior.
+• La conversió DOCX/PDF passa de ser asíncrona-en-upload a asíncrona-en-selecció
+  (per a CreateProjectModal, on es fa la previsualització del nom). Això millora
+  la UX perquè el temps de conversió és visible i controlat.
+
+
+================================================================================
+
+
+7. PROVES MANUALS RECOMANADES
+───────────────────────────────
+□ CreateProjectModal: seleccionar DOCX → spinner "Convertint…" → nom .txt visible
+□ CreateProjectModal: crear projecte → guió pujat correctament al backend
+□ CreateProjectModal: comprovar que .rtf i .txt NO apareixen al selector de fitxer
+□ ScriptViewPanel (amb projecte): "↑ Canviar guió" amb DOCX → carrega contingut
+□ ScriptViewPanel (amb projecte): "↑ Canviar guió" amb PDF → carrega contingut
+□ ScriptViewPanel (sense projecte, docId): DOCX/PDF → contingut local a localStorage
+□ ScriptViewPanel: comprovar que .rtf i .txt NO apareixen al selector de fitxer
+□ LibraryView (importació convencional): segueix funcionant igual que abans
+□ Correcció de transcripció (✦ Corregir): funciona amb guió pujat via pipeline nou
+□ Verificar que api.uploadProjectGuionFile NO es crida (inspecció de xarxa)
+
+
+================================================================================
+
+
+8. PENDENTS OPCIONALS (NO URGENTS)
+────────────────────────────────────
+• Eliminar api.uploadProjectGuionFile() del frontend (api.ts) i del backend si
+  s'ha confirmat que cap altre component el fa servir.
+• Eliminar guion_converter.py del backend si és dead code per a tots els fluxos.
+• Avaluar si el mode "local" (docId sense projectId) en ScriptViewPanel és
+  necessari: ara accepta DOCX/PDF però si l'usuari no té projecte és poc comú.
+  Es podria simplificar o documentar millor.
+
+
+================================================================================
+FI DEL LOG
+================================================================================
