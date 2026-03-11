@@ -17,6 +17,7 @@ import { useVerticalPanelResize, useHorizontalPanelResize } from '../../hooks/us
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
 import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
 import { ScriptViewPanel } from './ScriptViewPanel';
+import TranscriptCorrectionModal, { ChangeRecord as CorrectionChangeRecord } from './TranscriptCorrectionModal';
 
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
@@ -103,6 +104,10 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const [guionContent, setGuionContent] = useState<string>('');
   const [guionProjectId, setGuionProjectId] = useState<string | null>(null);
 
+  // ── Correcció de transcripció amb guió ───────────────────────────────────
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [correctionHighlightIds, setCorrectionHighlightIds] = useState<Set<number>>(new Set());
+
   /** Clau localStorage per al guió d'aquest document (persistència local sense backend) */
   const _localGuionKey = `sonilab_guion_${currentDoc?.id}`;
 
@@ -141,6 +146,21 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const subsHistory = useDocumentHistory<Segment[]>(currentDoc.id, initialSegments);
   const segments = subsHistory.present;
   const [activeSegmentId, setActiveSegmentId] = useState<number | null>(null);
+
+  /**
+   * Aplica la correcció de transcripció: actualitza els segments en memòria
+   * i marca els segments modificats per resaltar-los.
+   * (Definit DESPRÉS de subsHistory per evitar Temporal Dead Zone)
+   */
+  const handleApplyCorrection = useCallback((correctedSrt: string, changes: CorrectionChangeRecord[]) => {
+    const correctedSegs = parseSrt(correctedSrt);
+    if (correctedSegs.length > 0) {
+      subsHistory.commit(correctedSegs);
+    }
+    const changedIds = new Set<number>(changes.map(c => c.seg_idx));
+    setCorrectionHighlightIds(changedIds);
+    setTimeout(() => setCorrectionHighlightIds(new Set()), 30_000);
+  }, [subsHistory]);
 
   const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
     useSubtitleAIOperations({
@@ -558,6 +578,7 @@ const handleSave = useCallback(() => {
           projectId={guionProjectId}
           docId={currentDoc?.id}
           onGuionLoaded={handleGuionLoaded}
+          onOpenCorrection={guionProjectId ? () => setIsCorrectionModalOpen(true) : undefined}
         />
         <div className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors" onMouseDown={handleHorizontalMouseDown} />
         <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">
@@ -581,11 +602,21 @@ const handleSave = useCallback(() => {
             onMerge={handleMergeSegmentWithNext}
             onInsert={handleInsertSegment}
             onDelete={handleDeleteSegment}
+            correctionHighlightIds={correctionHighlightIds.size > 0 ? correctionHighlightIds : undefined}
           />
         </div>
       </div>
       {isSyncModalOpen && <SyncLibraryModal isOpen={isSyncModalOpen} onClose={() => setIsSyncModalOpen(false)} onSyncMedia={handleSyncMedia} onSyncSubtitles={handleSyncSubtitles} />}
       {isAIModalOpen && <SubtitleAIOperationsModal isOpen={isAIModalOpen} onClose={() => setIsAIModalOpen(false)} mode={aiMode} isProcessing={isAIProcessing} onWhisper={handleWhisperTranscription} onTranslate={handleAITranslation} onRevision={handleAIRevision} />}
+      {isCorrectionModalOpen && guionProjectId && (
+        <TranscriptCorrectionModal
+          isOpen={isCorrectionModalOpen}
+          onClose={() => setIsCorrectionModalOpen(false)}
+          projectId={guionProjectId}
+          onApply={handleApplyCorrection}
+          hasGuion={Boolean(guionContent?.trim())}
+        />
+      )}
     </div>
   );
 };

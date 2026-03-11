@@ -10,9 +10,11 @@ import { scriptToCsv } from '../../utils/EditorDeGuions/csvConverter';
 import { FileItem } from './FileItem';
 import * as Icons from '../icons';
 import OpenWithModal from './OpenWithModal';
+import SrtEditorModeModal from './SrtEditorModeModal';
 import ImportFilesModal from '../Import/ImportFilesModal';
 import { api } from '@/services/api';
 import { CreateProjectModal } from '../Projects/CreateProjectModal';
+import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { useAuth } from '../../context/Auth/AuthContext';
 import { AdminPanel } from '../Admin/AdminPanel';
 
@@ -84,6 +86,9 @@ const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [formatColWidth, setFormatColWidth] = useState(100);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [srtModeModalOpen, setSrtModeModalOpen] = useState(false);
+  const [srtModeDocId, setSrtModeDocId] = useState<string | null>(null);
+  const [srtModeHasGuion, setSrtModeHasGuion] = useState(false);
 
   const goLibrary = () => {
   dispatch({ type: 'SET_VIEW', payload: 'library' });
@@ -590,8 +595,23 @@ const itemsToRender = currentItems.filter((item) => {
                     <FileItem key={item.id} item={item} isSelected={selectedIds.has(item.id)} isDragging={isDragging} setIsDragging={setIsDragging} dropTargetId={dropTargetId} setDropTargetId={setDropTargetId} onPreviewDocument={handlePreviewDocument} onDoubleClickOpen={(docId) => {
     const doc = state.documents.find(d => d.id === docId);
     const isSrt = doc && ((doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt'));
-    if (isSrt) onOpenDocument(docId, 'editor-srt-standalone' as any, true);
-    else setOpenWithDocId(docId);
+    if (isSrt) {
+      // Comprova si hi ha preferència guardada
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SRT_EDITOR_MODE);
+      if (saved === 'editor-video-subs' || saved === 'editor-srt-standalone') {
+        onOpenDocument(docId, saved as any, true);
+      } else {
+        // Mostrar modal de selecció; consultar si el projecte té guió
+        setSrtModeDocId(docId);
+        setSrtModeHasGuion(false); // default; actualitzem async
+        setSrtModeModalOpen(true);
+        api.getProjectBySrt(docId)
+          .then(p => setSrtModeHasGuion(Boolean(p?.guionDocumentId)))
+          .catch(() => {});
+      }
+    } else {
+      setOpenWithDocId(docId);
+    }
   }} gridColumns={gridColumns} />
                   ))
                 ) : (
@@ -679,6 +699,17 @@ const itemsToRender = currentItems.filter((item) => {
   onOpenDocument={onOpenDocument}
 />
       {openWithDocId && <OpenWithModal docId={openWithDocId} onClose={() => setOpenWithDocId(null)} onOpen={handleOpenFromModal} />}
+      <SrtEditorModeModal
+        isOpen={srtModeModalOpen}
+        hasGuion={srtModeHasGuion}
+        onSelect={(mode, remember) => {
+          if (remember) localStorage.setItem(LOCAL_STORAGE_KEYS.SRT_EDITOR_MODE, mode);
+          setSrtModeModalOpen(false);
+          if (srtModeDocId) onOpenDocument(srtModeDocId, mode as any, true);
+          setSrtModeDocId(null);
+        }}
+        onClose={() => { setSrtModeModalOpen(false); setSrtModeDocId(null); }}
+      />
       {isImportModalOpen && <ImportFilesModal isOpen={isImportModalOpen} onClose={() => setImportModalOpen(false)} onFilesSelect={handleFilesUpload} accept=".pdf,.docx,.srt,.mp4,.wav,.mov,.webm,.ogg" title="Importar Fitxers" description="Selecciona o arrossega guions (PDF, DOCX), subtítols (SRT) o vídeo/àudio." />}
     
     

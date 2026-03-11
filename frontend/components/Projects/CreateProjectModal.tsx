@@ -146,7 +146,7 @@ export const CreateProjectModal: React.FC<{
       const text = await guionFile.text();
       await api.setProjectGuion(projectId, text, guionFile.name);
     } else {
-      // DOCX/PDF: puja el fitxer al backend per extreure text
+      // DOCX / RTF / PDF: puja el fitxer al backend per extreure text
       await api.uploadProjectGuionFile(projectId, guionFile);
     }
   };
@@ -223,7 +223,7 @@ export const CreateProjectModal: React.FC<{
           await sleep(1000);
         }
 
-        // Si hi ha guió, l'associem al projecte
+        // Si hi ha guió, l'associem al projecte i obrim en editor complet
         if (guionFile) {
           await uploadGuionToProject(res.project.id).catch((e) => {
             console.warn('Guion upload failed (non-fatal):', e);
@@ -233,6 +233,11 @@ export const CreateProjectModal: React.FC<{
         await reloadTree();
 
         onClose();
+
+        // Navegar a l'editor complet si hi ha guió associat
+        if (guionFile && srtDocId) {
+          onOpenDocument(srtDocId, 'editor-video-subs' as any, true);
+        }
 
       } catch (e: any) {
         setErr(e?.message || 'Error creando proyecto');
@@ -263,7 +268,7 @@ export const CreateProjectModal: React.FC<{
         const srtDocId = res?.srtDocument?.id;
         if (!srtDocId) throw new Error('Respuesta inválida al importar SRT');
 
-        // Si hi ha guió, l'associem al projecte
+        // Si hi ha guió, l'associem al projecte i obrim en editor complet
         if (guionFile && res.project?.id) {
           await uploadGuionToProject(res.project.id).catch((e) => {
             console.warn('Guion upload failed (non-fatal):', e);
@@ -273,6 +278,11 @@ export const CreateProjectModal: React.FC<{
         await reloadTree();
 
         onClose();
+
+        // Navegar a l'editor complet si hi ha guió associat
+        if (guionFile && srtDocId) {
+          onOpenDocument(srtDocId, 'editor-video-subs' as any, true);
+        }
 
       } catch (e: any) {
         setErr(e?.message || 'Error importando SRT');
@@ -385,12 +395,12 @@ export const CreateProjectModal: React.FC<{
               </div>
               <div className="text-[11px] text-gray-500 mb-2">
                 Associa el guió al projecte per comparar-lo amb els subtítols a l'editor.
-                S'accepta DOCX, PDF o TXT.
+                S'accepta DOCX, RTF, PDF o TXT.
               </div>
               <label className="text-xs text-gray-300 font-semibold cursor-pointer">
                 <input
                   type="file"
-                  accept=".docx,.pdf,.txt"
+                  accept=".docx,.rtf,.pdf,.txt"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];

@@ -231,8 +231,8 @@ if (exists) {
   }
 
   /**
-   * Extrae texto plano de un buffer DOCX o PDF usando Python.
-   * Devuelve el texto extraído (formato del guión intacto).
+   * Extrae texto plano de un buffer DOCX/RTF/PDF/TXT usando guion_converter.py.
+   * Preserva tabuladors (SPEAKER\ttext) i estructura SONILAB.
    */
   async extractTextFromFile(buffer: Buffer, originalName: string): Promise<string> {
     const ext = path.extname(originalName).toLowerCase();
@@ -246,36 +246,18 @@ if (exists) {
       const pythonExec = this.config.get<string>('PYTHON_EXEC', 'python');
       const { execSync } = require('child_process');
 
-      let script: string;
-      if (ext === '.docx') {
-        script = `
-import sys, zipfile, re
-from xml.etree import ElementTree as ET
-def extract_docx(path):
-    ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-    with zipfile.ZipFile(path) as zf:
-        xml = zf.read('word/document.xml')
-    root = ET.fromstring(xml)
-    lines = []
-    for p in root.iter(f'{ns}p'):
-        text = ''.join((r.text or '') for r in p.iter(f'{ns}t'))
-        lines.append(text)
-    # eliminar lineas completamente vacias al principio/final y colapsar multiples vacias
-    result = []
-    prev_empty = False
-    for line in lines:
-        if not line.strip():
-            if not prev_empty and result:
-                result.append('')
-            prev_empty = True
-        else:
-            result.append(line)
-            prev_empty = False
-    print('\\n'.join(result).strip())
-extract_docx(sys.argv[1])
-`.trim();
-      } else if (ext === '.pdf') {
-        script = `
+      if (ext === '.txt') {
+        // TXT: llegir directament sense subprocess
+        try {
+          return fs.readFileSync(tmpPath, 'utf-8');
+        } catch {
+          return fs.readFileSync(tmpPath, 'latin1');
+        }
+      }
+
+      if (ext === '.pdf') {
+        // PDF: script inline (pdfminer.six / pdftotext)
+        const pdfScript = `
 import sys
 try:
     import pdfminer.high_level as hl
@@ -287,24 +269,43 @@ except ImportError:
         r = subprocess.run(['pdftotext', sys.argv[1], '-'], capture_output=True, text=True)
         print(r.stdout.strip())
     except Exception:
-        print('ERROR: No se puede extraer texto del PDF. Instala pdfminer.six o pdftotext.')
+        print('ERROR: No es pot extreure text del PDF. Instal·la pdfminer.six o pdftotext.')
         sys.exit(1)
 `.trim();
-      } else {
-        // .txt u otro: leer directamente
-        return fs.readFileSync(tmpPath, 'utf-8');
+        const scriptPath = path.join(require('os').tmpdir(), `guion_pdf_${Date.now()}.py`);
+        fs.writeFileSync(scriptPath, pdfScript, 'utf-8');
+        try {
+          const result = execSync(`${pythonExec} "${scriptPath}" "${tmpPath}"`, {
+            encoding: 'utf-8',
+            timeout: 30000,
+          });
+          return result.trim();
+        } finally {
+          if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
+        }
       }
 
-      const scriptPath = path.join(require('os').tmpdir(), `guion_extract_${Date.now()}.py`);
-      fs.writeFileSync(scriptPath, script, 'utf-8');
+      // DOCX / RTF → guion_converter.py (preserva tabuladors SONILAB)
+      if (ext === '.docx' || ext === '.rtf') {
+        // Localitzar guion_converter.py relatiu al runner
+        const runnerDir = this.config.get<string>(
+          'PYTHON_RUNNER_DIR',
+          path.join(process.cwd(), '..', 'WhisperX_Sonilab_01-main', 'src'),
+        );
+        const converterScript = path.join(runnerDir, 'guion_converter.py');
 
-      const result = execSync(`${pythonExec} "${scriptPath}" "${tmpPath}"`, {
-        encoding: 'utf-8',
-        timeout: 30000,
-      });
+        if (!fs.existsSync(converterScript)) {
+          throw new Error(`guion_converter.py not found at: ${converterScript}`);
+        }
 
-      fs.unlinkSync(scriptPath);
-      return result.trim();
+        const result = execSync(
+          `${pythonExec} "${converterScript}" "${tmpPath}"`,
+          { encoding: 'utf-8', timeout: 30000 },
+        );
+        return result.trim();
+      }
+
+      throw new Error(`Format no suportat: ${ext}`);
     } finally {
       if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
     }
@@ -363,6 +364,119 @@ except ImportError:
     } catch {
       return { text: null, guionDocumentId: project.guionDocumentId };
     }
+  }
+
+  /**
+   * Corregeix el text de la transcripció SRT del projecte usant el guió vinculat.
+   *
+   * Executa transcript_corrector.py (Python) de manera síncrona.
+   * Retorna el SRT corregit + JSON de canvis. NO modifica el projecte automàticament;
+   * l'usuari ha de confirmar i cridar applyCorrectedSrt si vol desar.
+   */
+  async correctTranscript(
+    projectId: string,
+    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string } = {},
+  ): Promise<{
+    correctedSrt: string;
+    changes: any[];
+    summary: { totalSegments: number; changed: number; unchanged: number };
+  }> {
+    const { execSync } = require('child_process');
+    const os = require('os');
+
+    const project = await this.getProject(projectId);
+    const ownerId = (project as any).ownerId;
+
+    // Obtenir SRT de transcripció
+    if (!project.srtDocumentId) {
+      throw new (require('@nestjs/common').BadRequestException)('El projecte no té SRT de transcripció');
+    }
+    const srtDoc = await this.library.getDocument(ownerId, project.srtDocumentId);
+    const srtText: string = (srtDoc as any).contentByLang?.['_unassigned']
+      || Object.values((srtDoc as any).contentByLang || {})[0]
+      || '';
+    if (!srtText.trim()) {
+      throw new (require('@nestjs/common').BadRequestException)('El SRT de transcripció és buit');
+    }
+
+    // Obtenir guió
+    const { text: guionText } = await this.getGuionContent(projectId);
+    if (!guionText?.trim()) {
+      throw new (require('@nestjs/common').BadRequestException)(
+        'No hi ha guió vinculat al projecte. Puja el guió primer.',
+      );
+    }
+
+    // Escriure fitxers temporals
+    const tmpDir = os.tmpdir();
+    const ts = Date.now();
+    const srtTmp = path.join(tmpDir, `correct_srt_${ts}.srt`);
+    const guionTmp = path.join(tmpDir, `correct_guion_${ts}.txt`);
+    const outSrtTmp = path.join(tmpDir, `correct_out_${ts}.srt`);
+    const outJsonTmp = path.join(tmpDir, `correct_changes_${ts}.json`);
+
+    fs.writeFileSync(srtTmp, srtText, 'utf-8');
+    fs.writeFileSync(guionTmp, guionText, 'utf-8');
+
+    try {
+      const pythonExec = this.config.get<string>('PYTHON_EXEC', 'python');
+      const runnerDir = this.config.get<string>(
+        'PYTHON_RUNNER_DIR',
+        path.join(process.cwd(), '..', 'WhisperX_Sonilab_01-main', 'src'),
+      );
+      const correctorScript = path.join(runnerDir, 'transcript_corrector.py');
+
+      if (!fs.existsSync(correctorScript)) {
+        throw new Error(`transcript_corrector.py not found at: ${correctorScript}`);
+      }
+
+      const threshold = options.threshold ?? 0.45;
+      const window = options.window ?? 8;
+      const llmMode = options.llmMode && ['off', 'fast', 'smart'].includes(options.llmMode)
+        ? options.llmMode : 'off';
+      const llmModel = options.llmModel || 'llama3.1';
+
+      const rawOutput = execSync(
+        `${pythonExec} "${correctorScript}" --srt "${srtTmp}" --guion "${guionTmp}" --out-srt "${outSrtTmp}" --out-json "${outJsonTmp}" --threshold ${threshold} --window ${window} --llm-mode ${llmMode} --llm-model ${llmModel}`,
+        { encoding: 'utf-8', timeout: 60000 },
+      );
+
+      const summary = JSON.parse(rawOutput.trim());
+      if (summary.error) {
+        throw new Error(summary.error);
+      }
+
+      const correctedSrt = fs.readFileSync(outSrtTmp, 'utf-8');
+      const changesRaw = fs.readFileSync(outJsonTmp, 'utf-8');
+      const changesData = JSON.parse(changesRaw);
+
+      return {
+        correctedSrt,
+        changes: changesData.changes || [],
+        summary: {
+          totalSegments: summary.total_segments,
+          changed: summary.changed,
+          unchanged: summary.unchanged,
+        },
+      };
+    } finally {
+      for (const f of [srtTmp, guionTmp, outSrtTmp, outJsonTmp]) {
+        if (fs.existsSync(f)) fs.unlinkSync(f);
+      }
+    }
+  }
+
+  /**
+   * Aplica un SRT corregit (prèviament generat per correctTranscript) al projecte.
+   * Substitueix el contingut del document SRT del projecte.
+   */
+  async applyCorrectedSrt(projectId: string, correctedSrt: string): Promise<void> {
+    const project = await this.getProject(projectId);
+    const ownerId = (project as any).ownerId;
+    if (!project.srtDocumentId) {
+      throw new (require('@nestjs/common').BadRequestException)('El projecte no té SRT de transcripció');
+    }
+    await this.setSrtContent(ownerId, project.srtDocumentId, correctedSrt);
   }
 }
 

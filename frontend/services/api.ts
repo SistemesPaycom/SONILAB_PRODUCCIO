@@ -288,4 +288,51 @@ async purgeDocument(id: string) {
       xhr.send(fd);
     });
   },
+
+  // ─── Correcció de transcripció ────────────────────────────────────────────
+
+  /** Opcions disponibles per al corrector (modes LLM, models, defaults) */
+  async getCorrectionOptions(): Promise<{
+    llmModes: Array<{ value: string; label: string }>;
+    llmModels: Array<{ value: string; label: string }>;
+    defaults: { llmMode: string; llmModel: string; threshold: number; window: number };
+  }> {
+    return request(`/projects/correction/options`);
+  },
+
+  /** Corregeix la transcripció SRT del projecte usant el guió vinculat */
+  async correctTranscript(
+    projectId: string,
+    options: { threshold?: number; window?: number; llmMode?: string; llmModel?: string } = {},
+  ): Promise<{
+    correctedSrt: string;
+    changes: Array<{
+      seg_idx: number;
+      start: string;
+      end: string;
+      original: string;
+      corrected: string;
+      guion_speaker: string;
+      guion_text: string;
+      score: number;
+      method: string;
+    }>;
+    summary: { totalSegments: number; changed: number; unchanged: number };
+  }> {
+    return request(`/projects/${projectId}/correct-transcript`, {
+      method: 'POST',
+      body: options,
+    });
+  },
+
+  /** Aplica el SRT corregit al projecte (sobreescriu el SRT actual) */
+  async applyCorrectedSrt(
+    projectId: string,
+    correctedSrt: string,
+  ): Promise<{ ok: boolean }> {
+    return request(`/projects/${projectId}/apply-correction`, {
+      method: 'POST',
+      body: { correctedSrt },
+    });
+  },
 };

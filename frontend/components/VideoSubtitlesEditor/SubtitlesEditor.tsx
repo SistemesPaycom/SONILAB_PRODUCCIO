@@ -26,6 +26,8 @@ interface SubtitlesEditorProps {
   generalConfig: GeneralConfig;
   autoScroll: boolean;
   onOpenAIOperations: (mode: 'whisper' | 'translate' | 'revision') => void;
+  /** Conjunt d'índexs de segments corregits pel pipeline de guió (per resaltar) */
+  correctionHighlightIds?: Set<number>;
 }
 
 const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
@@ -47,7 +49,8 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   onOverlayConfigChange,
   generalConfig,
   autoScroll,
-  onOpenAIOperations
+  onOpenAIOperations,
+  correctionHighlightIds,
 }) => {
   const { caretHintRef } = useSubtitleEditor();
   const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
@@ -187,6 +190,7 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
                 segment={segment}
                 isActive={activeId === segment.id}
                 isEditable={isEditable}
+                isCorrected={correctionHighlightIds?.has(segment.id as number)}
                 onChange={onSegmentChange}
                 onBlur={onSegmentBlur}
                 onClick={onSegmentClick}

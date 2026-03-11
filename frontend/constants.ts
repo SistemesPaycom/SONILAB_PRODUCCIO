@@ -10,8 +10,10 @@ export const LOCAL_STORAGE_KEYS = {
   SUB_GRID_OPACITY: 'slsf_sub_grid_opacity',
   WAVEFORM_HOLD_MS: 'slsf_waveform_hold_ms',
   AUTOSAVE_SRT: 'slsf_autosave_srt',
-   TASKS_TRANSLATION: 'slsf_tasks_translation',
+  TASKS_TRANSLATION: 'slsf_tasks_translation',
   TASKS_TRANSCRIPTION: 'slsf_tasks_transcription',
+  /** Preferència d'editor per als SRT: 'editor-video-subs' | 'editor-srt-standalone' */
+  SRT_EDITOR_MODE: 'slsf_srt_editor_mode',
 };
 
 export const A4_WIDTH_PX = 794;

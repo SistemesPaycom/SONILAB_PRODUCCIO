@@ -11,6 +11,8 @@ interface SegmentItemProps {
   segment: Segment;
   isActive: boolean;
   isEditable: boolean;
+  /** Indica que el segment ha estat corregit pel pipeline de correcció de guió */
+  isCorrected?: boolean;
   onClick: (id: number) => void;
   onFocus: (id: number) => void;
   onBlur?: () => void;
@@ -46,6 +48,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   segment,
   isActive,
   isEditable,
+  isCorrected = false,
   onClick,
   onFocus,
   onBlur,
@@ -411,6 +414,8 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
       className={`relative flex flex-col p-2 border-b border-gray-800 transition-all duration-200 ${
         isActive
           ? 'bg-blue-600/10 ring-1 ring-inset ring-blue-500/30'
+          : isCorrected
+          ? 'bg-rose-900/15 hover:bg-rose-900/25'
           : segment.hasDiff
           ? 'bg-red-900/10 hover:bg-red-900/20'
           : 'hover:bg-gray-800/30'
@@ -422,6 +427,13 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         <div
           className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500/70"
           title="Discrepància amb el guió"
+        />
+      )}
+      {/* Indicador lateral rosa quan isCorrected (text corregit pel pipeline guió) */}
+      {isCorrected && !isActive && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-0.5 bg-rose-400/80"
+          title="Text corregit pel guió"
         />
       )}
       <div

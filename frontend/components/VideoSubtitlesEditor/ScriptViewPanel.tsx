@@ -23,6 +23,8 @@ interface ScriptViewPanelProps {
   docId?: string | null;
   /** Callback cridat quan s'ha pujat/actualitzat el guió correctament */
   onGuionLoaded?: (text: string) => void;
+  /** Callback per obrir el modal de correcció de transcripció (requereix projectId) */
+  onOpenCorrection?: () => void;
 }
 
 /** Clau localStorage per guardar el guió d'un document concret (sense projecte de backend) */
@@ -53,6 +55,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
   projectId,
   docId,
   onGuionLoaded,
+  onOpenCorrection,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -77,7 +80,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
           await api.setProjectGuion(projectId, text, file.name);
           onGuionLoaded?.(text);
         } else {
-          // DOCX/PDF: el backend extreu el text
+          // DOCX/RTF/PDF: el backend extreu el text (preserva tabuladors SONILAB)
           await api.uploadProjectGuionFile(projectId, file);
           const { text: extractedText } = await api.getProjectGuion(projectId);
           if (extractedText) onGuionLoaded?.(extractedText);
@@ -135,13 +138,24 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
           </button>
         )}
 
+        {/* Botó per corregir la transcripció amb el guió (només si hi ha projecte i guió carregat) */}
+        {projectId && hasContent && onOpenCorrection && (
+          <button
+            className="text-[9px] text-gray-500 hover:text-rose-300 bg-gray-700/50 hover:bg-rose-900/30 border border-gray-600/50 px-2 py-0.5 rounded transition-colors"
+            onClick={onOpenCorrection}
+            title="Corregir text de la transcripció usant el guió (preserva timecodes)"
+          >
+            ✦ Corregir
+          </button>
+        )}
+
         {/* Botó per pujar/canviar guió */}
         {canLink && (
           <>
             <input
               ref={fileInputRef}
               type="file"
-              accept={projectId ? '.docx,.pdf,.txt' : '.txt'}
+              accept={projectId ? '.docx,.rtf,.pdf,.txt' : '.txt'}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -155,7 +169,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
               disabled={uploading}
               title={
                 projectId
-                  ? 'Pujar o canviar el guió del projecte (DOCX, PDF, TXT)'
+                  ? 'Pujar o canviar el guió del projecte (DOCX, RTF, PDF, TXT)'
                   : 'Vincular un guió TXT (es desarà al navegador)'
               }
             >
@@ -183,7 +197,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
             <div className="text-sm font-bold text-gray-500">Cap guió associat</div>
             <div className="text-xs text-gray-600 max-w-[200px]">
               {projectId
-                ? 'Puja el guió del doblatge (DOCX, PDF o TXT) per comparar-lo amb els subtítols i detectar discrepàncies.'
+                ? 'Puja el guió del doblatge (DOCX, RTF, PDF o TXT) per comparar-lo amb els subtítols i detectar discrepàncies.'
                 : 'Vincular un guió TXT per comparar-lo amb els subtítols. Es desarà al navegador.'}
             </div>
             {canLink && (
