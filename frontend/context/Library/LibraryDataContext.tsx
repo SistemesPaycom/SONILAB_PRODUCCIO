@@ -300,7 +300,7 @@ const LibraryDataContext = createContext<LibraryDataContextValue>({
 export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(libraryDataReducer, initialState);
 
-  const useBackend = import.meta.env.VITE_USE_BACKEND === '1';
+  const useBackend = process.env.VITE_USE_BACKEND === '1';
 
   const normalizeFolder = (f: any): Folder => ({
     id: f.id || f._id,

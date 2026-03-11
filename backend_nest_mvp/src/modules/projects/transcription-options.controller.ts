@@ -13,7 +13,7 @@ export class TranscriptionOptionsController {
   @Get('options')
   options() {
     return {
-      models: ['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3', 'large-v3-turbo'],
+      models: ['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3', 'large-v3-turbo', 'large-v3', 'large-v3-turbo'],
       engines: ['faster-whisper', 'purfview-xxl', 'whisperx', 'script-align'],
       profiles: ['VE', 'VCAT'],
       defaults: {
