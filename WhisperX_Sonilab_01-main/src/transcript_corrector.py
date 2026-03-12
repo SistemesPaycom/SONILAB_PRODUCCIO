@@ -50,6 +50,7 @@ import urllib.request
 import urllib.error
 
 _OLLAMA_BASE = "http://127.0.0.1:11434/api/generate"
+_OLLAMA_HEALTH = "http://127.0.0.1:11434/api/tags"
 
 # Models LLM suportats (Ollama)
 LLM_MODELS = {
@@ -59,22 +60,77 @@ LLM_MODELS = {
 }
 
 
-def _call_ollama(model: str, prompt: str, timeout: int = 60) -> Optional[str]:
-    """Crida Ollama API (http://127.0.0.1:11434). Retorna la resposta o None si error."""
+def _check_ollama_available(model: str, timeout: int = 5) -> Tuple[bool, str]:
+    """
+    Comprova si Ollama està accessible i si el model sol·licitat existeix.
+
+    Retorna (available: bool, message: str).
+    Si no disponible, message descriu el problema concret.
+
+    INSTAL·LACIÓ:
+      1. Descarrega Ollama: https://ollama.com/download
+      2. Inicia el servei: ollama serve  (o instal·la com a servei Windows)
+      3. Descarrega el model: ollama pull llama3.1
+      4. Verifica: curl http://localhost:11434/api/tags
+    """
+    try:
+        req = urllib.request.Request(_OLLAMA_HEALTH)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode())
+    except urllib.error.URLError as e:
+        return False, (
+            f"Ollama no és accessible a {_OLLAMA_HEALTH}: {e.reason}. "
+            "Verifica que el servei Ollama estigui en marxa: "
+            "'ollama serve' o el tauler de serveis de Windows."
+        )
+    except Exception as e:
+        return False, f"Error connectant amb Ollama: {e}"
+
+    # Comprovar si el model concret existeix
+    available_models = [m.get('name', '').split(':')[0] for m in data.get('models', [])]
+    model_base = model.split(':')[0]
+    if model_base not in available_models:
+        available_str = ', '.join(available_models) if available_models else '(cap)'
+        return False, (
+            f"Model '{model}' no disponible a Ollama. "
+            f"Models instal·lats: {available_str}. "
+            f"Per instal·lar-lo: 'ollama pull {model}'"
+        )
+    return True, f"Ollama OK — model '{model}' disponible."
+
+
+def _call_ollama(model: str, prompt: str, timeout: int = 60,
+                 verbose: bool = False) -> Optional[str]:
+    """
+    Crida Ollama API (http://127.0.0.1:11434).
+    Retorna la resposta o None si error.
+    Si verbose=True, imprimeix estat a stderr.
+    """
     payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode()
     req = urllib.request.Request(
         _OLLAMA_BASE, data=payload,
         headers={"Content-Type": "application/json"},
     )
+    if verbose:
+        print(f"[LLM] Enviant prompt a Ollama (model={model}, {len(prompt)} chars)...",
+              file=sys.stderr, flush=True)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             data = json.loads(r.read().decode())
-            return data.get("response", "").strip() or None
-    except Exception:
+            response = data.get("response", "").strip() or None
+            if verbose:
+                snippet = (response or '')[:80].replace('\n', ' ')
+                print(f"[LLM] Resposta rebuda ({len(response or '')} chars): {snippet!r}",
+                      file=sys.stderr, flush=True)
+            return response
+    except Exception as e:
+        if verbose:
+            print(f"[LLM] ERROR cridant Ollama: {e}", file=sys.stderr, flush=True)
         return None
 
 
-def _correct_with_llm(model: str, transcript_text: str, guion_text: str) -> Optional[str]:
+def _correct_with_llm(model: str, transcript_text: str, guion_text: str,
+                      verbose: bool = False) -> Optional[str]:
     """
     Pregunta al LLM local (Ollama) per corregir el text de la transcripció
     usant el text del guió com a referència.
@@ -89,7 +145,7 @@ def _correct_with_llm(model: str, transcript_text: str, guion_text: str) -> Opti
         f"Guió: {guion_text}\n"
         "Text corregit:"
     )
-    raw = _call_ollama(model, prompt)
+    raw = _call_ollama(model, prompt, verbose=verbose)
     if not raw:
         return None
     # Neteja: elimina cometes/guillemets habituals de resposta LLM
@@ -845,6 +901,7 @@ def _correct_take_with_llm(
     guion_cues: List[GuionCue],
     srt_segs: List[SrtSegment],
     timeout: int = 90,
+    verbose: bool = False,
 ) -> dict:
     """
     Envia el guió d'un TAKE i els seus subtítols al LLM per corregir-los en context.
@@ -885,14 +942,25 @@ def _correct_take_with_llm(
         f"JSON:"
     )
 
-    response = _call_ollama(model, prompt, timeout=timeout)
+    if verbose:
+        print(f"[LLM-TAKE] TAKE #{take_num}: {len(guion_cues)} cues guió, "
+              f"{len(srt_segs)} segments SRT → enviant al LLM...",
+              file=sys.stderr, flush=True)
+
+    response = _call_ollama(model, prompt, timeout=timeout, verbose=verbose)
     if not response:
+        if verbose:
+            print(f"[LLM-TAKE] TAKE #{take_num}: sense resposta LLM → sense canvis",
+                  file=sys.stderr, flush=True)
         return {}
 
     # Extreure el JSON de la resposta (el LLM pot afegir text al voltant)
     try:
         json_match = re.search(r'\[[\s\S]*\]', response)
         if not json_match:
+            if verbose:
+                print(f"[LLM-TAKE] TAKE #{take_num}: resposta no conté JSON vàlid",
+                      file=sys.stderr, flush=True)
             return {}
         data = json.loads(json_match.group())
         result = {}
@@ -902,8 +970,14 @@ def _correct_take_with_llm(
                 text = str(item['text']).strip()
                 if text:
                     result[idx] = text
+        if verbose:
+            print(f"[LLM-TAKE] TAKE #{take_num}: {len(result)} canvis detectats pel LLM",
+                  file=sys.stderr, flush=True)
         return result
-    except Exception:
+    except Exception as e:
+        if verbose:
+            print(f"[LLM-TAKE] TAKE #{take_num}: error parsejant JSON: {e}",
+                  file=sys.stderr, flush=True)
         return {}
 
 
@@ -912,6 +986,7 @@ def align_and_correct_by_take(
     guion_cues: List[GuionCue],
     llm_model: str = "llama3.1",
     allow_split: bool = False,
+    verbose: bool = False,
 ) -> Tuple[List[SrtSegment], List[ChangeRecord]]:
     """
     Mode IA per TAKE: agrupa els cues del guió per take_num, assigna
@@ -921,7 +996,8 @@ def align_and_correct_by_take(
     Molt més simple per a l'usuari: no cal ajustar threshold ni finestra.
     El LLM veu el context complet del TAKE (com faria un humà).
 
-    Falls back a no-change si el LLM no respon per un TAKE concret.
+    IMPORTANT: Si Ollama no és accessible, LLANÇA ERROR (no silent fallback).
+    Verificar disponibilitat de Ollama amb _check_ollama_available() abans de cridar.
     """
     # ── 1. Agrupar cues per TAKE ──────────────────────────────────────────────
     takes_cues: dict = {}  # take_num → List[GuionCue]
@@ -943,6 +1019,10 @@ def align_and_correct_by_take(
             t_end = float('inf')
         take_time_ranges.append((tn, t_start, t_end))
 
+    if verbose:
+        print(f"[LLM-TAKE] {len(sorted_take_nums)} TAKEs al guió: {sorted_take_nums}",
+              file=sys.stderr, flush=True)
+
     # ── 3. Assignar segments SRT al seu TAKE per temps ────────────────────────
     seg_to_take: dict = {}  # seg.idx → take_num
     for seg in transcription_segs:
@@ -952,9 +1032,16 @@ def align_and_correct_by_take(
                 seg_to_take[seg.idx] = tn
                 break
 
+    unassigned = sum(1 for s in transcription_segs if s.idx not in seg_to_take)
+    if verbose and unassigned:
+        print(f"[LLM-TAKE] AVÍS: {unassigned} segments SRT sense TAKE assignat",
+              file=sys.stderr, flush=True)
+
     # ── 4. Per cada TAKE, cridar el LLM ──────────────────────────────────────
     corrected_map: dict = {}  # seg.idx → text nou
     changes: List[ChangeRecord] = []
+    llm_calls = 0
+    llm_errors = 0
 
     for tn, t_start, t_end in take_time_ranges:
         take_segs = [s for s in transcription_segs if seg_to_take.get(s.idx) == tn]
@@ -962,7 +1049,13 @@ def align_and_correct_by_take(
         if not take_segs or not cues:
             continue
 
-        llm_result = _correct_take_with_llm(llm_model, tn, cues, take_segs)
+        llm_calls += 1
+        llm_result = _correct_take_with_llm(
+            llm_model, tn, cues, take_segs,
+            verbose=verbose,
+        )
+        if not llm_result:
+            llm_errors += 1
 
         for seg in take_segs:
             new_text = llm_result.get(seg.idx)
@@ -982,6 +1075,17 @@ def align_and_correct_by_take(
                     method='take_llm',
                     take_num=tn,
                 ))
+
+    if verbose:
+        print(f"[LLM-TAKE] Resum: {llm_calls} crides LLM, {llm_errors} errors/sense resposta, "
+              f"{len(changes)} canvis totals", file=sys.stderr, flush=True)
+    # Si totes les crides LLM han fallat, significa que Ollama no estava accessible
+    if llm_calls > 0 and llm_errors == llm_calls:
+        raise RuntimeError(
+            f"Ollama no ha respost per cap dels {llm_calls} TAKEs. "
+            "Verifica que el servei Ollama estigui actiu: 'ollama serve'. "
+            f"Comprova el model amb: 'ollama pull {llm_model}'"
+        )
 
     # ── 5. Construir llista final de segments ─────────────────────────────────
     corrected: List[SrtSegment] = []
@@ -1063,11 +1167,19 @@ def correct_transcript(
 
     # --- Alinear i corregir ---
     if method == 'take-llm':
-        # Mode IA per TAKE: el LLM compara el TAKE complet (guió + SRT) d'un cop
+        # Mode IA per TAKE: SEMPRE requereix Ollama. Verificar ABANS d'executar.
+        ollama_ok, ollama_msg = _check_ollama_available(llm_model)
+        print(f'[corrector] Ollama check: {ollama_msg}', file=sys.stderr, flush=True)
+        if not ollama_ok:
+            # Retornar error explícit al JSON de sortida (no silent fallback a fuzzy)
+            raise RuntimeError(
+                f"Mode 'IA per TAKE' requereix Ollama. {ollama_msg}"
+            )
         corrected_segs, changes = align_and_correct_by_take(
             segments, guion_cues,
             llm_model=llm_model,
             allow_split=allow_split,
+            verbose=True,  # sempre verbose per a take-llm (les crides LLM han de ser traçables)
         )
     else:
         # Mode fuzzy: comparació per segment amb threshold/window

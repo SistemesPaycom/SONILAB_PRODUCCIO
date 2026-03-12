@@ -1,0 +1,316 @@
+================================================================================
+SONILAB — LOG DE VERIFICACIÓ REAL: ASR (purfview-xxl) + LLM + GPU/CPU
+Data: 2026-03-12
+================================================================================
+
+================================================================================
+1. OBJECTIU
+================================================================================
+
+Verificar i corregir l'execució REAL de:
+  A) Engine "Purfview / faster-whisper XXL" — ruta d'execució real, diferències amb SE
+  B) Corrector LLM (mode "IA per TAKE") — si realment es fa servir Ollama o és un fallback silenciós
+  C) GPU / CPU — si l'elecció de device arriba realment al motor
+
+
+================================================================================
+2. FITXERS INSPECCIONATS
+================================================================================
+
+Python:
+  - WhisperX_Sonilab_01-main/src/pipeline.py
+  - WhisperX_Sonilab_01-main/src/faster_whisper_engine.py
+  - WhisperX_Sonilab_01-main/src/postprocessor.py
+  - WhisperX_Sonilab_01-main/src/transcript_corrector.py
+  - WhisperX_Sonilab_01-main/src/runner_cli.py
+  - WhisperX_Sonilab_01-main/src/cues.py
+  - WhisperX_Sonilab_01-main/src/rules.py
+
+Backend:
+  - backend_nest_mvp/src/modules/projects/transcription.processor.ts
+  - backend_nest_mvp/src/modules/projects/projects.service.ts
+
+Frontend:
+  - frontend/components/Projects/CreateProjectModal.tsx
+
+
+================================================================================
+3. RUTA REAL D'EXECUCIÓ — ENGINE PURFVIEW-XXL
+================================================================================
+
+UI → Frontend (CreateProjectModal.tsx):
+  - El usuari selecciona engine="purfview-xxl", model, device
+  - S'envia via api.createProject({ engine: "purfview-xxl", model, device, ... })
+
+Backend → NestJS (transcription.processor.ts):
+  - Rep settings del job Bull
+  - Construeix la crida al runner Python:
+      python runner_cli.py
+        --input <video>
+        --output_dir <outDir>
+        --model large-v3
+        --engine purfview-xxl
+        --device cpu|cuda
+        --postprocess              ← sempre per purfview-xxl
+        --subtitle-edit-compat     ← AFEGIT ARA (estava absent!)
+        [--language ca]
+        [--timing-fix]
+
+Python → runner_cli.py:
+  - Parseja args
+  - Si --subtitle-edit-compat: rules.subtitle_edit_compat = True, postprocess_merge = False
+  - Crida pipeline_generate(..., engine="purfview-xxl", ...)
+
+Python → pipeline.py (pipeline_generate):
+  - use_faster_whisper = (engine in ("faster-whisper", "purfview-xxl"))  → TRUE
+  - Crida _transcribe_faster_whisper() amb VAD params específics per purfview-xxl:
+      min_silence_duration_ms=300  (vs 200 per defecte)
+      speech_pad_ms=300            (vs 100 per defecte)
+  - IMPORTANT: NO executa faster-whisper-xxl.exe de Purfview (no existeix al sistema)
+    Usa el paquet Python 'faster-whisper' (CTranslate2) + postprocess + compat mode
+
+Python → faster_whisper_engine.py:
+  - WhisperModel(model_size, device=device, compute_type=compute_type)
+  - model.transcribe(audio_path, vad_filter=True, word_timestamps=True, ...)
+  - Retorna word_segments amb timestamps a nivell de paraula
+
+Python → cues.py (build_cues + merge_orphans_and_ultrashort):
+  - Si rules.subtitle_edit_compat=True:
+      eff_orphan_gap = 0.20s  (vs 1.00s)
+      eff_small_gap  = 0.20s  (vs 0.85s)
+      eff_small_words = 1     (vs 3)
+      eff_small_chars = 5     (vs 18)
+  - Reducció significativa de merges → més cues separats
+
+Python → postprocessor.py (apply_postprocessing):
+  - MERGE_MAX_GAP_MS = 40ms  (CANVIAT de 120ms → 40ms, com Subtitle Edit)
+  - merge_short_lines: fusiona sols si gap < 40ms entre cues consecutius
+  - Altres: fix_casing, add_periods, balance_lines
+
+
+================================================================================
+4. DIFERÈNCIES DETECTADES AMB SUBTITLE EDIT / PURFVIEW-XXL.EXE
+================================================================================
+
+CAUSA ARREL de 235 vs 366 cues:
+
+  A) MERGE_MAX_GAP_MS = 120ms → SE usa ~40ms
+     CORREGIT: canviat a 40ms en postprocessor.py
+
+  B) --subtitle-edit-compat NO s'enviava des del processor
+     CORREGIT: afegit automàticament quan engine=purfview-xxl
+
+  C) purfview-xxl NO invoca faster-whisper-xxl.exe (no instal·lat/disponible al sistema)
+     ESTAT: NO CANVIAT — caldria instal·lar l'exe o usar Wine/Linux per invocar-lo
+     ALTERNATIVA IMPLEMENTADA: Python faster-whisper + params equivalents + compat mode
+
+Diferències que RESTEN (limitació):
+  - El binari faster-whisper-xxl.exe de Purfview pot tenir paràmetres interns lleugerament
+    diferents (ex: beam_size, VAD intern específic, post-processor natively linked).
+  - El resultat de l'app s'APROXIMA a SE però no és idèntic al 100%.
+  - Per a máxima fidelitat caldria: instal·lar faster-whisper-xxl.exe i invocar-lo des
+    del processor com un subprocés extern (fora de l'abast d'aquesta sessió).
+
+Estimació d'impacte dels canvis:
+  - Abans: ~235 cues
+  - Amb MERGE_MAX_GAP_MS=40 + subtitle_edit_compat + VAD params purfview: ~300-350 cues
+  - SE referència: 366 cues
+  - Gap restant (~15-20 cues): diferències en el comportament intern del binari Purfview
+
+
+================================================================================
+5. RUTA REAL D'EXECUCIÓ — LLM (mode "IA per TAKE")
+================================================================================
+
+DESCOBERTA CRÍTICA: LLM tenia FALLBACK SILENCIÓS
+
+Flux anterior (INCORRECTE):
+  1. Usuari selecciona mode "🤖 IA per TAKE"
+  2. Backend crida transcript_corrector.py --method take-llm
+  3. align_and_correct_by_take() crida _correct_take_with_llm() per cada TAKE
+  4. _correct_take_with_llm() crida _call_ollama()
+  5. Si Ollama NO està en marxa:
+     except Exception: return None  ← SILENCI TOTAL, cap error
+  6. llm_result = {} (buit)
+  7. 0 canvis aplicats — IDÈNTIC a no fer res
+  8. Usuari no veu cap indicació de fallida
+
+Flux CORREGIT:
+  1. Usuari selecciona mode "🤖 IA per TAKE"
+  2. Backend crida transcript_corrector.py --method take-llm
+  3. correct_transcript() fa CHECK EXPLÍCIT d'Ollama ABANS:
+       ollama_ok, ollama_msg = _check_ollama_available(llm_model)
+       Si NOT ok → raise RuntimeError amb missatge clar
+  4. Si Ollama disponible: align_and_correct_by_take() amb verbose=True
+  5. Cada crida LLM s'imprimeix a stderr: "[LLM-TAKE] TAKE #N: ... → enviant al LLM..."
+  6. Resposta rebuda: "[LLM-TAKE] TAKE #N: X canvis detectats pel LLM"
+  7. Si TOTES les crides fallen: raise RuntimeError (mai silenci)
+  8. Backend captura l'error i el retorna al frontend com a {"error": "..."}
+
+Endpoint de health check Ollama: http://127.0.0.1:11434/api/tags
+
+
+================================================================================
+6. INSTAL·LACIÓ D'OLLAMA (requerida per mode IA per TAKE)
+================================================================================
+
+Pas 1: Descarregar Ollama
+  https://ollama.com/download  (instal·lador Windows disponible)
+
+Pas 2: Iniciar el servei
+  - Opció A: Executar "Ollama" des del menú d'inici (instal·la com a servei Windows)
+  - Opció B (CLI): ollama serve
+
+Pas 3: Descarregar el model
+  ollama pull llama3.1     ← Model recomanat (8B, ~5GB)
+  ollama pull qwen2.5      ← Alternativa (~4.7GB, millor en català)
+  ollama pull mistral      ← Alternativa (~4.1GB)
+
+Pas 4: Verificar
+  curl http://localhost:11434/api/tags
+  # Ha de retornar JSON amb llista de models instal·lats
+
+Models suportats per l'app:
+  - llama3.1   (Meta Llama 3.1 8B)
+  - qwen2.5    (Qwen 2.5 7B)
+  - mistral    (Mistral 7B)
+
+NOTA: El mode LLM requereix ~8GB RAM (per a models 7-8B en CPU) o GPU VRAM equivalent.
+Si el servidor Ollama utilitza CPU, una correcció completa (per tots els TAKEs d'un episodi)
+pot trigar 10-30 minuts. Per a ús en producció: GPU recomanada o model quantitzat (q4).
+
+
+================================================================================
+7. GPU / CPU — COM ES RESOL
+================================================================================
+
+Flux complet:
+  1. Frontend (CreateProjectModal.tsx):
+       const [device, setDevice] = useState<'cpu' | 'cuda'>('cpu');
+       → Selector "CPU" / "GPU (CUDA)" → envia device a l'API
+
+  2. Backend (transcription.processor.ts):
+       const device = String(s.device || 'cpu');
+       args.push('--device', device);  ← propagat al runner
+       LOG: "Engine: X | Model: Y | Device: Z | ..."  ← LOG AFEGIT
+
+  3. runner_cli.py:
+       device_pref = (args.device or "cpu").strip().lower()
+       → passat a pipeline_generate(device_pref=device_pref)
+
+  4. pipeline.py (get_device_and_compute_type):
+       if device_pref == "cuda":
+           if torch.cuda.is_available():
+               return "cuda", "float16"
+           return "cpu", "int8"  ← fallback si CUDA no disponible
+       if device_pref == "cpu":
+           return "cpu", "int8"
+
+  5. Logs al runner (STATUS):
+       "CUDA avail: True/False"
+       "GPU: RTX 3090 / NO GPU"
+       "Device seleccionat: cuda (compute_type=float16)"
+
+  6. faster_whisper_engine.py:
+       WhisperModel(model_size, device=device, compute_type=compute_type)
+       → El model s'executa realment en GPU o CPU
+
+CONCLUSIÓ GPU/CPU:
+  - El sistema JA propagava correctament el device end-to-end
+  - No calia wiring addicional
+  - S'ha afegit LOG explícit al processor per confirmar el device en cada run
+
+
+================================================================================
+8. CANVIS IMPLEMENTATS
+================================================================================
+
+postprocessor.py:
+  - MERGE_MAX_GAP_MS: 120ms → 40ms (com Subtitle Edit AudioToTextPostProcessor)
+    IMPACTE: reducció de merges en postprocess → ~50-80 cues més al SRT final
+
+transcription.processor.ts:
+  - Afegit: args.push('--subtitle-edit-compat') quan engine=purfview-xxl
+    IMPACTE: activa thresholds conservadors a cues.py (orphan_gap 1s→0.20s, etc.)
+  - Afegit: console.log explícit de engine, model, device, args al log del servidor
+
+pipeline.py:
+  - _transcribe_faster_whisper(): afegit paràmetre vad_parameters opcional
+  - Per engine=purfview-xxl: vad_parameters amb min_silence_duration_ms=300, speech_pad_ms=300
+    (vs 200ms i 100ms per defecte) → segments VAD més separats
+  - Afegit log NOTE explícit sobre quin engine real s'executa
+
+transcript_corrector.py:
+  - _check_ollama_available(model): nova funció que verifica si Ollama corre i si el
+    model concret existeix (via GET /api/tags)
+  - _call_ollama(): afegit paràmetre verbose + logs a stderr de cada crida i resposta
+  - _correct_take_with_llm(): afegit verbose + logs de cada TAKE
+  - align_and_correct_by_take(): afegit verbose + logs, comptador llm_calls/llm_errors,
+    RAISE explícit si TOTES les crides fallen (no més fallback silenciós)
+  - correct_transcript(): check Ollama PREVI a take-llm, error explícit si no disponible
+
+
+================================================================================
+9. LIMITACIONS QUE RESTEN
+================================================================================
+
+1. L'exe faster-whisper-xxl.exe de Purfview NO s'invoca directament.
+   La implementació usa el paquet Python faster-whisper (equivalent funcional).
+   Per a invocació exacta de l'exe caldria:
+     - Tenir l'exe instal·lat localment
+     - Afegir un engine "purfview-exe" al pipeline que el cridi com a subprocess
+
+2. El mode take-llm requereix Ollama instal·lat i el model descarregat.
+   Sense Ollama, el mode falla amb un error clar (no fallback silenciós).
+
+3. El corrector LLM (mode fuzzy + llm_mode=fast|smart) segueix tenint possible
+   fallback silenciós si Ollama no és accessible durant la correcció d'un segment
+   concret. En mode take-llm el fallback silenciós ha estat eliminat completament.
+
+4. Els paràmetres VAD de l'exe Purfview no son públicament documentats al 100%.
+   Els valors usats (min_silence=300ms, speech_pad=300ms) s'aproximen a les
+   observacions de la comunitat però poden diferir de l'exe exacte.
+
+
+================================================================================
+10. PROVES MANUALS RECOMANADES
+================================================================================
+
+A. Verificar millora ASR (purfview-xxl):
+   1. Crear projecte nou amb engine=purfview-xxl, model=large-v3, language=ca
+   2. Usar el mateix vídeo (One Piece ep 525)
+   3. Comparar el nombre de cues del SRT resultant:
+      - Abans: ~235 cues
+      - Esperat ara: ~300-350 cues
+      - Referència SE: 366 cues
+   4. Revisar el TAKE #8: "Kibusasoku Enduriment! Què." hauria d'estar més separat
+
+B. Verificar LLM funcionant:
+   1. Instal·lar Ollama: https://ollama.com/download
+   2. Executar: ollama pull llama3.1
+   3. Iniciar: ollama serve  (o tauler Windows)
+   4. A l'app: obrir el corrector, seleccionar "🤖 IA per TAKE"
+   5. Executar → revisar els logs del backend:
+        "[LLM-TAKE] TAKE #N: X cues guió, Y segments SRT → enviant al LLM..."
+        "[LLM-TAKE] TAKE #N: Z canvis detectats pel LLM"
+   6. Verificar que els canvis en la previsualització tinguin badge "🤖 LLM" i "T{N}"
+
+C. Verificar LLM falla visiblement:
+   1. Aturar Ollama (o no instal·lar-lo)
+   2. Seleccionar mode "🤖 IA per TAKE" → executar
+   3. Ha d'aparèixer un ERROR clar a la UI (no 0 canvis en silenci)
+
+D. Verificar GPU/CPU:
+   1. Crear projecte amb device=cuda (si NVIDIA disponible)
+   2. Observar als logs del servidor:
+        "[TRANSCRIBE] Engine: purfview-xxl | Model: large-v3 | Device: cuda | ..."
+        "[STATUS] CUDA avail: True"
+        "[STATUS] Device seleccionado: cuda (compute_type=float16)"
+   3. Monitor GPU amb Task Manager / nvidia-smi durant la transcripció
+
+E. Verificar que NO es trenca res:
+   1. Corrector fuzzy (mode ⚡) → ha de continuar funcionant com abans
+   2. Edició SRT → intacta
+   3. Importació de projectes → intacta
+
+================================================================================

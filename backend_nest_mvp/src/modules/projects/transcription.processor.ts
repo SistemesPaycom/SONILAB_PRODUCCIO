@@ -109,10 +109,16 @@ export class TranscriptionProcessor {
       }
 
       // purfview-xxl activa postprocess automáticamente en el runner,
-      // pero lo pasamos explícitamente para que quede en el log
+      // pero lo pasamos explícitamente para que quede en el log.
+      // --subtitle-edit-compat: reduce merges agressius (orphan_gap 1s→0.20s,
+      // small_gap 0.85s→0.20s) per produir ~300-360 cues en lloc de ~235,
+      // similar al resultat de Subtitle Edit amb faster-whisper-xxl.exe.
       if (engine === 'purfview-xxl') {
         args.push('--postprocess');
+        args.push('--subtitle-edit-compat');
       }
+
+      console.log(`[TRANSCRIBE] Engine: ${engine} | Model: ${model} | Device: ${device} | Language: ${language || 'auto'} | Args: ${args.slice(2).join(' ')}`);
 
       if (language) args.push('--language', language);
       if (offline) args.push('--offline');

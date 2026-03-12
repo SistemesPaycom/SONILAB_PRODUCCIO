@@ -26,7 +26,10 @@ MAX_CUE_CHARS = 84           # máx. totales (2 líneas × 42)
 MIN_DURATION_MS = 800        # duración mínima tras merge (ms)
 PERIOD_GAP_MS = 600          # pausa mínima para añadir punto
 PERIOD_GAP_ALWAYS_MS = 1250  # pausa donde siempre se añade punto
-MERGE_MAX_GAP_MS = 120       # gap máximo entre dos cues para fusionarlos
+# MERGE_MAX_GAP_MS: umbral de gap entre cues para fusionarlos en merge_short_lines.
+# SubtitleEdit AudioToTextPostProcessor usa ~40ms. 120ms era demasiado agresivo
+# y causaba que se fundiesen cues que SE dejaría separados (366 vs 235 cues).
+MERGE_MAX_GAP_MS = 40        # gap máximo entre dos cues para fusionarlos (como SE)
 
 
 # ─── Corrección de artefactos de tokenización ────────────────────────────────

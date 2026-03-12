@@ -133,10 +133,12 @@ def _transcribe_faster_whisper(
     language: Optional[str],
     rules: SubtitleRules,
     status_cb=None,
+    vad_parameters: Optional[dict] = None,
 ):
     """
     Usa Faster-Whisper como motor de transcripción.
     Devuelve (word_segments, segments, detected_language).
+    Si vad_parameters es None, faster_whisper_engine usa sus defaults.
     """
     from faster_whisper_engine import (
         transcribe_with_faster_whisper,
@@ -145,7 +147,7 @@ def _transcribe_faster_whisper(
 
     initial_prompt = get_initial_prompt_for_language(language)
 
-    word_segments, segments, detected_lang = transcribe_with_faster_whisper(
+    kwargs = dict(
         audio_path=wav_path,
         model_size=model_size,
         device=device,
@@ -157,6 +159,10 @@ def _transcribe_faster_whisper(
         initial_prompt=initial_prompt,
         status_cb=status_cb,
     )
+    if vad_parameters is not None:
+        kwargs["vad_parameters"] = vad_parameters
+
+    word_segments, segments, detected_lang = transcribe_with_faster_whisper(**kwargs)
 
     return word_segments, segments, detected_lang
 
@@ -281,6 +287,25 @@ def pipeline_generate(
         _status(f"Idioma transcripción: {language or 'auto'}")
         _status(f"Motor de transcripción: {engine}")
 
+        # ── Log explícit del motor real ──────────────────────────────────────
+        # IMPORTANT: 'purfview-xxl' NO executa el binari faster-whisper-xxl.exe
+        # de https://github.com/Purfview/whisper-standalone-win.
+        # Usa el paquet Python 'faster-whisper' (CTranslate2) amb postprocess=True
+        # i subtitle_edit_compat (merges més conservadors via rules.subtitle_edit_compat).
+        # Diferències amb l'exe real: VAD params poden diferir lleugerament.
+        # El resultat s'aproxima a Subtitle Edit gràcies a:
+        #   1) MERGE_MAX_GAP_MS=40ms al postprocessor (vs 120ms anterior)
+        #   2) subtitle_edit_compat: orphan_gap 1s→0.20s, small_gap 0.85s→0.20s
+        if engine == "purfview-xxl":
+            _status(
+                "NOTA: engine=purfview-xxl usa faster-whisper Python "
+                "(NO faster-whisper-xxl.exe). Postprocess activat + subtitle_edit_compat."
+            )
+        elif engine == "faster-whisper":
+            _status("NOTA: engine=faster-whisper usa faster-whisper Python (CTranslate2).")
+        elif engine == "whisperx":
+            _status("NOTA: engine=whisperx usa WhisperX + pyannote align.")
+
         # purfview-xxl usa faster-whisper internamente + postprocessing activado
         use_faster_whisper = engine in ("faster-whisper", "purfview-xxl")
         if engine == "purfview-xxl":
@@ -313,6 +338,19 @@ def pipeline_generate(
         elif use_faster_whisper:
             # ----- Motor: Faster-Whisper -----
             _status(f"Usando Faster-Whisper con modelo {model_size}...")
+
+            # VAD params optimitzats per a purfview-xxl: més conservadors per produir
+            # segments més curts i separats (similar a Subtitle Edit AudioToTextPostProcessor).
+            # min_silence_duration_ms=300ms (vs 200ms defecte): talla en silencis més llargs,
+            # generant més cues separats. speech_pad_ms=300ms: padding mínim per no tallar paraules.
+            vad_params_purfview = {
+                "threshold": 0.35,
+                "min_speech_duration_ms": 250,
+                "max_speech_duration_s": 25.0,
+                "min_silence_duration_ms": 300,   # 200ms per defecte → 300ms per purfview-xxl
+                "speech_pad_ms": 300,              # 100ms per defecte → 300ms per purfview-xxl
+            }
+
             word_segments_raw, segments, detected_lang = _transcribe_faster_whisper(
                 wav_path=wav_path,
                 model_size=model_size,
@@ -321,6 +359,7 @@ def pipeline_generate(
                 language=language,
                 rules=rules,
                 status_cb=_status,
+                vad_parameters=vad_params_purfview if engine == "purfview-xxl" else None,
             )
             _used_fallback = False  # Faster-Whisper da word timestamps nativos
 
