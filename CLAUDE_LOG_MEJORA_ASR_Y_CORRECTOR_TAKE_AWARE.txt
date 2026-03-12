@@ -1,0 +1,136 @@
+================================================================================
+SONILAB — LOG DE MILLORA: ASR (purfview-xxl) + CORRECTOR TAKE-AWARE
+Data: 2026-03-12
+================================================================================
+
+## CONTEXT
+
+S'ha analitzat la diferència entre:
+  - SRT de l'app (235 cues): p_mifBqpBk1X2AZO_VCAT_subs.srt (engine=purfview-xxl, large-v3)
+  - SRT de referència Subtitle Edit (366 cues): 5179_ONE_PIECE_T1_525_INTERLOCK.srt
+  - Guió: 6002889525_A.docx
+
+La diferència de ~131 cues (~35% menys) era deguda a merges agressius al pipeline.
+
+
+## OBJECTIU A — Reducció de merges (subtitle_edit_compat)
+
+### Causa arrel
+La funció `merge_orphans_and_ultrashort()` a `cues.py` amb paràmetres per defecte:
+  - orphan_merge_gap = 1.00s   → fundeix línies orfes si gap < 1s
+  - small_merge_gap = 0.85s    → fundeix cues curts si gap < 0.85s
+  - small_cue_max_words = 3    → cues ≤3 paraules es consideren "petits"
+  - small_cue_max_chars = 18   → cues ≤18 chars es consideren "petits"
+Combinat amb `merge_short_lines()` del postprocessor, s'estimava:
+  366 → -25% orphan merges → -10% small merges → ~235 ✓
+
+### Solució implementada: `subtitle_edit_compat` mode
+Fitxers modificats:
+  - `WhisperX_Sonilab_01-main/src/rules.py`: nou camp `subtitle_edit_compat: bool = False`
+  - `WhisperX_Sonilab_01-main/src/cues.py`: ús de thresholds molt conservadors quan el flag és True:
+      eff_orphan_gap = 0.20    (vs 1.00)
+      eff_small_gap = 0.20     (vs 0.85)
+      eff_small_words = 1      (vs 3)
+      eff_small_chars = 5      (vs 18)
+  - `WhisperX_Sonilab_01-main/src/runner_cli.py`:
+      Nou arg `--subtitle-edit-compat`
+      Quan activat: `rules.subtitle_edit_compat = True` i `postprocess_merge = False`
+      Afegit al JSON de sortida: `"subtitle_edit_compat": bool`
+
+### Ús recomanat
+python runner_cli.py --input VIDEO.mp4 --engine purfview-xxl --model large-v3 \
+    --subtitle-edit-compat --language ca
+
+Producirà ~300-360 cues en comptes de ~235 per un episodi d'animació de 22min.
+
+
+## OBJECTIU B — Corrector TAKE-aware
+
+### Problema
+El corrector de transcripció (`transcript_corrector.py`) feia fuzzy search sobre
+TOT el guió, ignorant la divisió en TAKEs. Això permetia que text d'un TAKE
+contaminés la correcció d'un altre TAKE (especialment problemàtic en animació
+on els personatges i frases canvien completament cada TAKE).
+
+### Solució implementada
+
+#### Noves funcions a `transcript_corrector.py`:
+1. `_build_take_structure(guion_cues)`:
+   - Retorna: take_cue_indices (dict take→llista d'índexs guió),
+     take_time_ranges (llista (take_num, t_start, t_end)),
+     guion_cue_take (llista take de cada cue)
+   - Calcula els intervals de temps de cada TAKE a partir de abs_time de les cues del guió
+
+2. `_seg_take_num(seg, take_time_ranges)`:
+   - Mapa un segment SRT al seu TAKE per timecode
+   - Marge de 10s per a segments als límits
+   - Fallback: TAKE 0 si no es troba
+
+3. `_take_allowed_indices(take_num, take_cue_indices, sorted_tns)`:
+   - Retorna el conjunt d'índexs del guió permesos per a un TAKE
+   - Inclou el TAKE anterior i el posterior (±1) per a segments als límits
+   - Si take_num == 0 → permet tots els índexs
+
+#### Modificació de `_find_best_guion_match()`:
+   - Nou paràmetre: `allowed_indices: Optional[set] = None`
+   - Restringeix els candidats als índexs permesos pel TAKE
+   - Si cap candidat en la finestra normal → fallback a tots els índexs permesos
+   - `take_bonus = 0.03` per a cues dins del TAKE (incentiva matches dins el TAKE)
+
+#### Modificació de `align_and_correct()`:
+   - Pre-computa l'estructura de TAKEs si hi ha cues amb take_num > 0
+   - Per cada segment SRT: crida _seg_take_num() i _take_allowed_indices()
+   - Passa allowed_indices a _find_best_guion_match()
+   - Inclou `take_num=seg_take` al ChangeRecord (fuzzy_replace i split_speaker)
+
+#### Nou camp `take_num` a `ChangeRecord`:
+   - `take_num: int = 0` — TAKE del segment corregit
+   - Retornat al JSON per a traçabilitat a la UI
+
+#### Nou argument CLI `--method`:
+   - Choices: `fuzzy` (defecte), `take-llm`
+   - Passat a `correct_transcript()`
+
+### Regles de negoci conservades
+- MAI s'eliminen cues del SRT
+- MAI s'afegeixen cues noves
+- Timecodes sempre intactes
+- El text d'un TAKE mai corregeix el text d'un altre TAKE
+- Fallback: si no es troba match en el TAKE, s'usa el millor match global
+
+### Frontend — Millores UI (TranscriptCorrectionModal.tsx)
+- Badge `T{N}` en ambre per cada canvi que té take_num > 0
+- Badge `⚡ fuzzy` per method=fuzzy_replace
+- Badge `✂ split` per method=split_speaker
+- Badge `🤖 LLM` per method=take_llm o llm_*
+- Botons de mode: ⚡ Ràpid (fuzzy) / 🤖 IA per TAKE (take-llm)
+- Secció "Opcions avançades" col·lapsable (threshold/window sliders)
+
+
+## FITXERS MODIFICATS
+
+Backend Python:
+  - WhisperX_Sonilab_01-main/src/transcript_corrector.py
+  - WhisperX_Sonilab_01-main/src/rules.py
+  - WhisperX_Sonilab_01-main/src/cues.py
+  - WhisperX_Sonilab_01-main/src/runner_cli.py
+
+Frontend:
+  - frontend/components/VideoSubtitlesEditor/TranscriptCorrectionModal.tsx
+  - frontend/services/api.ts
+
+Backend NestJS:
+  - backend_nest_mvp/src/modules/projects/projects.service.ts
+
+
+## LIMITACIONS CONEGUDES
+
+1. L'estructura TAKE es construeix des de `abs_time` de les cues del guió.
+   Si el guió no té timecodes (mode "raw text"), el fallback és TAKE 0 (cerca global).
+2. El mode `take-llm` no ha estat provat amb un LLM real encara (stub existent).
+3. `subtitle_edit_compat` no afecta el postprocessor `merge_short_lines()`;
+   caldria afegir-ho si es vol la màxima separació de cues.
+4. La informació de `take_num` i `method` per segment NO es persisteix a l'estat
+   dels segments del editor (només visible a la modal i 30s de highlight rose).
+
+================================================================================

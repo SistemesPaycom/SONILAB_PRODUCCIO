@@ -130,7 +130,8 @@ class ChangeRecord:
     guion_speaker: str
     guion_text: str    # text del guió assignat
     score: float       # similitud [0.0, 1.0]
-    method: str        # "fuzzy_replace" / "no_change" / ...
+    method: str        # "fuzzy_replace" / "no_change" / "take_llm" / ...
+    take_num: int = 0  # TAKE del guió al qual pertany la correcció
 
 
 # ─────────────────────── Parser SRT ───────────────────────────────────────────
@@ -362,6 +363,78 @@ def _split_slash_cue(text: str) -> List[str]:
     return [p for p in parts if p]
 
 
+# ─────────────────────── Estructura TAKE del guió ─────────────────────────────
+
+def _build_take_structure(
+    guion_cues: List[GuionCue],
+) -> Tuple[dict, List[Tuple[int, float, float]], List[int]]:
+    """
+    Construeix l'estructura de TAKES a partir de les cues del guió.
+
+    Returns:
+      take_cue_indices  — {take_num: [índexos de cue dins guion_cues]}
+      take_time_ranges  — [(take_num, start_s, end_s), ...] ordenat per take_num
+      guion_cue_take    — [take_num, ...] paral·lel a guion_cues (índex → take)
+    """
+    take_cue_indices: dict = {}
+    for i, cue in enumerate(guion_cues):
+        take_cue_indices.setdefault(cue.take_num, []).append(i)
+
+    sorted_tns = sorted(take_cue_indices.keys())
+    take_time_ranges: List[Tuple[int, float, float]] = []
+    for j, tn in enumerate(sorted_tns):
+        t_start = min(guion_cues[i].abs_time for i in take_cue_indices[tn])
+        if j + 1 < len(sorted_tns):
+            t_end = min(guion_cues[i].abs_time for i in take_cue_indices[sorted_tns[j + 1]])
+        else:
+            t_end = float('inf')
+        take_time_ranges.append((tn, t_start, t_end))
+
+    guion_cue_take = [cue.take_num for cue in guion_cues]
+    return take_cue_indices, take_time_ranges, guion_cue_take
+
+
+def _seg_take_num(
+    seg: SrtSegment,
+    take_time_ranges: List[Tuple[int, float, float]],
+    margin_s: float = 10.0,
+) -> int:
+    """Retorna el take_num del TAKE al qual pertany el segment per timecode."""
+    for tn, t_start, t_end in take_time_ranges:
+        if seg.start_s >= t_start - margin_s and seg.start_s < t_end:
+            return tn
+    return 0
+
+
+def _take_allowed_indices(
+    take_num: int,
+    take_cue_indices: dict,
+    sorted_take_nums: Optional[List[int]] = None,
+    border_takes: int = 1,
+) -> Optional[set]:
+    """
+    Retorna el conjunt d'índexos de cue permesos per a un TAKE, incloent-hi
+    els TAKEs veïns (±border_takes) per gestionar segments als límits.
+    Retorna None si no hi ha informació de TAKE (cerca oberta).
+    """
+    if take_num == 0 or not take_cue_indices:
+        return None
+
+    tns = sorted_take_nums or sorted(take_cue_indices.keys())
+    try:
+        pos = tns.index(take_num)
+    except ValueError:
+        return None
+
+    lo = max(0, pos - border_takes)
+    hi = min(len(tns), pos + border_takes + 1)
+
+    allowed: set = set()
+    for i in range(lo, hi):
+        allowed.update(take_cue_indices.get(tns[i], []))
+    return allowed if allowed else None
+
+
 # ─────────────────────── Motor d'alineament ────────────────────────────────────
 
 def _has_voice(seg: SrtSegment) -> bool:
@@ -386,12 +459,14 @@ def _find_best_guion_match(
     seg_index: int,
     guion_cursor: int,
     window: int,
+    allowed_indices: Optional[set] = None,
 ) -> Tuple[Optional[int], float]:
     """
     Cerca el millor cue del guió per al segment de transcripció donat.
 
     Estratègia:
       - Busca dins una finestra [guion_cursor - window//2, guion_cursor + window]
+      - Si allowed_indices no és None, restringeix la cerca als índexos permesos (TAKE-aware)
       - Puntua per similitud de text (token-level + word overlap)
       - Afegeix un petit bonus temporal si el guió té timestamps fiables
       - Intenta també solapament parcial per segments llargs vs cues curts
@@ -404,12 +479,26 @@ def _find_best_guion_match(
     lo = max(0, guion_cursor - window // 2)
     hi = min(len(guion_cues), guion_cursor + window + 1)
 
+    # Si no hi ha candidats permesos en la finestra estàndard, ampliar la finestra
+    # per incloure tots els índexos permesos (evita quedar-se sense candidats)
+    if allowed_indices is not None:
+        candidates_in_window = [i for i in range(lo, hi) if i in allowed_indices]
+        if not candidates_in_window:
+            # Ampliar la cerca a tots els índexos permesos
+            candidates = list(allowed_indices)
+        else:
+            candidates = candidates_in_window
+    else:
+        candidates = list(range(lo, hi))
+
     best_idx: Optional[int] = None
     best_score = -1.0
 
     seg_words = set(_normalize(seg.text).split())
 
-    for i in range(lo, hi):
+    for i in candidates:
+        if i < 0 or i >= len(guion_cues):
+            continue
         cue = guion_cues[i]
         text_score = _similarity(seg.text, cue.text)
 
@@ -423,7 +512,12 @@ def _find_best_guion_match(
         time_diff = abs(cue.abs_time - seg.start_s)
         time_bonus = max(0.0, 1.0 - time_diff / 60.0) * 0.05  # màxim 5% bonus
 
-        combined = text_score + time_bonus
+        # Bonus TAKE: si el cue és del mateix TAKE estimat del segment (sense TAKE_info: 0)
+        take_bonus = 0.0
+        if allowed_indices is not None and i in allowed_indices:
+            take_bonus = 0.03  # lleuger bonus per estar al TAKE correcte
+
+        combined = text_score + time_bonus + take_bonus
 
         if combined > best_score:
             best_score = combined
@@ -535,6 +629,9 @@ def align_and_correct(
     """
     Alinea segments de transcripció amb cues del guió i corregeix el text.
 
+    Millora TAKE-aware (v2): si el guió té take_num definit, la cerca es restringeix
+    als cues del mateix TAKE (±1 TAKE als límits). Evita errors de cross-TAKE.
+
     Args:
       llm_mode: "off" (només fuzzy), "fast" (LLM per casos ambigus), "smart" (LLM sempre)
       llm_model: identificador del model Ollama (ex: "llama3.1", "qwen2.5", "mistral")
@@ -552,9 +649,29 @@ def align_and_correct(
     # Rang "ambigu" per al mode "fast": entre threshold*0.65 i threshold
     fast_lo = threshold * 0.65
 
+    # ── Precomputar estructura de TAKEs ───────────────────────────────────────
+    has_take_info = any(c.take_num > 0 for c in guion_cues)
+    take_cue_indices: dict = {}
+    take_time_ranges: List[Tuple[int, float, float]] = []
+    sorted_take_nums: List[int] = []
+
+    if has_take_info:
+        take_cue_indices, take_time_ranges, _ = _build_take_structure(guion_cues)
+        sorted_take_nums = sorted(take_cue_indices.keys())
+
     for seg in transcription_segs:
+        # Determinar els índexos permesos per a aquest segment (TAKE-aware)
+        allowed_indices: Optional[set] = None
+        seg_take = 0
+        if has_take_info and take_time_ranges:
+            seg_take = _seg_take_num(seg, take_time_ranges)
+            allowed_indices = _take_allowed_indices(
+                seg_take, take_cue_indices, sorted_take_nums, border_takes=1
+            )
+
         best_idx, best_score = _find_best_guion_match(
-            seg, guion_cues, len(corrected), guion_cursor, window
+            seg, guion_cues, len(corrected), guion_cursor, window,
+            allowed_indices=allowed_indices,
         )
 
         # Umbral dinàmic: si el segment té veu clara, acceptem un 10% menys de confiança
@@ -616,6 +733,7 @@ def align_and_correct(
                     guion_text=f"{cue_a.text} / {cue_b.text}",
                     score=round(_similarity(seg.text, cue_a.text + ' ' + cue_b.text), 4),
                     method='split_speaker',
+                    take_num=seg_take,
                 ))
                 used_guion.add(best_idx)
                 used_guion.add(best_idx + 1)
@@ -642,6 +760,7 @@ def align_and_correct(
                 guion_text=cue.text,
                 score=round(best_score, 4),
                 method=method,
+                take_num=seg_take,
             )
             changes.append(record)
             used_guion.add(best_idx)
@@ -861,6 +980,7 @@ def align_and_correct_by_take(
                     guion_text=', '.join(c.text for c in cues[:3]),
                     score=1.0,
                     method='take_llm',
+                    take_num=tn,
                 ))
 
     # ── 5. Construir llista final de segments ─────────────────────────────────

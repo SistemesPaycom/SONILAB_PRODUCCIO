@@ -25,6 +25,7 @@ interface ChangeRecord {
   guion_text: string;
   score: number;
   method: string;
+  take_num?: number;
 }
 
 interface CorrectionResult {
@@ -404,7 +405,22 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                           <span className="text-[9px] text-blue-400/70 bg-blue-900/20 px-1.5 py-0.5 rounded">
                             {c.guion_speaker}
                           </span>
-                          {c.method?.startsWith('llm_') && (
+                          {c.take_num != null && c.take_num > 0 && (
+                            <span className="text-[9px] text-amber-400/80 bg-amber-900/20 px-1.5 py-0.5 rounded font-mono">
+                              T{c.take_num}
+                            </span>
+                          )}
+                          {c.method === 'fuzzy_replace' && (
+                            <span className="text-[9px] text-cyan-400/70 bg-cyan-900/20 px-1.5 py-0.5 rounded">
+                              ⚡ fuzzy
+                            </span>
+                          )}
+                          {c.method === 'split_speaker' && (
+                            <span className="text-[9px] text-green-400/70 bg-green-900/20 px-1.5 py-0.5 rounded">
+                              ✂ split
+                            </span>
+                          )}
+                          {(c.method === 'take_llm' || c.method?.startsWith('llm_')) && (
                             <span className="text-[9px] text-violet-400/80 bg-violet-900/20 px-1.5 py-0.5 rounded">
                               🤖 LLM
                             </span>

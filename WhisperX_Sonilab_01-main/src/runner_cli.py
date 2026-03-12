@@ -99,6 +99,19 @@ def main():
         help="Umbral de silencio para timing fixer (0-100). Menor = más agresivo. Defecto: 7.0"
     )
 
+    p.add_argument(
+        "--subtitle-edit-compat",
+        dest="subtitle_edit_compat",
+        action="store_true",
+        default=False,
+        help=(
+            "Mode compatible Subtitle Edit: redueix l'agressivitat dels merges de cues "
+            "per obtenir una sortida amb més cues i més curts, similar a Subtitle Edit. "
+            "Desactiva el merge d'orfes i redueix el merge de cues petits a gap < 0.25s. "
+            "Recomanat amb engine=purfview-xxl i model large-v3."
+        )
+    )
+
     args = p.parse_args()
 
     inp = Path(args.input).resolve()
@@ -108,6 +121,9 @@ def main():
     # Reglas
     rules = SubtitleRules()
     rules.enable_diarization = bool(args.diarization)
+    subtitle_edit_compat = getattr(args, 'subtitle_edit_compat', False)
+    if subtitle_edit_compat:
+        rules.subtitle_edit_compat = True
 
     profile = (args.profile or "").strip().upper()
     language = (args.language or "").strip().lower() or None
@@ -126,6 +142,11 @@ def main():
     postprocess_periods = bool(args.postprocess_periods)
     postprocess_merge = bool(args.postprocess_merge)
     postprocess_balance = bool(args.postprocess_balance)
+
+    # Mode subtitle_edit_compat: desactiva merge de línies al post-procesador
+    # (el merge de cues ja es controla via rules.subtitle_edit_compat a cues.py)
+    if subtitle_edit_compat:
+        postprocess_merge = False
 
     # Guion (para engine=script-align)
     script_text = ""
@@ -211,6 +232,7 @@ def main():
         "timing_fix": enable_timing_fix,
         "timing_fix_threshold": timing_fix_threshold,
         "postprocess": postprocess,
+        "subtitle_edit_compat": subtitle_edit_compat,
     }
     print(json.dumps(result, ensure_ascii=False))
 

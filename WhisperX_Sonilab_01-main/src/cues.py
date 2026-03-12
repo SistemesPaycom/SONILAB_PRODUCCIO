@@ -523,9 +523,24 @@ def merge_orphans_and_ultrashort(cues: List[Dict], rules: SubtitleRules) -> List
     """
     - cues huérfanos => pegar al vecino si está cerca (sin mezclar speakers)
     - cues enanos => pegar al siguiente si está cerca (sin mezclar speakers)
+
+    Mode subtitle_edit_compat: thresholds molt conservadors per obtenir més cues
+    i sortida similar a Subtitle Edit (menys merges agressius).
     """
     if not cues:
         return cues
+
+    # Thresholds efectius: en mode subtitle_edit_compat, quasi cap merge
+    if getattr(rules, 'subtitle_edit_compat', False):
+        eff_orphan_gap = 0.20    # 200ms vs 1.0s default
+        eff_small_gap = 0.20     # 200ms vs 0.85s default
+        eff_small_words = 1      # 1 paraula (ex: "Ei!") vs 3 default
+        eff_small_chars = 5      # 5 chars vs 18 default
+    else:
+        eff_orphan_gap = rules.orphan_merge_gap
+        eff_small_gap = rules.small_merge_gap
+        eff_small_words = rules.small_cue_max_words
+        eff_small_chars = rules.small_cue_max_chars
 
     def cue_start(c): return c["words"][0]["start"]
     def cue_end_speech(c): return c["words"][-1]["end"]
@@ -556,7 +571,7 @@ def merge_orphans_and_ultrashort(cues: List[Dict], rules: SubtitleRules) -> List
             continue
 
         # NEXT huérfano -> pegar hacia atrás
-        if gap <= rules.orphan_merge_gap and is_orphan_cue_words(n["words"], rules):
+        if gap <= eff_orphan_gap and is_orphan_cue_words(n["words"], rules):
             merged = c["words"] + n["words"]
             if merged_ok(merged):
                 out[i]["words"] = merged
@@ -564,7 +579,7 @@ def merge_orphans_and_ultrashort(cues: List[Dict], rules: SubtitleRules) -> List
                 continue
 
         # CURRENT huérfano -> pegar hacia delante
-        if gap <= rules.orphan_merge_gap and is_orphan_cue_words(c["words"], rules):
+        if gap <= eff_orphan_gap and is_orphan_cue_words(c["words"], rules):
             merged = c["words"] + n["words"]
             if merged_ok(merged):
                 out[i + 1]["words"] = merged
@@ -575,12 +590,12 @@ def merge_orphans_and_ultrashort(cues: List[Dict], rules: SubtitleRules) -> List
         c_toks = [normalize_token(w["word"]) for w in c["words"] if normalize_token(w["word"])]
         c_chars = words_to_chars(c["words"])
         is_small = (
-            len(c_toks) <= rules.small_cue_max_words
-            or c_chars <= rules.small_cue_max_chars
+            len(c_toks) <= eff_small_words
+            or c_chars <= eff_small_chars
             or dur_c < (rules.min_duration * rules.ultra_short_ratio)
         )
 
-        if is_small and gap <= rules.small_merge_gap:
+        if is_small and gap <= eff_small_gap:
             merged = c["words"] + n["words"]
             if merged_ok(merged):
                 out[i]["words"] = merged

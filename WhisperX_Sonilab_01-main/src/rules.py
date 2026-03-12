@@ -99,6 +99,13 @@ class SubtitleRules:
     split_on_internal_sentence_punct: bool = True
     split_sentence_min_tail_words: int = 2  # min palabras tras el punto para considerar split
 
+    # ----------------------------
+    # Mode compatible Subtitle Edit (menys merges, més cues, sortida similar SE)
+    # Activa thresholds molt conservadors per a orphan_merge i small_merge.
+    # Útil amb Purfview / faster-whisper XXL quan es vol maximitzar la separació de cues.
+    # ----------------------------
+    subtitle_edit_compat: bool = False
+
 
 # Palabras “función” (preferimos que NO queden al final de la línea 1)
 BAD_END_WORDS = {
