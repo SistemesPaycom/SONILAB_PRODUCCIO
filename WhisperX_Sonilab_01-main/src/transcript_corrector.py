@@ -900,7 +900,7 @@ def _correct_take_with_llm(
     take_num: int,
     guion_cues: List[GuionCue],
     srt_segs: List[SrtSegment],
-    timeout: int = 90,
+    timeout: int = 120,
     verbose: bool = False,
 ) -> dict:
     """
@@ -908,43 +908,61 @@ def _correct_take_with_llm(
     El LLM compara tot el TAKE alhora: detecta errors, paraules mal transcrites,
     canvis de personatge, etc.
 
-    Retorna {seg_idx: text_corregit} o {} si LLM no disponible/error.
+    Retorna {global_seg_idx: text_corregit} o {} si LLM no disponible/error.
+
+    IMPORTANT (v2):
+    - Usa índexs LOCALS (1..N) al prompt, no globals (els LLMs petits com llama3.1:8b
+      quasi sempre responen amb 1,2,3... independentment dels índexs mostrats)
+    - Demana TOTS els subtítols en la resposta (no només els canvis): el filtratge
+      de "realment canviat" es fa al Python, no al LLM
+    - Prompt en anglès: millor seguiment de les instruccions de format JSON
+    - Parsing robust: elimina code fences, accepta camps alternatius, doble fallback
+      local→global
     """
     if not guion_cues or not srt_segs:
         return {}
 
-    # Construir el bloc del guió per a aquest TAKE
+    n = len(srt_segs)
+
+    # Bloc del guió
     guion_block = '\n'.join(
         f"  {c.speaker}: {c.text}"
         for c in guion_cues
     )
 
-    # Construir el bloc de subtítols (sense timecodes — el LLM no els ha de tocar)
-    srt_block = '\n'.join(
-        f"  [{s.idx}] {s.text}"
-        for s in srt_segs
-    )
+    # Índexs LOCALS (1..N) — molt més fiables per al LLM que índexs globals arbitraris
+    # local_to_global: {local_1based → global seg.idx}
+    local_to_global: dict = {}
+    srt_lines: list = []
+    for local_i, seg in enumerate(srt_segs, start=1):
+        local_to_global[local_i] = seg.idx
+        srt_lines.append(f"  [{local_i}] {seg.text}")
+    srt_block = '\n'.join(srt_lines)
+
+    # Mapa inversa: global idx → segment (per poder verificar canvis reals)
+    global_segs_map = {s.idx: s for s in srt_segs}
 
     prompt = (
-        f"Ets un corrector de subtítols de doblatge. "
-        f"Et dono el guió oficial i la transcripció automàtica del TAKE #{take_num}.\n\n"
-        f"GUIÓ OFICIAL (TAKE #{take_num}):\n{guion_block}\n\n"
-        f"TRANSCRIPCIÓ AUTOMÀTICA (subtítols):\n{srt_block}\n\n"
-        f"TASCA: Corregeix el text de la transcripció per fer-lo coincidir amb el guió.\n"
-        f"NORMES ESTRICTES:\n"
-        f"- No canviïs els números de subtítol\n"
-        f"- No eliminis cap subtítol\n"
-        f"- No afegeixis subtítols nous (els timecodes son els originals)\n"
-        f"- Si un subtítol conté dues rèpliques de personatges DIFERENTS, pots separar-les\n"
-        f"- Respon ÚNICAMENT amb JSON, sense cap text addicional\n\n"
-        f"FORMAT DE RESPOSTA: [{{'idx': N, 'text': 'text corregit'}}, ...]\n"
-        f"Inclou NOMÉS els subtítols que canvien. Si un subtítol ja és correcte, no l'incloguis.\n\n"
-        f"JSON:"
+        f"You are a dubbing subtitle editor. "
+        f"Correct the auto-transcription of TAKE {take_num} to match the official script.\n\n"
+        f"OFFICIAL SCRIPT:\n{guion_block}\n\n"
+        f"AUTO-TRANSCRIPTION (subtitles 1..{n}):\n{srt_block}\n\n"
+        f"TASK: Rewrite each subtitle using the EXACT wording from the official script.\n"
+        f"RULES:\n"
+        f"1. The official script is the ground truth — copy its exact words\n"
+        f"2. Match script lines to subtitles by order and meaning\n"
+        f"3. Keep subtitle numbers 1..{n} unchanged\n"
+        f"4. Output ALL {n} subtitles (include unchanged ones too)\n"
+        f"5. Reply ONLY with a JSON array, no explanation or extra text\n\n"
+        f"RESPONSE FORMAT:\n"
+        f"[{{\"idx\": 1, \"text\": \"subtitle 1 text\"}}, "
+        f"{{\"idx\": 2, \"text\": \"subtitle 2 text\"}}, "
+        f"..., {{\"idx\": {n}, \"text\": \"subtitle {n} text\"}}]"
     )
 
     if verbose:
         print(f"[LLM-TAKE] TAKE #{take_num}: {len(guion_cues)} cues guió, "
-              f"{len(srt_segs)} segments SRT → enviant al LLM...",
+              f"{n} segments (locals 1..{n}) → enviant al LLM (timeout={timeout}s)...",
               file=sys.stderr, flush=True)
 
     response = _call_ollama(model, prompt, timeout=timeout, verbose=verbose)
@@ -954,26 +972,69 @@ def _correct_take_with_llm(
                   file=sys.stderr, flush=True)
         return {}
 
-    # Extreure el JSON de la resposta (el LLM pot afegir text al voltant)
+    # ── Parsing robust ─────────────────────────────────────────────────────────
     try:
-        json_match = re.search(r'\[[\s\S]*\]', response)
+        # 1. Eliminar code fences que el LLM pot afegir: ```json ... ```
+        clean = re.sub(r'```[a-zA-Z]*\n?', '', response).strip('`').strip()
+
+        # 2. Trobar el JSON array (greedy per capturar arrays multi-línia)
+        json_match = re.search(r'\[[\s\S]*\]', clean)
         if not json_match:
-            if verbose:
-                print(f"[LLM-TAKE] TAKE #{take_num}: resposta no conté JSON vàlid",
-                      file=sys.stderr, flush=True)
-            return {}
-        data = json.loads(json_match.group())
-        result = {}
+            # Fallback: potser la resposta és un objecte JSON en lloc d'array
+            obj_match = re.search(r'\{[\s\S]*\}', clean)
+            if obj_match:
+                raw_json = f"[{obj_match.group()}]"
+            else:
+                if verbose:
+                    print(f"[LLM-TAKE] TAKE #{take_num}: no s'ha trobat JSON a la resposta",
+                          file=sys.stderr, flush=True)
+                return {}
+        else:
+            raw_json = json_match.group()
+
+        data = json.loads(raw_json)
+        if not isinstance(data, list):
+            data = [data]
+
+        result: dict = {}
         for item in data:
-            if isinstance(item, dict) and 'idx' in item and 'text' in item:
-                idx = int(item['idx'])
-                text = str(item['text']).strip()
-                if text:
-                    result[idx] = text
+            if not isinstance(item, dict):
+                continue
+            # Acceptar camps: 'idx', 'index', 'id', 'num', 'n', 'subtitle', 'sub'
+            raw_idx = (item.get('idx') or item.get('index') or item.get('id') or
+                       item.get('num') or item.get('n') or item.get('subtitle') or
+                       item.get('sub'))
+            if raw_idx is None:
+                continue
+            try:
+                local_idx = int(raw_idx)
+            except (ValueError, TypeError):
+                continue
+
+            # Intent 1: l'idx és LOCAL (1..N) — cas habitual per a llama3.1:8b
+            global_idx = local_to_global.get(local_idx)
+
+            # Intent 2: l'idx és GLOBAL — el LLM ha recordat els índexs originals
+            if global_idx is None and local_idx in global_segs_map:
+                global_idx = local_idx
+
+            if global_idx is None:
+                continue
+
+            text = str(item.get('text', '')).strip()
+            if text:
+                result[global_idx] = text
+
         if verbose:
-            print(f"[LLM-TAKE] TAKE #{take_num}: {len(result)} canvis detectats pel LLM",
+            n_changed = sum(
+                1 for gidx, txt in result.items()
+                if txt.strip() != global_segs_map.get(gidx, SrtSegment(0, '', '', '', 0, 0)).text.strip()
+            )
+            print(f"[LLM-TAKE] TAKE #{take_num}: {len(result)}/{n} subtítols rebuts del LLM, "
+                  f"{n_changed} realment canviats",
                   file=sys.stderr, flush=True)
         return result
+
     except Exception as e:
         if verbose:
             print(f"[LLM-TAKE] TAKE #{take_num}: error parsejant JSON: {e}",
