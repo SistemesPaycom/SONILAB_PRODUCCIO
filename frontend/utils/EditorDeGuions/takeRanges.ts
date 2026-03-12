@@ -111,11 +111,14 @@ export function buildTakeRangesFromScript(params: BuildTakeRangesParams): TakeRa
     let end: number;
 
     if (next) {
-      // Un take s'atura on digui el seu contingut + marge de sortida.
-      end = endBase;
-      
-      // Limitem el solapament màxim respecte al següent inici per seguretat.
-      // Important: comparem amb l'inici ja amb marge del següent per evitar buits innecessaris.
+      // Regla d'Or: el TAKE actual ocupa fins on comença el TAKE següent (next.rawStart),
+      // eliminant zones mortes on cap segment quedaria sense TAKE assignat.
+      // Si el contingut intern del TAKE arriba més lluny (endBase > next.rawStart),
+      // respectem el contingut (pot haver-hi timecodes interns tardans).
+      const fillEnd = next.rawStart;
+      end = Math.max(endBase, fillEnd);
+
+      // Limitem el solapament màxim respecte al start (amb pre-roll) del TAKE següent.
       end = Math.min(end, next.start + maxOverlapSeconds);
     } else {
       // ÚLTIM TAKE: Si sabem la durada del vídeo, l'estirem fins al final

@@ -125,13 +125,15 @@ export class ProjectsController {
   @HttpCode(200)
   async correctTranscript(
     @Param('id') id: string,
-    @Body() body: { threshold?: number; window?: number; llmMode?: string; llmModel?: string } = {},
+    @Body() body: { threshold?: number; window?: number; llmMode?: string; llmModel?: string; allowSplit?: boolean; method?: string } = {},
   ) {
     return this.projects.correctTranscript(id, {
       threshold: body.threshold,
       window: body.window,
       llmMode: body.llmMode,
       llmModel: body.llmModel,
+      allowSplit: body.allowSplit,
+      method: body.method,
     });
   }
 

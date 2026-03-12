@@ -1,0 +1,313 @@
+================================================================================
+SONILAB — LOG DE MILLORA: TK/TAKE, LLM REAL, SEPARACIÓ PER PERSONATGE
+Data: 2026-03-12
+================================================================================
+
+================================================================================
+1. OBJECTIU
+================================================================================
+
+Sessió de treball sobre tres problemes detectats:
+
+  A) PROBLEMA A — Separació per canvi de personatge / canvi de veu
+     El pipeline (engine purfview-xxl + subtitle_edit_compat) no separava
+     suficientment els subtítols en els canvis de locutor.
+
+  B) PROBLEMA B — LLM real amb llama3.1:8b
+     El mode "🤖 IA per TAKE" semblava funcionar com el mode fuzzy,
+     sense fer servir Ollama. CAUSA: el controller NestJS ignorava
+     els paràmetres `method` i `allowSplit` del body.
+
+  C) PROBLEMA C — Mapeo incorrecte de TK/TAKE al SRT editor
+     Les etiquetes TK del editor SRT assignaven TAKEs incorrectes
+     a molts subtítols. CAUSA: gaps temporals entre rangs de TAKE
+     (el TAKE acabava molt abans de que comencés el TAKE següent).
+
+
+================================================================================
+2. FITXERS INSPECCIONATS
+================================================================================
+
+Backend:
+  - backend_nest_mvp/src/modules/projects/projects.controller.ts
+  - backend_nest_mvp/src/modules/projects/projects.service.ts
+
+Frontend:
+  - frontend/components/VideoSubtitlesEditor/TranscriptCorrectionModal.tsx
+  - frontend/components/VideoSubtitlesEditor/SegmentItem.tsx
+  - frontend/components/VideoSubtitlesEditor/SubtitlesEditor.tsx
+  - frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+  - frontend/utils/EditorDeGuions/takeRanges.ts
+  - frontend/utils/SubtitlesEditor/segmentTakeLinker.ts
+
+Python:
+  - WhisperX_Sonilab_01-main/src/cues.py
+  - WhisperX_Sonilab_01-main/src/rules.py
+
+
+================================================================================
+3. PROBLEMA B — LLM REAL AMB llama3.1:8b
+================================================================================
+
+ARREL DEL BUG (doble bug encadenat):
+
+  BUG 1 — projects.controller.ts (NestJS):
+    El body del endpoint POST /projects/:id/correct-transcript definia:
+      @Body() body: { threshold?; window?; llmMode?; llmModel? }
+    FALTAVEN: `method` i `allowSplit`
+
+    Per tant, quan el frontend enviava `method: 'take-llm'`, el controller
+    rebía el valor però NO el passava al service. El service usava el default:
+      method = 'fuzzy'  ← SEMPRE FUZZY, mai take-llm
+
+  BUG 2 — TranscriptCorrectionModal.tsx (Frontend):
+    Línia 115 (anterior):
+      llmMode: method === 'take-llm' ? 'off' : 'off',
+    Sempre enviava 'off' (ternari idèntic a les dues branques).
+    CORREGIT a: llmMode: 'off'  (simplificat; el routing es fa via `method`)
+
+FIXES IMPLEMENTATS:
+
+  projects.controller.ts:
+    - Afegit `method` i `allowSplit` al body type del endpoint
+    - Afegit `method: body.method` i `allowSplit: body.allowSplit` a la crida del service
+    RESULTAT: el service ja rep correctament method='take-llm' i l'usa per:
+      * Canviar el timeout (take-llm → 20 min vs fuzzy → 90s)
+      * Passar --method take-llm al script Python
+      * El script transcript_corrector.py executa align_and_correct_by_take()
+        amb check previ d'Ollama (implementat a la sessió anterior)
+
+  TranscriptCorrectionModal.tsx:
+    - Simplificat: llmMode: 'off' (sense condicional redundant)
+
+VERIFICACIÓ:
+  1. Assegurar Ollama en marxa: ollama serve
+  2. Model disponible: ollama pull llama3.1  (o llama3.1:8b)
+  3. A l'app: mode "🤖 IA per TAKE" → Executar
+  4. Als logs del backend: s'hauria de veure timeout=1200000ms i method=take-llm
+  5. Als logs de Python (stderr): "[LLM-TAKE] TAKE #N: X cues..." per cada TAKE
+
+NOTA: El model al selector de la UI és 'llama3.1' (sense :8b).
+  La funció _check_ollama_available() ja fa el check base name:
+    model.split(':')[0] → 'llama3.1'
+    available_models = [name.split(':')[0] for name in api_response]
+  Per tant, 'llama3.1' localitza 'llama3.1:8b' correctament.
+
+
+================================================================================
+4. PROBLEMA C — MAPEO INCORRECTE DE TK/TAKE AL SRT EDITOR
+================================================================================
+
+CAUSA ARREL:
+
+  buildTakeRangesFromScript() (frontend/utils/EditorDeGuions/takeRanges.ts)
+  calculava el final de cada TAKE com:
+    end = internalMax + takeEndMarginSeconds
+  on `internalMax` és el TC intern màxim del TAKE (o rawStart si no hi ha TCs interns).
+
+  Si un TAKE no té TCs interns:
+    end = rawStart + 2s  ← acaba 2 segons després del seu inici!
+
+  I el TAKE següent comença a:
+    start = nextRawStart - 2s  ← comença 2 segons ABANS del seu timecode
+
+  → GAP entre rangs: [rawStart + 2s, nextRawStart - 2s]
+    Per exemple, TAKE #1 rawStart=100, TAKE #2 rawStart=200:
+      TAKE #1 range: [98, 102]
+      TAKE #2 range: [198, 202]
+      GAP: [102, 198] → 96 SEGONS SENSE TAKE!
+
+  El linker (segmentTakeLinker.ts) per als segments en zones mortes:
+    → usa el TAKE més proper (proximity), però cau molt sovint en el TAKE equivocat
+      (ex: un segment a t=150 era assignat a TAKE #2 per proximitat, quan hauria
+       de ser TAKE #1 que és el TAKE actiu des de t=100)
+
+FIX IMPLEMENTAT:
+
+  takeRanges.ts — càlcul de l'end quan hi ha TAKE següent:
+  ANTERIOR:
+    end = endBase;
+    end = Math.min(end, next.start + maxOverlapSeconds);
+
+  CORREGIT:
+    const fillEnd = next.rawStart;  // frontera exacta: timecode del TAKE següent
+    end = Math.max(endBase, fillEnd);  // almenys arriba al timecode del TAKE següent
+    end = Math.min(end, next.start + maxOverlapSeconds);
+
+  LÒGICA:
+    - Cada TAKE s'estén com a mínim fins al timecode del TAKE següent (fillEnd)
+    - Elimina els "buits" entre rangs → cap segment queda en zona morta
+    - La zona de solapament (pre-roll del TAKE següent: 2s) queda coberta per TOTS DOS TAKEs
+    - segmentTakeLinker tria el TAKE que ha COMENÇAT MÉS TARD → el TAKE nou correcte
+
+  EXEMPLE CORREGIT:
+    TAKE #1 rawStart=100, TAKE #2 rawStart=200:
+      TAKE #1 range: [98, max(102, 200)] = [98, 200]
+      TAKE #2 range: [198, 202]
+      Segment t=150: TAKE #1 [98-200] → primary=TAKE #1 ✓
+      Segment t=199: TAKE #1 [98-200] + TAKE #2 [198-202]
+                     → tria el que va COMENÇAR MÉS TARD = TAKE #2 ✓
+
+LIMITACIÓ RESIDUAL:
+  - L'última TAKE segueix extenent-se fins al final del vídeo (comportament correcte).
+  - Si un TAKE té TCs interns que superen el rawStart del TAKE següent,
+    el seu range s'estén fins a max(endBase, fillEnd) → pot crear solapaments.
+    El linker continua resolent correctament (últim que ha començat = prioritari).
+
+
+================================================================================
+5. PROBLEMA A — SEPARACIÓ PER CANVI DE PERSONATGE
+================================================================================
+
+CONTEXT:
+  El pipeline purfview-xxl usa diarization (pyannote) per assignar labels de speaker
+  a cada paraula (SPEAKER_00, SPEAKER_01, etc.) quan l'usuari té HuggingFace token.
+  Quan no hi ha diarization, les paraules tenen speaker="UNK" i no hi ha separació.
+
+CAUSA DEL PROBLEMA (quan diarization SÍ funciona):
+  cues.py → build_cues() → build_cues_from_group():
+    Els canvis de speaker AFEGIEN un "candidate_cut" però NO forçaven un tall obligatori.
+    Un cue podia contenir paraules de 2 speakers si el text total cabia en 2 línies
+    (format diàleg amb guions: "- Speaker A\n- Speaker B").
+
+  Comportament resultant:
+    Speakers A i B en ràfega curta → 1 sol cue de 2 línies amb guions.
+    La normativa VE/VCAT PERMET aquest format, però si el pipeline de referència
+    (Subtitle Edit / Purfview-XXL) sempre separa, volem el mateix.
+
+FIX IMPLEMENTAT:
+
+  cues.py — funció build_cues():
+  ANTERIOR:
+    def build_cues(words, rules):
+        groups = split_by_pause(words, rules.max_pause_within_cue)
+        cues = []
+        for g in groups:
+            cues.extend(build_cues_from_group(g, rules))
+        return cues
+
+  CORREGIT:
+    def build_cues(words, rules):
+        groups = split_by_pause(words, rules.max_pause_within_cue)
+
+        # En mode subtitle_edit_compat: pre-dividir per canvis de speaker
+        # → GARANTEIX que paraules de locutors/personatges DIFERENTS mai
+        #   comencen al mateix cue inicial.
+        if getattr(rules, 'subtitle_edit_compat', False):
+            expanded = []
+            for g in groups:
+                spk_chunks = split_words_by_speaker(g)
+                expanded.extend(spk_chunks)
+            groups = expanded
+
+        cues = []
+        for g in groups:
+            cues.extend(build_cues_from_group(g, rules))
+        return cues
+
+  COMPORTAMENT:
+    - Actiu ÚNICAMENT quan subtitle_edit_compat=True (engine purfview-xxl)
+    - split_words_by_speaker() respecta UNK: paraules sense speaker s'adhereixen
+      al speaker actual → no crea splits innecessaris per mots aïllats sense diarization
+    - Els cues resultants SÓN CURTS però:
+      * merge_orphans_and_ultrashort() NO fusiona cues de speakers diferents
+        (per la comprovació same_dom_speaker() ja existent)
+      * El merge ultra-conservador de subtitle_edit_compat (gap < 200ms) manté
+        els cues separats si el gap entre speakers és > 200ms (cas habitual)
+    - Efecte global: quan diarization funciona, CADA CANVI DE PERSONATGE = NOU CUE
+      → resultat proper a Subtitle Edit amb diarization
+
+  LIMITACIÓ:
+    - Si diarization NO funciona (sense HF token, mode offline, etc.), totes les
+      paraules son UNK i split_words_by_speaker() retorna el grup sencer intacte
+      → comportament idèntic a l'anterior (sense degradació).
+    - Si el pipeline de diarization assigna mal els speakers (soroll, veus similars),
+      la separació pot ser incorrecta. Però és el mateix problema que tindria SE.
+
+
+================================================================================
+6. CANVIS IMPLEMENTATS (resum)
+================================================================================
+
+backend_nest_mvp/src/modules/projects/projects.controller.ts:
+  - AFEGIT: body type expandit amb `method?: string` i `allowSplit?: boolean`
+  - AFEGIT: `method: body.method` i `allowSplit: body.allowSplit` passats al service
+  IMPACTE: Mode "IA per TAKE" ara arriba correctament al Python script.
+           Timeout s'ajusta a 20 minuts per take-llm (era 90s per fuzzy).
+
+frontend/components/VideoSubtitlesEditor/TranscriptCorrectionModal.tsx:
+  - CORREGIT: `llmMode: method === 'take-llm' ? 'off' : 'off'` → `llmMode: 'off'`
+  IMPACTE: Codi lleugerament més clar (la lògica era redundant).
+
+frontend/utils/EditorDeGuions/takeRanges.ts:
+  - CORREGIT: càlcul end del TAKE quan hi ha TAKE següent
+    · fillEnd = next.rawStart  (frontera entre TAKEs)
+    · end = max(endBase, fillEnd)  (elimina gaps temporals)
+  IMPACTE: Tots els segments assignats al TAKE correcte.
+           Les etiquetes TK al SRT editor mostren el TAKE real.
+
+WhisperX_Sonilab_01-main/src/cues.py:
+  - AFEGIT: pre-split per speaker dins de build_cues()
+    · Actiu quan subtitle_edit_compat=True (engine purfview-xxl)
+    · Usa split_words_by_speaker() existent (ja existia al fitxer)
+  IMPACTE: Quan diarization detecta canvis de locutor, cada locutor
+           obté el seu propi cue (no es combinen en 2 línies amb guions).
+
+
+================================================================================
+7. PROVES MANUALS RECOMANADES
+================================================================================
+
+A. Verificar LLM "IA per TAKE" funciona ara:
+   1. Assegurar Ollama en marxa: ollama serve  (o servei Windows)
+   2. Model disponible: ollama pull llama3.1  (o llama3.1:8b)
+   3. A l'app: mode "🤖 IA per TAKE" → Executar
+   4. Als logs del servidor backend, buscar:
+        timeout=1200000  ← confirma mode take-llm
+        method=take-llm  ← confirma que el controller ho rep
+   5. Als logs Python (stderr): "[LLM-TAKE] TAKE #N: X cues guió, Y segments SRT"
+   6. La previsualització ha de mostrar badge "🤖 LLM" als canvis
+
+B. Verificar TK labels correctes:
+   1. Obrir un projecte amb guió vinculat (amb marcadors TAKE #N HH:MM:SS)
+   2. Comparar les etiquetes TK dels subtítols amb els timecodes del guió
+   3. Un subtítol a les 10:30 hauria de mostrar el TAKE que comença
+      JUST ABANS i no acaba fins JUST DESPRÉS (o fins al TAKE següent)
+   4. ESPECIALMENT: subtítols entre dos TAKEs consecutius haurien de pertànyer
+      al TAKE que comença ABANS, no al més proper (bug anterior)
+
+C. Verificar separació per personatge (purfview-xxl + diarization):
+   1. Crear projecte nou amb engine=purfview-xxl + diarization activat + HF token
+   2. Transcriure vídeo amb diàlegs vius (alternança ràpida de locutors)
+   3. Comparar cues resultants: cada canvi de speaker hauria de ser un cue nou
+   4. Revisar que no hi ha cues amb guions (- Línia 1\n- Línia 2) per a 2 speakers
+      (si hi ha guions, significa que el split no s'ha aplicat; veure diarization logs)
+
+D. Verificar que NO es trenca res:
+   1. Mode Fuzzy → ha de funcionar exactament igual que abans
+   2. Engine whisperx (no purfview-xxl) → subtitle_edit_compat=False
+      → build_cues sense pre-split de speakers (comportament anterior)
+   3. Edició SRT → intacta
+   4. Importació de projectes → intacta
+
+================================================================================
+8. LIMITACIONS QUE RESTEN
+================================================================================
+
+1. El pre-split per speaker (Problema A) NOMÉS actua quan diarization funciona.
+   Sense HF token o en mode offline, no hi ha canvis (comportament degradat graciós).
+
+2. El mode "IA per TAKE" requereix Ollama instal·lat i el model descarregat.
+   Si Ollama no corre → error clar a la UI (implementat sessió anterior).
+
+3. El corrector LLM en mode fuzzy+llm_mode=fast/smart pot tenir fallback silenciós
+   (no corregit en aquesta sessió; queda per a futur).
+
+4. Les etiquetes TK al editor SRT depenen del guió vinculat al projecte.
+   Si no hi ha guió, tots els segments mostren TK buit (comportament correcte).
+
+5. El pre-roll/post-roll de takeRanges (±2s) pot causar solapament de fins a 4s
+   entre dos TAKEs consecutius. En la zona de solapament, s'assigna el TAKE
+   que ha COMENÇAT MÉS TARD (el nou TAKE), que és el comportament esperat.
+
+================================================================================

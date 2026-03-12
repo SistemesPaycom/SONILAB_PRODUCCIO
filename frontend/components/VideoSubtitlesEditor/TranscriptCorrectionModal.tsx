@@ -112,7 +112,7 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
       const res = await api.correctTranscript(projectId, {
         threshold,
         window: windowSize,
-        llmMode: method === 'take-llm' ? 'off' : 'off',
+        llmMode: 'off',
         llmModel,
         allowSplit,
         method,

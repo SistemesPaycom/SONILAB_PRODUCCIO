@@ -406,6 +406,18 @@ def build_cues_from_group(group: List[Dict], rules: SubtitleRules) -> List[Dict]
 
 def build_cues(words: List[Dict], rules: SubtitleRules) -> List[Dict]:
     groups = split_by_pause(words, rules.max_pause_within_cue)
+
+    # En mode subtitle_edit_compat: pre-dividir cada grup per canvis de speaker.
+    # Garanteix que paraules de locutors/personatges diferents MAI comencin al mateix cue,
+    # produint una separació de diàleg equivalent a la de Subtitle Edit / Purfview-XXL.
+    # UNK es tracta com a "sense canvi" (s'adereix al speaker previ).
+    if getattr(rules, 'subtitle_edit_compat', False):
+        expanded: List[List[Dict]] = []
+        for g in groups:
+            spk_chunks = split_words_by_speaker(g)
+            expanded.extend(spk_chunks)
+        groups = expanded
+
     cues: List[Dict] = []
     for g in groups:
         cues.extend(build_cues_from_group(g, rules))
