@@ -1,16 +1,16 @@
 /**
  * TranscriptCorrectionModal.tsx
  *
- * Modal per corregir el text de la transcripció SRT usant el guió vinculat.
- *
- * Flux:
- *  1. L'usuari configura threshold i window
- *  2. Clic "Corregir" → crida backend POST /projects/:id/correct-transcript
- *  3. Es mostra previsualització de canvis (original vs corregit)
- *  4. L'usuari pot "Aplicar" (guarda) o "Descartar"
+ * Modal per configurar i llançar la correcció de transcripció amb guió.
+ * FLUX NOU (inline review):
+ *   1. L'usuari configura el mètode i opcions
+ *   2. Clic "Corregir" → crida backend POST /projects/:id/correct-transcript
+ *   3. En rebre el resultat, crida onCorrectionReady(result) i tanca el modal
+ *   4. El pare (VideoSubtitlesEditorView) presenta les correccions inline
+ *      a l'editor SRT, on l'usuari pot acceptar/rebutjar cada canvi per separat.
  */
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { api } from '../../services/api';
 
 // ─────────────────────── Tipus ────────────────────────────────────────────────
@@ -46,35 +46,10 @@ interface TranscriptCorrectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
-  /** Cridat quan l'usuari aplica la correcció. Rep el SRT corregit. */
-  onApply: (correctedSrt: string, changes: ChangeRecord[]) => void;
+  /** Cridat amb el resultat quan la correcció s'ha completat (per revisió inline) */
+  onCorrectionReady: (result: CorrectionResult) => void;
   hasGuion: boolean;
 }
-
-// ─────────────────────── Subcomponents ────────────────────────────────────────
-
-const ScoreBar: React.FC<{ score: number }> = ({ score }) => {
-  const pct = Math.round(score * 100);
-  const color = score >= 0.75 ? 'bg-emerald-500' : score >= 0.55 ? 'bg-amber-500' : 'bg-orange-500';
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-[9px] text-gray-500 w-7 text-right">{pct}%</span>
-    </div>
-  );
-};
-
-const DiffText: React.FC<{ original: string; corrected: string }> = ({ original, corrected }) => {
-  if (original === corrected) return <span className="text-gray-400">{original}</span>;
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-red-400/70 line-through text-[10px]">{original}</span>
-      <span className="text-emerald-300 text-[11px]">{corrected}</span>
-    </div>
-  );
-};
 
 // ─────────────────────── Modal principal ──────────────────────────────────────
 
@@ -82,24 +57,19 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
   isOpen,
   onClose,
   projectId,
-  onApply,
+  onCorrectionReady,
   hasGuion,
 }) => {
-  // Mode principal: "fuzzy" (ràpid, sense LLM) o "take-llm" (IA per TAKE)
   const [method, setMethod] = useState<'fuzzy' | 'take-llm'>('fuzzy');
   const [llmModel, setLlmModel] = useState<string>('llama3.1');
   const [allowSplit, setAllowSplit] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  // Opcions avançades (fuzzy)
   const [threshold, setThreshold] = useState(0.45);
   const [windowSize, setWindowSize] = useState(8);
   const [correctionOptions, setCorrectionOptions] = useState<CorrectionOptions | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<CorrectionResult | null>(null);
-  const [isApplying, setIsApplying] = useState(false);
 
-  // Carregar opcions del backend al muntar
   useEffect(() => {
     api.getCorrectionOptions().then(setCorrectionOptions).catch(() => {});
   }, []);
@@ -107,7 +77,6 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
   const handleRun = useCallback(async () => {
     setIsRunning(true);
     setError(null);
-    setResult(null);
     try {
       const res = await api.correctTranscript(projectId, {
         threshold,
@@ -117,45 +86,25 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
         allowSplit,
         method,
       });
-      setResult(res);
+      // Passar el resultat al pare per a revisió inline i tancar el modal
+      onCorrectionReady(res);
+      onClose();
     } catch (e: any) {
       setError(e?.message || 'Error durant la correcció');
     } finally {
       setIsRunning(false);
     }
-  }, [projectId, threshold, windowSize, llmModel, allowSplit, method]);
-
-  const handleApply = useCallback(async () => {
-    if (!result) return;
-    setIsApplying(true);
-    setError(null);
-    try {
-      await api.applyCorrectedSrt(projectId, result.correctedSrt);
-      onApply(result.correctedSrt, result.changes);
-      onClose();
-    } catch (e: any) {
-      setError(e?.message || 'Error aplicant la correcció');
-    } finally {
-      setIsApplying(false);
-    }
-  }, [result, projectId, onApply, onClose]);
-
-  const handleClose = () => {
-    if (isRunning || isApplying) return;
-    setResult(null);
-    setError(null);
-    onClose();
-  };
+  }, [projectId, threshold, windowSize, llmModel, allowSplit, method, onCorrectionReady, onClose]);
 
   if (!isOpen) return null;
 
   return (
     <div
       className="fixed inset-0 bg-black/80 flex items-center justify-center z-[200] p-4 backdrop-blur-sm"
-      onClick={handleClose}
+      onClick={() => { if (!isRunning) onClose(); }}
     >
       <div
-        className="bg-gray-800 border border-gray-700 rounded-3xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden"
+        className="bg-gray-800 border border-gray-700 rounded-3xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden"
         style={{ maxHeight: '90vh' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -172,34 +121,29 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                 Corregir Transcripció
               </h2>
               <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">
-                Usa el guió per corregir el text (preserva timecodes)
+                Les correccions apareixeran directament a l'editor per revisar-les
               </p>
             </div>
           </div>
-          <button onClick={handleClose} className="text-gray-500 hover:text-white transition-colors text-2xl leading-none">&times;</button>
+          <button onClick={() => { if (!isRunning) onClose(); }} className="text-gray-500 hover:text-white transition-colors text-2xl leading-none">&times;</button>
         </div>
 
         {/* Cos */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-
-          {/* Avís sense guió */}
           {!hasGuion && (
             <div className="m-4 p-4 bg-amber-900/30 border border-amber-700/50 rounded-xl text-amber-200 text-xs">
               No hi ha guió vinculat al projecte. Puja primer el guió (DOCX, RTF o TXT) al panell esquerre.
             </div>
           )}
 
-          {/* Configuració */}
-          {hasGuion && !result && (
+          {hasGuion && (
             <div className="p-5 space-y-4">
-
-              {/* ── Selecció de mètode ── */}
+              {/* Selecció de mètode */}
               <div className="space-y-2">
                 <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">
                   Mètode de correcció
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Fuzzy */}
                   <button
                     onClick={() => setMethod('fuzzy')}
                     className={`p-3 rounded-xl border text-left transition-all ${
@@ -209,14 +153,9 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                     }`}
                   >
                     <div className="text-lg mb-1">⚡</div>
-                    <div className="text-[11px] font-black uppercase tracking-tight">
-                      Fuzzy
-                    </div>
-                    <div className="text-[9px] mt-0.5 opacity-70">
-                      Ràpid · Compara paraula a paraula · Sense IA
-                    </div>
+                    <div className="text-[11px] font-black uppercase tracking-tight">Fuzzy</div>
+                    <div className="text-[9px] mt-0.5 opacity-70">Ràpid · Compara paraula a paraula · Sense IA</div>
                   </button>
-                  {/* IA per TAKE */}
                   <button
                     onClick={() => setMethod('take-llm')}
                     className={`p-3 rounded-xl border text-left transition-all ${
@@ -228,29 +167,16 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                     <div className="text-lg mb-1">🤖</div>
                     <div className="text-[11px] font-black uppercase tracking-tight flex items-center gap-1.5">
                       IA per TAKE
-                      <span className="text-[8px] font-bold bg-violet-700/60 text-violet-200 px-1.5 py-0.5 rounded uppercase tracking-widest">
-                        Recomanat
-                      </span>
+                      <span className="text-[8px] font-bold bg-violet-700/60 text-violet-200 px-1.5 py-0.5 rounded uppercase tracking-widest">Recomanat</span>
                     </div>
-                    <div className="text-[9px] mt-0.5 opacity-70">
-                      El LLM veu tot el TAKE · Correcció contextual
-                    </div>
+                    <div className="text-[9px] mt-0.5 opacity-70">LLM veu tot el TAKE · Redistribueix diàlegs</div>
                   </button>
                 </div>
 
-                {/* Descripció del mode seleccionat */}
-                {method === 'fuzzy' && (
-                  <p className="text-[9px] text-gray-500 px-1">
-                    Compara cada subtítol amb les línies del guió usant similitud de text.
-                    Ràpid i funciona sense internet ni GPU extra.
-                  </p>
-                )}
                 {method === 'take-llm' && (
                   <div className="space-y-1.5">
                     <p className="text-[9px] text-gray-500 px-1">
-                      Envia el guió oficial de cada TAKE + els subtítols corresponents a una IA local (Ollama),
-                      que els compara i corregeix tenint en compte el context complet.
-                      No cal ajustar paràmetres.
+                      Envia el guió oficial de cada TAKE + els subtítols al LLM (Ollama local), que els corregeix i pot redistribuir diàlegs entre subtítols propers quan Whisper els ha barrejat.
                     </p>
                     <div className="flex items-center gap-3 px-1">
                       <select
@@ -266,10 +192,7 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                           <option key={m.value} value={m.value}>{m.label}</option>
                         ))}
                       </select>
-                      <span
-                        className="text-[9px] text-amber-400/80 bg-amber-900/20 border border-amber-700/30 px-1.5 py-0.5 rounded whitespace-nowrap"
-                        title="Requereix Ollama instal·lat i en marxa a http://127.0.0.1:11434"
-                      >
+                      <span className="text-[9px] text-amber-400/80 bg-amber-900/20 border border-amber-700/30 px-1.5 py-0.5 rounded whitespace-nowrap" title="Requereix Ollama instal·lat i en marxa a http://127.0.0.1:11434">
                         Requereix Ollama
                       </span>
                     </div>
@@ -277,13 +200,9 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                 )}
               </div>
 
-              {/* ── Toggle divisió de personatges ── */}
+              {/* Toggle divisió de personatges */}
               <div
-                className={`p-3 rounded-xl border transition-colors cursor-pointer ${
-                  allowSplit
-                    ? 'bg-amber-900/20 border-amber-700/50'
-                    : 'bg-gray-900/40 border-gray-700/50'
-                }`}
+                className={`p-3 rounded-xl border transition-colors cursor-pointer ${allowSplit ? 'bg-amber-900/20 border-amber-700/50' : 'bg-gray-900/40 border-gray-700/50'}`}
                 onClick={() => setAllowSplit((v) => !v)}
               >
                 <div className="flex items-center justify-between">
@@ -291,14 +210,7 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                     <div className={`text-[9px] font-black uppercase tracking-widest ${allowSplit ? 'text-amber-400' : 'text-gray-400'}`}>
                       ✂ Dividir subtítols per canvi de personatge
                     </div>
-                    <p className="text-[9px] text-gray-500">
-                      Separa en dos un subtítol que conté veus de dos personatges DIFERENTS.
-                    </p>
-                    {allowSplit && (
-                      <p className="text-[9px] text-amber-600/80">
-                        ⚠ Revisa el resultat — només divideix quan hi ha evidència acústica.
-                      </p>
-                    )}
+                    <p className="text-[9px] text-gray-500">Separa en dos un subtítol que conté veus de dos personatges DIFERENTS.</p>
                   </div>
                   <div className={`ml-3 flex-shrink-0 w-8 h-4 rounded-full transition-colors ${allowSplit ? 'bg-amber-500' : 'bg-gray-600'}`}>
                     <div className="w-3.5 h-3.5 bg-white rounded-full" style={{ marginTop: '1px', transform: allowSplit ? 'translateX(17px)' : 'translateX(1px)', transition: 'transform 0.15s' }} />
@@ -306,7 +218,7 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                 </div>
               </div>
 
-              {/* ── Opcions avançades (fuzzy) ── */}
+              {/* Opcions avançades (fuzzy) */}
               {method === 'fuzzy' && (
                 <div>
                   <button
@@ -319,35 +231,17 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                   {showAdvanced && (
                     <div className="mt-3 space-y-4 pl-3 border-l border-gray-700/50">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-                          Sensibilitat — {Math.round(threshold * 100)}%
-                        </label>
+                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">Sensibilitat — {Math.round(threshold * 100)}%</label>
                         <div className="flex items-center gap-3">
-                          <input
-                            type="range" min={0.2} max={0.9} step={0.05}
-                            value={threshold}
-                            onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                            className="flex-1 accent-blue-500"
-                          />
-                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
-                            {threshold <= 0.35 ? 'agressiu' : threshold <= 0.55 ? 'equilibrat' : 'conservador'}
-                          </span>
+                          <input type="range" min={0.2} max={0.9} step={0.05} value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value))} className="flex-1 accent-blue-500" />
+                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">{threshold <= 0.35 ? 'agressiu' : threshold <= 0.55 ? 'equilibrat' : 'conservador'}</span>
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-                          Finestra de cerca — ±{windowSize}
-                        </label>
+                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">Finestra de cerca — ±{windowSize}</label>
                         <div className="flex items-center gap-3">
-                          <input
-                            type="range" min={3} max={20} step={1}
-                            value={windowSize}
-                            onChange={(e) => setWindowSize(parseInt(e.target.value, 10))}
-                            className="flex-1 accent-blue-500"
-                          />
-                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">
-                            {windowSize <= 5 ? 'precís' : windowSize <= 10 ? 'normal' : 'ampli'}
-                          </span>
+                          <input type="range" min={3} max={20} step={1} value={windowSize} onChange={(e) => setWindowSize(parseInt(e.target.value, 10))} className="flex-1 accent-blue-500" />
+                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">{windowSize <= 5 ? 'precís' : windowSize <= 10 ? 'normal' : 'ampli'}</span>
                         </div>
                       </div>
                     </div>
@@ -355,90 +249,17 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                 </div>
               )}
 
-              {/* ── Regles ── */}
-              <div className="p-3 bg-gray-900/40 rounded-xl border border-gray-700/50 text-[9px] text-gray-500 space-y-1">
-                <div className="font-bold text-gray-400 uppercase tracking-widest mb-1">Regles de correcció</div>
-                <div>• <span className="text-gray-300">Mai s'eliminen línies</span> de la transcripció</div>
-                <div>• {allowSplit ? <span className="text-amber-300">Pot crear línies noves</span> : <span className="text-gray-300">Mai s'afegeixen línies</span>} {allowSplit ? '(divisió per personatge activada)' : 'noves'}</div>
-                <div>• Els <span className="text-gray-300">timecodes originals</span> es preserven sempre</div>
-                <div>• Tots els canvis queden <span className="text-gray-300">registrats</span> per a revisió</div>
+              {/* Info inline review */}
+              <div className="p-3 bg-blue-950/30 rounded-xl border border-blue-800/30 text-[9px] text-blue-300/70 space-y-1">
+                <div className="font-bold text-blue-300/90 uppercase tracking-widest mb-1">📋 Revisió inline</div>
+                <div>• Les correccions <span className="text-amber-300">s'aplicaran directament</span> a l'editor</div>
+                <div>• Cada canvi mostrarà el text proposat en <span className="text-amber-300">groc/amber</span></div>
+                <div>• Podràs <span className="text-emerald-400">acceptar ✓</span> o <span className="text-red-400">rebutjar ✗</span> cada subtítol individualment</div>
+                <div>• Els timecodes originals <span className="text-gray-300">es preserven sempre</span></div>
               </div>
             </div>
           )}
 
-          {/* Resultat: previsualització de canvis */}
-          {result && (
-            <div className="p-5 space-y-4">
-              {/* Resum */}
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: 'Total segments', value: result.summary.totalSegments, color: 'text-gray-300' },
-                  { label: 'Modificats', value: result.summary.changed, color: 'text-blue-300' },
-                  { label: 'Sense canvis', value: result.summary.unchanged, color: 'text-gray-500' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-gray-900/50 rounded-xl p-3 text-center border border-gray-700/50">
-                    <div className={`text-2xl font-black ${color}`}>{value}</div>
-                    <div className="text-[9px] uppercase tracking-widest text-gray-600 mt-0.5">{label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Llista de canvis */}
-              {result.changes.length === 0 ? (
-                <div className="text-center py-8 text-gray-600 text-sm">
-                  Cap canvi detectat. Prova un threshold més baix.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-                    Previsualització de canvis ({result.changes.length})
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
-                    {result.changes.map((c) => (
-                      <div
-                        key={c.seg_idx}
-                        className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-3 space-y-1.5"
-                      >
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[9px] font-mono text-gray-600">#{c.seg_idx}</span>
-                          <span className="text-[9px] font-mono text-gray-600">{c.start} → {c.end}</span>
-                          <span className="text-[9px] text-blue-400/70 bg-blue-900/20 px-1.5 py-0.5 rounded">
-                            {c.guion_speaker}
-                          </span>
-                          {c.take_num != null && c.take_num > 0 && (
-                            <span className="text-[9px] text-amber-400/80 bg-amber-900/20 px-1.5 py-0.5 rounded font-mono">
-                              T{c.take_num}
-                            </span>
-                          )}
-                          {c.method === 'fuzzy_replace' && (
-                            <span className="text-[9px] text-cyan-400/70 bg-cyan-900/20 px-1.5 py-0.5 rounded">
-                              ⚡ fuzzy
-                            </span>
-                          )}
-                          {c.method === 'split_speaker' && (
-                            <span className="text-[9px] text-green-400/70 bg-green-900/20 px-1.5 py-0.5 rounded">
-                              ✂ split
-                            </span>
-                          )}
-                          {(c.method === 'take_llm' || c.method?.startsWith('llm_')) && (
-                            <span className="text-[9px] text-violet-400/80 bg-violet-900/20 px-1.5 py-0.5 rounded">
-                              🤖 LLM
-                            </span>
-                          )}
-                          <div className="flex-1 min-w-[60px]">
-                            <ScoreBar score={c.score} />
-                          </div>
-                        </div>
-                        <DiffText original={c.original} corrected={c.corrected} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Error */}
           {error && (
             <div className="mx-5 mb-4 p-3 bg-red-900/30 border border-red-700/50 rounded-xl text-red-300 text-xs">
               {error}
@@ -446,17 +267,17 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
           )}
         </div>
 
-        {/* Footer amb botons */}
+        {/* Footer */}
         <div className="flex-shrink-0 p-4 bg-gray-900/30 border-t border-gray-700 flex items-center justify-between gap-3">
           <button
-            onClick={handleClose}
-            disabled={isRunning || isApplying}
+            onClick={() => { if (!isRunning) onClose(); }}
+            disabled={isRunning}
             className="px-4 py-2 text-xs font-bold text-gray-400 hover:text-white bg-gray-700/50 hover:bg-gray-700 rounded-xl transition-colors disabled:opacity-40"
           >
-            {result ? 'Descartar' : 'Cancel·lar'}
+            Cancel·lar
           </button>
 
-          {!result && hasGuion && (
+          {hasGuion && (
             <button
               onClick={handleRun}
               disabled={isRunning}
@@ -468,35 +289,9 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                   Corregint…
                 </>
               ) : (
-                'Corregir Transcripció'
+                'Corregir i Revisar Inline'
               )}
             </button>
-          )}
-
-          {result && (
-            <>
-              <button
-                onClick={() => { setResult(null); setError(null); }}
-                disabled={isApplying}
-                className="px-4 py-2 text-xs font-bold text-gray-400 hover:text-white bg-gray-700/50 hover:bg-gray-700 rounded-xl transition-colors disabled:opacity-40"
-              >
-                Tornar a configurar
-              </button>
-              <button
-                onClick={handleApply}
-                disabled={isApplying || result.changes.length === 0}
-                className="px-5 py-2 text-xs font-black uppercase tracking-widest text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {isApplying ? (
-                  <>
-                    <span className="animate-spin inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full" />
-                    Aplicant…
-                  </>
-                ) : (
-                  `Aplicar ${result.changes.length} canvi${result.changes.length !== 1 ? 's' : ''}`
-                )}
-              </button>
-            </>
           )}
         </div>
       </div>
@@ -505,4 +300,4 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
 };
 
 export default TranscriptCorrectionModal;
-export type { ChangeRecord };
+export type { ChangeRecord, CorrectionResult };

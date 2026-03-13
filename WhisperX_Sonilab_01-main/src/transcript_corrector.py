@@ -895,6 +895,49 @@ def _format_corrected_text(guion_text: str, original_text: str) -> str:
 
 # ─────────────────────── Mode IA per TAKE ─────────────────────────────────────
 
+def _strip_speaker_contamination(text: str, known_speakers: set) -> str:
+    """
+    Elimina noms de speaker que el LLM afegeix per error al text del subtítol.
+
+    Patrons detectats:
+      "RUFFY: Haki busoshoku!"    → "Haki busoshoku!"
+      "*RUFFY* Haki busoshoku!"   → "Haki busoshoku!"
+      "[RUFFY] Haki busoshoku!"   → "Haki busoshoku!"
+      "RUFFY - Haki busoshoku!"   → "Haki busoshoku!"
+      "Ruffy: Haki busoshoku!"    → "Haki busoshoku!"  (case-insensitive)
+
+    Funciona:
+    - Per als speakers coneguts del TAKE (known_speakers)
+    - Per qualsevol mot en majúscules seguit de ':' (heurística general)
+    """
+    t = text.strip()
+
+    # Patró 1: speaker conegut explícit (case-insensitive) seguit de separador
+    for spk in known_speakers:
+        # Escapem per regex, eliminarem asterisc/claudàtor ràpid
+        spk_clean = re.sub(r'[^\w\s]', '', spk).strip()
+        if not spk_clean:
+            continue
+        # Patrons: [SPK], *SPK*, SPK:, SPK -
+        patterns = [
+            rf'^\[{re.escape(spk_clean)}\]\s*',      # [RUFFY] ...
+            rf'^\*{re.escape(spk_clean)}\*\s*',       # *RUFFY* ...
+            rf'^{re.escape(spk_clean)}\s*:\s*',        # RUFFY: ...
+            rf'^{re.escape(spk_clean)}\s+-\s+',        # RUFFY - ...
+        ]
+        for pat in patterns:
+            new_t = re.sub(pat, '', t, count=1, flags=re.IGNORECASE)
+            if new_t != t:
+                t = new_t.strip()
+                break
+
+    # Patró 2: heurística general — qualsevol mot en CAPS seguit de ':' a l'inici
+    # (p.ex. el LLM usa un speaker nou que no estava al guió)
+    t = re.sub(r'^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝ]{2,}\s*:\s*', '', t).strip()
+
+    return t
+
+
 def _correct_take_with_llm(
     model: str,
     take_num: int,
@@ -924,9 +967,12 @@ def _correct_take_with_llm(
 
     n = len(srt_segs)
 
-    # Bloc del guió
+    # Extreiem els noms de speaker del guió (per post-processat anti-contaminació)
+    known_speakers: set = {c.speaker.strip().upper() for c in guion_cues if c.speaker.strip()}
+
+    # Bloc del guió: mostra el speaker per context, però el LLM NO l'ha de copiar
     guion_block = '\n'.join(
-        f"  {c.speaker}: {c.text}"
+        f"  [{c.speaker}] {c.text}"
         for c in guion_cues
     )
 
@@ -945,15 +991,19 @@ def _correct_take_with_llm(
     prompt = (
         f"You are a dubbing subtitle editor. "
         f"Correct the auto-transcription of TAKE {take_num} to match the official script.\n\n"
-        f"OFFICIAL SCRIPT:\n{guion_block}\n\n"
+        f"OFFICIAL SCRIPT (speaker shown in brackets for context only):\n{guion_block}\n\n"
         f"AUTO-TRANSCRIPTION (subtitles 1..{n}):\n{srt_block}\n\n"
         f"TASK: Rewrite each subtitle using the EXACT wording from the official script.\n"
         f"RULES:\n"
         f"1. The official script is the ground truth — copy its exact words\n"
         f"2. Match script lines to subtitles by order and meaning\n"
-        f"3. Keep subtitle numbers 1..{n} unchanged\n"
+        f"3. Keep subtitle numbers 1..{n} and output exactly {n} subtitles\n"
         f"4. Output ALL {n} subtitles (include unchanged ones too)\n"
-        f"5. Reply ONLY with a JSON array, no explanation or extra text\n\n"
+        f"5. DO NOT include speaker names in subtitle text — only the dialogue words\n"
+        f"6. If Whisper has mixed/merged dialogue from different speakers in adjacent subtitles,\n"
+        f"   you MAY redistribute text between 2-3 consecutive subtitles to better match the script.\n"
+        f"   But keep the total count at exactly {n}.\n"
+        f"7. Reply ONLY with a JSON array, no explanation or extra text\n\n"
         f"RESPONSE FORMAT:\n"
         f"[{{\"idx\": 1, \"text\": \"subtitle 1 text\"}}, "
         f"{{\"idx\": 2, \"text\": \"subtitle 2 text\"}}, "
@@ -1023,7 +1073,11 @@ def _correct_take_with_llm(
 
             text = str(item.get('text', '')).strip()
             if text:
-                result[global_idx] = text
+                # Post-process: eliminar contaminació de noms de speaker que el LLM pugui afegir.
+                # Patrons: "RUFFY: text", "*RUFFY* text", "[RUFFY] text", "RUFFY - text"
+                text = _strip_speaker_contamination(text, known_speakers)
+                if text:
+                    result[global_idx] = text
 
         if verbose:
             n_changed = sum(

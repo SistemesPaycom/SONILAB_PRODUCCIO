@@ -141,24 +141,66 @@ export class TranscriptionProcessor {
           child.on('close', (code) => resolve({ stderr: stderrBuf, exitCode: code ?? 1 }));
         });
 
+        // EXIT CODE ROBUSTNESS:
+        // 0xC0000409 (3221226505) = STATUS_STACK_BUFFER_OVERRUN — Windows mata el procés
+        // per detecció de stack corruption en el cleanup, però el SRT JA S'HA GENERAT.
+        // No tractem exit != 0 com a fallo immediat: busquem el SRT primer.
+        // Si el SRT existeix i és vàlid, el tractament és OK (warning al log).
+        // Només falla si el SRT no s'ha generat en cap de les ubicacions esperades.
+        const EXIT_CODE_SECURITY_CRASH = 3221226505; // 0xC0000409
         if (exeExitCode !== 0) {
-          throw new Error(`faster-whisper-xxl.exe ha fallat (exit ${exeExitCode}).\nSTDERR:\n${exeStderr || '(buit)'}`);
+          const isCrashOnExit = exeExitCode === EXIT_CODE_SECURITY_CRASH || exeExitCode < 0;
+          if (isCrashOnExit) {
+            console.warn(`[PURFVIEW-EXE] Exit code ${exeExitCode} (0x${(exeExitCode >>> 0).toString(16).toUpperCase()}) — crash on exit detectat (probablement CRT stack cleanup). Verificant si el SRT s'ha generat...`);
+          } else {
+            console.warn(`[PURFVIEW-EXE] Exit code no-zero: ${exeExitCode}. Intentant recuperar el SRT igualment...`);
+          }
         }
 
-        // Buscar SRT output: per defecte el .exe escriu al directori del vídeo amb el mateix nom base
+        // Buscar SRT en múltiples ubicacions possibles:
+        // 1. Directori on es troba el .exe (comportament reportat per l'usuari)
+        // 2. Directori del fitxer de vídeo d'entrada
         const baseName = path.basename(mediaPath, path.extname(mediaPath));
+        const exeDir = path.dirname(purfviewExePath);
         const mediaDir = path.dirname(mediaPath);
-        const exeSrtPath = path.join(mediaDir, baseName + '.srt');
 
-        if (!fs.existsSync(exeSrtPath)) {
+        const srtCandidates = [
+          path.join(exeDir, baseName + '.srt'),         // on l'exe realment l'escriu
+          path.join(mediaDir, baseName + '.srt'),        // ruta "natural" prop del vídeo
+          path.join(outDir, baseName + '.srt'),          // ruta del backend (si l'exe suporta output dir)
+        ];
+
+        let foundSrtPath: string | null = null;
+        for (const candidate of srtCandidates) {
+          if (fs.existsSync(candidate)) {
+            const stat = fs.statSync(candidate);
+            if (stat.size > 0) {
+              foundSrtPath = candidate;
+              console.log(`[PURFVIEW-EXE] SRT trobat a: ${foundSrtPath} (${stat.size} bytes)`);
+              break;
+            }
+          }
+        }
+
+        if (!foundSrtPath) {
+          // Cap SRT trobat — ara sí que és un error real
+          const searched = srtCandidates.join(', ');
           throw new Error(
-            `faster-whisper-xxl.exe ha completat però el SRT no s'ha trobat a: ${exeSrtPath}\nSTDERR: ${exeStderr}`,
+            `faster-whisper-xxl.exe ha fallat (exit ${exeExitCode}) i no s'ha generat cap SRT.\n` +
+            `Ubicacions cercades: ${searched}\nSTDERR: ${exeStderr || '(buit)'}`,
           );
+        }
+
+        // SRT trobat — considerat èxit (fins i tot si exit code != 0)
+        if (exeExitCode !== 0) {
+          console.warn(`[PURFVIEW-EXE] Exit code ${exeExitCode} però SRT vàlid trobat. Continuant com a èxit.`);
         }
 
         // Copiar SRT al outDir per consistència amb el pipeline Python
         const copiedSrtPath = path.join(outDir, baseName + '.srt');
-        fs.copyFileSync(exeSrtPath, copiedSrtPath);
+        if (foundSrtPath !== copiedSrtPath) {
+          fs.copyFileSync(foundSrtPath, copiedSrtPath);
+        }
         console.log(`[PURFVIEW-EXE] SRT copiat a: ${copiedSrtPath}`);
 
         await this.projects.updateJob(jobId, { progress: 80 } as any);

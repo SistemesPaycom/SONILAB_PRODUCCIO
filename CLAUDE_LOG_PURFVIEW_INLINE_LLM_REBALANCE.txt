@@ -1,0 +1,159 @@
+================================================================================
+CLAUDE_LOG_PURFVIEW_INLINE_LLM_REBALANCE.txt
+Data: 2026-03-13
+Sessió: context-continuation (resumenat)
+================================================================================
+
+RESUM DE CANVIS PER OBJECTIU
+==============================
+
+────────────────────────────────────────────────────────────────────────────────
+OBJECTIU A — Fix Purfview .exe (exit 3221226505 + SRT en ubicació inesperada)
+────────────────────────────────────────────────────────────────────────────────
+
+Fitxer modificat:
+  backend_nest_mvp/src/modules/projects/transcription.processor.ts
+
+Problema:
+  - faster-whisper-xxl.exe genera el SRT correctament però surt amb exit code
+    3221226505 (0xC0000409 = STATUS_STACK_BUFFER_OVERRUN), que és un crash del
+    CRT de Windows durant el cleanup de la pila. L'exe JA HA ACABAT la feina.
+  - El SRT s'escrivia al directori de l'exe, no al directori del vídeo.
+  - La implementació anterior tractava qualsevol exit != 0 com a error fatal.
+
+Solució implementada:
+  1. Constant EXIT_CODE_SECURITY_CRASH = 3221226505 (0xC0000409) identificada.
+  2. Exit != 0 NO és fatal: primer busca el SRT en múltiples ubicacions:
+       - path.join(exeDir, baseName + '.srt')    ← on l'exe realment escriu
+       - path.join(mediaDir, baseName + '.srt')  ← prop del vídeo (fallback)
+       - path.join(outDir, baseName + '.srt')    ← backend outDir (fallback)
+  3. Si el SRT existeix i té mida > 0 → èxit (fins i tot amb exit code != 0).
+  4. Logs diferenciats: "crash on exit detectat" vs "exit no-zero genèric".
+  5. SRT copiat a outDir per consistència amb el pipeline Python.
+  6. Únic error real: cap SRT trobat en cap de les 3 ubicacions.
+
+Cap engine afectat: whisperx, faster-whisper normal, script-align → NO tocats.
+
+────────────────────────────────────────────────────────────────────────────────
+OBJECTIU B — Inline Review UX (revisió per segment en l'editor SRT)
+────────────────────────────────────────────────────────────────────────────────
+
+Fitxers modificats:
+  frontend/components/VideoSubtitlesEditor/TranscriptCorrectionModal.tsx
+  frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+  frontend/components/VideoSubtitlesEditor/SubtitlesEditor.tsx
+  frontend/components/VideoSubtitlesEditor/SegmentItem.tsx
+
+Problema:
+  - El flux anterior mostrava les correccions en un modal amb "Acceptar tot"
+    o "Descartar tot". No hi havia revisió per segment individual.
+
+Solució implementada:
+
+  TranscriptCorrectionModal.tsx (reescrit):
+    - Eliminat: result state, isApplying state, UI de previsualització en modal
+    - Canviat: onApply(correctedSrt, changes) → onCorrectionReady(result)
+    - Quan corre la correcció: crida onCorrectionReady(res) i tanca el modal
+    - Afegit: panell informatiu explicant el nou flux inline
+    - Exporta ara: CorrectionResult (a més de ChangeRecord)
+
+  VideoSubtitlesEditorView.tsx:
+    - Eliminat: handleApplyCorrection (que commitava tot d'un cop)
+    - Afegit: pendingCorrections: Map<segId, {proposed, original, change}>
+    - Afegit: handleCorrectionReady(result) → omple pendingCorrections, NO commitea
+    - Afegit: handleAcceptCorrection(segId) → aplica proposed text + rose 30s
+    - Afegit: handleRejectCorrection(segId) → elimina de pendingCorrections
+    - Afegit: handleAcceptAllCorrections() → commit de tots + rose 30s
+    - Afegit: handleRejectAllCorrections() → neteja pendingCorrections
+    - Actualitzat: TranscriptCorrectionModal onApply → onCorrectionReady
+    - Actualitzat: SubtitlesEditor → rep pendingCorrections + 4 handlers nous
+
+  SubtitlesEditor.tsx:
+    - Afegit: interface PendingCorrectionEntry
+    - Afegit props: pendingCorrections, onAcceptCorrection, onRejectCorrection,
+      onAcceptAllCorrections, onRejectAllCorrections
+    - Afegit: barra amber a la capçalera quan hi ha correccions pendents
+      "✦ N correccions pendents | [✗ Rebutjar totes] [✓ Acceptar totes]"
+    - Actualitzat: SegmentItem rep proposedText/onAccept/onReject per segment
+
+  SegmentItem.tsx:
+    - Afegit props: proposedText?, onAccept?, onReject?
+    - Fons amber (bg-amber-950/20) quan proposedText és present
+    - Indicador lateral amber (w-0.5 bg-amber-400/90) quan pendent
+    - Panell inline sota la graella: mostra el text proposat en amber
+      amb botons "✓" (emerald) i "✗" (red) per acceptar/rebutjar
+    - Prioritat de fons: isActive > proposedText > isCorrected > hasDiff > normal
+
+Flux complet resultant:
+  1. Usuari clica "✦ Corregir" al ScriptViewPanel
+  2. Modal TranscriptCorrectionModal: configura mètode/model → "Corregir i Revisar Inline"
+  3. Backend processa → modal tanca automàticament
+  4. Editor SRT mostra segments amb fons amber + panell de proposta
+  5. Capçalera: "✦ N correccions pendents | [✗ Rebutjar totes] [✓ Acceptar totes]"
+  6. Per segment: ✓ Acceptar (aplica text + rose 30s) / ✗ Rebutjar (descarta)
+  7. Timecodes SEMPRE preservats (no es toquen)
+
+────────────────────────────────────────────────────────────────────────────────
+OBJECTIU C — Millores LLM (speaker contamination + rebalancing local)
+────────────────────────────────────────────────────────────────────────────────
+
+Fitxer modificat:
+  WhisperX_Sonilab_01-main/src/transcript_corrector.py
+
+Problema 1 — Speaker contamination:
+  LLM inseria noms de personatge al text del subtítol:
+  "RUFFY: Haki busoshoku!" en lloc de "Haki busoshoku!"
+  Causa: guion_block mostrava "RUFFY: text" → LLM mimificava el format.
+
+Solució:
+  a) Canviat format del guion_block de `speaker: text` a `[speaker] text`
+     → desambigua el format per al LLM
+  b) Afegit regla explícita al prompt:
+     "5. DO NOT include speaker names in subtitle text — only the dialogue words"
+  c) Afegida funció _strip_speaker_contamination(text, known_speakers):
+     - Patrons de strip per known_speakers: [NAME], *NAME*, NAME:, NAME -
+     - Heurística general: mot ≥2 caràcters en CAPS seguit de ':' a l'inici
+     - S'aplica a cada línia del resultat LLM
+  d) known_speakers extret del guio_cues per al post-processat
+
+Problema 2 — Rebalancing local:
+  Whisper de vegades barreja diàleg de personatges adjacents en un sol subtítol.
+  El LLM no podia redistribuir entre subtítols veïns.
+
+Solució:
+  Afegida regla al prompt:
+  "6. If Whisper has mixed/merged dialogue from different speakers in adjacent
+     subtitles, you MAY redistribute text between 2-3 consecutive subtitles to
+     better match the script. But keep the total count at exactly N."
+
+Verificació mode take-llm (sense silent fuzzy fallback):
+  - _correct_take_with_llm() NO té fallback a fuzzy
+  - Si LLM falla → excepció propagada (registrada al log)
+  - L'engine `take-llm` al backend passa llmMode='off' per configuració del modal
+    → TODO pendent: el modal pot passar llmMode en futures versions
+
+────────────────────────────────────────────────────────────────────────────────
+FITXERS MODIFICATS (RESUM)
+────────────────────────────────────────────────────────────────────────────────
+
+backend_nest_mvp/src/modules/projects/transcription.processor.ts
+  - OBJECTIU A: multi-location SRT search, exit 3221226505 tractament robust
+
+WhisperX_Sonilab_01-main/src/transcript_corrector.py
+  - OBJECTIU C: _strip_speaker_contamination(), prompt actualitzat, rebalancing
+
+frontend/components/VideoSubtitlesEditor/TranscriptCorrectionModal.tsx
+  - OBJECTIU B: reescrit per flux inline (onCorrectionReady, sense preview modal)
+
+frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+  - OBJECTIU B: handleCorrectionReady + accept/reject handlers
+
+frontend/components/VideoSubtitlesEditor/SubtitlesEditor.tsx
+  - OBJECTIU B: barra correccions pendents + nous props per SegmentItem
+
+frontend/components/VideoSubtitlesEditor/SegmentItem.tsx
+  - OBJECTIU B: proposedText panel + fons amber + botons accept/reject
+
+================================================================================
+FI DEL LOG
+================================================================================

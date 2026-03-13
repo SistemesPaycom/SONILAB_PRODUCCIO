@@ -6,6 +6,12 @@ import { EyeIcon, EyeOffIcon, EarIcon, Languages } from '../icons';
 import { LinkIcon, LinkOffIcon } from '../VideoEditor/PlayerIcons';
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
 
+interface PendingCorrectionEntry {
+  proposed: string;
+  original: string;
+  change: any;
+}
+
 interface SubtitlesEditorProps {
   title: string;
   segments: Segment[];
@@ -26,8 +32,14 @@ interface SubtitlesEditorProps {
   generalConfig: GeneralConfig;
   autoScroll: boolean;
   onOpenAIOperations: (mode: 'whisper' | 'translate' | 'revision') => void;
-  /** Conjunt d'índexs de segments corregits pel pipeline de guió (per resaltar) */
+  /** Conjunt d'índexs de segments corregits i acceptats (rose background, 30s) */
   correctionHighlightIds?: Set<number>;
+  /** Correccions pendents de revisió inline (amber, per segment) */
+  pendingCorrections?: Map<number, PendingCorrectionEntry>;
+  onAcceptCorrection?: (id: number) => void;
+  onRejectCorrection?: (id: number) => void;
+  onAcceptAllCorrections?: () => void;
+  onRejectAllCorrections?: () => void;
 }
 
 const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
@@ -51,6 +63,11 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   autoScroll,
   onOpenAIOperations,
   correctionHighlightIds,
+  pendingCorrections,
+  onAcceptCorrection,
+  onRejectCorrection,
+  onAcceptAllCorrections,
+  onRejectAllCorrections,
 }) => {
   const { caretHintRef } = useSubtitleEditor();
   const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
@@ -113,6 +130,30 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
       </div>
 
       <header className="flex-shrink-0 flex flex-col border-b border-gray-700 bg-gray-800/80 backdrop-blur-md">
+        {/* Barra de correccions pendents (inline review) */}
+        {pendingCorrections && pendingCorrections.size > 0 && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-amber-950/50 border-b border-amber-700/40">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-black uppercase tracking-widest text-amber-300">
+                ✦ {pendingCorrections.size} {pendingCorrections.size === 1 ? 'correcció pendent' : 'correccions pendents'}
+              </span>
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={onRejectAllCorrections}
+                className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-red-900/50 hover:bg-red-700/70 text-red-300 transition-colors"
+              >
+                ✗ Rebutjar totes
+              </button>
+              <button
+                onClick={onAcceptAllCorrections}
+                className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-emerald-900/50 hover:bg-emerald-700/70 text-emerald-300 transition-colors"
+              >
+                ✓ Acceptar totes
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between p-2">
             <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-500 ml-2">{title}</h3>
             
@@ -191,6 +232,9 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
                 isActive={activeId === segment.id}
                 isEditable={isEditable}
                 isCorrected={correctionHighlightIds?.has(segment.id as number)}
+                proposedText={pendingCorrections?.get(segment.id as number)?.proposed}
+                onAccept={onAcceptCorrection ? () => onAcceptCorrection(segment.id as number) : undefined}
+                onReject={onRejectCorrection ? () => onRejectCorrection(segment.id as number) : undefined}
                 onChange={onSegmentChange}
                 onBlur={onSegmentBlur}
                 onClick={onSegmentClick}

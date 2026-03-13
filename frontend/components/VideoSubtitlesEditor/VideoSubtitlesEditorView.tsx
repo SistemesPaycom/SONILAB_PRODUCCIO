@@ -17,7 +17,7 @@ import { useVerticalPanelResize, useHorizontalPanelResize } from '../../hooks/us
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
 import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
 import { ScriptViewPanel } from './ScriptViewPanel';
-import TranscriptCorrectionModal, { ChangeRecord as CorrectionChangeRecord } from './TranscriptCorrectionModal';
+import TranscriptCorrectionModal, { ChangeRecord as CorrectionChangeRecord, CorrectionResult } from './TranscriptCorrectionModal';
 
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
@@ -104,9 +104,16 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const [guionContent, setGuionContent] = useState<string>('');
   const [guionProjectId, setGuionProjectId] = useState<string | null>(null);
 
-  // ── Correcció de transcripció amb guió ───────────────────────────────────
+  // ── Correcció de transcripció amb guió — revisió inline ──────────────────
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  /** correctionHighlightIds: segments corregits i acceptats (rose background, 30s) */
   const [correctionHighlightIds, setCorrectionHighlightIds] = useState<Set<number>>(new Set());
+  /**
+   * pendingCorrections: mapa de correccions pendents de revisió inline.
+   * Clau: segment ID (seg_idx del ChangeRecord, que coincideix amb Segment.id)
+   * Valor: { proposed: text proposat, original: text original, change: registre de canvi }
+   */
+  const [pendingCorrections, setPendingCorrections] = useState<Map<number, { proposed: string; original: string; change: CorrectionChangeRecord }> | null>(null);
 
   /** Clau localStorage per al guió d'aquest document (persistència local sense backend) */
   const _localGuionKey = `sonilab_guion_${currentDoc?.id}`;
@@ -148,19 +155,72 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const [activeSegmentId, setActiveSegmentId] = useState<number | null>(null);
 
   /**
-   * Aplica la correcció de transcripció: actualitza els segments en memòria
-   * i marca els segments modificats per resaltar-los.
+   * Crida quan la correcció s'ha completat.
+   * No aplica res directament — omple pendingCorrections per revisió inline per segment.
    * (Definit DESPRÉS de subsHistory per evitar Temporal Dead Zone)
    */
-  const handleApplyCorrection = useCallback((correctedSrt: string, changes: CorrectionChangeRecord[]) => {
-    const correctedSegs = parseSrt(correctedSrt);
-    if (correctedSegs.length > 0) {
-      subsHistory.commit(correctedSegs);
+  const handleCorrectionReady = useCallback((result: CorrectionResult) => {
+    const map = new Map<number, { proposed: string; original: string; change: CorrectionChangeRecord }>();
+    for (const change of result.changes) {
+      map.set(change.seg_idx, {
+        proposed: change.corrected,
+        original: change.original,
+        change,
+      });
     }
-    const changedIds = new Set<number>(changes.map(c => c.seg_idx));
-    setCorrectionHighlightIds(changedIds);
+    setPendingCorrections(map.size > 0 ? map : null);
+  }, []);
+
+  /** Accepta la correcció d'un segment: aplica el text proposat i el marca com a corregit. */
+  const handleAcceptCorrection = useCallback((segId: number) => {
+    const pending = pendingCorrections?.get(segId);
+    if (!pending) return;
+    const newSegs = segments.map((s) =>
+      s.id === segId ? { ...s, originalText: pending.proposed, richText: pending.proposed } : s
+    );
+    subsHistory.commit(newSegs);
+    // Rose highlight temporal (30s)
+    setCorrectionHighlightIds((prev) => new Set([...prev, segId]));
+    setTimeout(() => {
+      setCorrectionHighlightIds((prev) => { const n = new Set(prev); n.delete(segId); return n; });
+    }, 30_000);
+    // Eliminar de pendents
+    setPendingCorrections((prev) => {
+      if (!prev) return null;
+      const next = new Map(prev);
+      next.delete(segId);
+      return next.size > 0 ? next : null;
+    });
+  }, [pendingCorrections, segments, subsHistory]);
+
+  /** Rebutja la correcció d'un segment: el descarta i segueix amb el text original. */
+  const handleRejectCorrection = useCallback((segId: number) => {
+    setPendingCorrections((prev) => {
+      if (!prev) return null;
+      const next = new Map(prev);
+      next.delete(segId);
+      return next.size > 0 ? next : null;
+    });
+  }, []);
+
+  /** Accepta totes les correccions pendents en un sol commit. */
+  const handleAcceptAllCorrections = useCallback(() => {
+    if (!pendingCorrections || pendingCorrections.size === 0) return;
+    const newSegs = segments.map((s) => {
+      const pending = pendingCorrections.get(s.id as number);
+      return pending ? { ...s, originalText: pending.proposed, richText: pending.proposed } : s;
+    });
+    subsHistory.commit(newSegs);
+    const acceptedIds = new Set<number>(pendingCorrections.keys());
+    setCorrectionHighlightIds(acceptedIds);
     setTimeout(() => setCorrectionHighlightIds(new Set()), 30_000);
-  }, [subsHistory]);
+    setPendingCorrections(null);
+  }, [pendingCorrections, segments, subsHistory]);
+
+  /** Descarta totes les correccions pendents sense aplicar cap canvi. */
+  const handleRejectAllCorrections = useCallback(() => {
+    setPendingCorrections(null);
+  }, []);
 
   const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
     useSubtitleAIOperations({
@@ -611,6 +671,11 @@ const handleSave = useCallback(() => {
             onInsert={handleInsertSegment}
             onDelete={handleDeleteSegment}
             correctionHighlightIds={correctionHighlightIds.size > 0 ? correctionHighlightIds : undefined}
+            pendingCorrections={pendingCorrections ?? undefined}
+            onAcceptCorrection={handleAcceptCorrection}
+            onRejectCorrection={handleRejectCorrection}
+            onAcceptAllCorrections={handleAcceptAllCorrections}
+            onRejectAllCorrections={handleRejectAllCorrections}
           />
         </div>
       </div>
@@ -621,7 +686,7 @@ const handleSave = useCallback(() => {
           isOpen={isCorrectionModalOpen}
           onClose={() => setIsCorrectionModalOpen(false)}
           projectId={guionProjectId}
-          onApply={handleApplyCorrection}
+          onCorrectionReady={handleCorrectionReady}
           hasGuion={Boolean(guionContent?.trim())}
         />
       )}
