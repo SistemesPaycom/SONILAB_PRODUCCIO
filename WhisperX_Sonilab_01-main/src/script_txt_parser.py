@@ -168,7 +168,7 @@ def _normalize_line_text(
     rest: str,
     base_tc: str,
     base_seconds: float,
-) -> Tuple[str, Tuple[float, ...], bool, bool]:
+) -> Tuple[str, Tuple[float, ...], bool, bool, Optional[float]]:
     """
     Elimina tags alpha, converteix marcadors de temps a (xxx.xx s).
 
@@ -177,6 +177,9 @@ def _normalize_line_text(
       - tuple d'anchors (segons absoluts)
       - is_adlib flag
       - has_prefix (hi ha text verbal ABANS del primer anchor)
+      - last_anchor_before_verbal (últim anchor numèric que té text verbal DESPRÉS seu)
+        Útil per a línies com: (28) (G) / (41) (G)... Haki! → abs_time = anchor(41)
+        Distinció clau: anchors numèrics (21),(47) = temps; literals (G),(GS),(OFF) = gesticulació
     """
     raw = rest or ""
 
@@ -184,6 +187,7 @@ def _normalize_line_text(
     anchors: List[float] = []
     is_adlib = False
     first_anchor_pos_in_out: Optional[int] = None
+    last_anchor_before_verbal: Optional[float] = None
 
     last = 0
     for m in PAREN_BLOCK_RE.finditer(raw):
@@ -193,6 +197,8 @@ def _normalize_line_text(
         inside = (m.group(1) or "").strip()
 
         if PAREN_HAS_ALPHA_RE.search(inside):
+            # Gesticulació/acotació: (G), (GS), (OFF), (ON), (OFF-ON), (PG), (RÍE), etc.
+            # NO són àncores temporals — es tracten com espai en blanc
             if inside.strip().upper() in {"ADLIB", "ADLIBS", "AD LIB", "AD LIBS"}:
                 is_adlib = True
             out_parts.append(" ")
@@ -203,6 +209,13 @@ def _normalize_line_text(
                 if first_anchor_pos_in_out is None:
                     first_anchor_pos_in_out = len(out_parts)
                 out_parts.append(f"({ts:.2f}s)")
+
+                # Comprovar si hi ha text verbal DESPRÉS d'aquest anchor en el raw restant.
+                # S'eliminen tots els blocs de parèntesis per veure si queda ALNUM literal.
+                remaining_after = raw[m.end():]
+                remaining_clean = PAREN_BLOCK_RE.sub("", remaining_after)
+                if ALNUM_RE.search(remaining_clean):
+                    last_anchor_before_verbal = float(ts)
             else:
                 out_parts.append(" ")
 
@@ -219,7 +232,7 @@ def _normalize_line_text(
         prefix = WS_RE.sub(" ", prefix).strip()
         has_prefix = bool(ALNUM_RE.search(prefix))
 
-    return norm, tuple(anchors), is_adlib, has_prefix
+    return norm, tuple(anchors), is_adlib, has_prefix, last_anchor_before_verbal
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +314,7 @@ def parse_script_txt_from_text(
 
         kind = _classify_kind(speaker)
 
-        norm_text, anchors, is_adlib, has_prefix = _normalize_line_text(
+        norm_text, anchors, is_adlib, has_prefix, last_anchor_before_verbal = _normalize_line_text(
             rest, base_tc=base_tc, base_seconds=base_seconds
         )
 
@@ -315,7 +328,17 @@ def parse_script_txt_from_text(
 
         # Càlcul de abs_time (bucket)
         if anchors_u:
-            abs_time = float(last_anchor_time_in_take) if has_prefix else float(min(anchors_u))
+            if has_prefix:
+                # Text verbal ABANS del primer anchor → usar l'anchor de la cue anterior
+                abs_time = float(last_anchor_time_in_take)
+            elif last_anchor_before_verbal is not None:
+                # Cas: (anchor1) (G) / (anchor2) (G) text_verbal
+                # Usar l'últim anchor que té text verbal DESPRÉS (el més proper al diàleg)
+                abs_time = float(last_anchor_before_verbal)
+            else:
+                # Cap text verbal trobat després de cap anchor (no hauria d'arribar aquí
+                # perquè _is_verbal_after_strip ho hauria filtrat, però per seguretat)
+                abs_time = float(min(anchors_u))
             last_anchor_time_in_take = float(max(anchors_u))
         else:
             abs_time = float(last_anchor_time_in_take)

@@ -78,141 +78,238 @@ export class TranscriptionProcessor {
       const timingFix = s.timingFix !== false;
       const scriptText = String(s.scriptText || '').trim();
 
-      const pythonExe = this.config.get<string>('WHISPERX_PYTHON', 'python');
-      const runnerPath = this.config.get<string>('WHISPERX_RUNNER');
-      if (!runnerPath) throw new Error('WHISPERX_RUNNER is not set in .env');
+      // ─── PURFVIEW REAL EXE CHECK ──────────────────────────────────────────────
+      // Si PURFVIEW_XXL_EXE_PATH apunta a un faster-whisper-xxl.exe real i l'engine
+      // és purfview-xxl, s'executa el .exe directament en comptes del pipeline Python.
+      // Fallback automàtic al pipeline Python si el .exe no existeix o l'env no està set.
+      const purfviewExePath = (this.config.get<string>('PURFVIEW_XXL_EXE_PATH', '') || '').trim();
+      const usePurfviewExe = engine === 'purfview-xxl' && !!purfviewExePath && fs.existsSync(purfviewExePath);
 
-      const hfToken = this.config.get<string>('HUGGINGFACE_HUB_TOKEN', '');
-
-      const args: string[] = [
-        runnerPath,
-        '--input',
-        mediaPath,
-        '--output_dir',
-        outDir,
-        '--model',
-        model,
-        '--profile',
-        profile,
-        '--batch_size',
-        batchSize,
-        '--device',
-        device,
-      ];
-
-      args.push('--engine', engine);
-
-      if (timingFix) {
-        args.push('--timing-fix');
-      } else {
-        args.push('--no-timing-fix');
-      }
-
-      // purfview-xxl activa postprocess automáticamente en el runner,
-      // pero lo pasamos explícitamente para que quede en el log.
-      // --subtitle-edit-compat: reduce merges agressius (orphan_gap 1s→0.20s,
-      // small_gap 0.85s→0.20s) per produir ~300-360 cues en lloc de ~235,
-      // similar al resultat de Subtitle Edit amb faster-whisper-xxl.exe.
       if (engine === 'purfview-xxl') {
-        args.push('--postprocess');
-        args.push('--subtitle-edit-compat');
+        if (usePurfviewExe) {
+          console.log(`[PURFVIEW-EXE] Real exe trodat: ${purfviewExePath}`);
+        } else if (purfviewExePath) {
+          console.warn(`[PURFVIEW-EXE] PURFVIEW_XXL_EXE_PATH configurat (${purfviewExePath}) però el fitxer no existeix. Fallback al pipeline Python.`);
+        } else {
+          console.log(`[PURFVIEW-EXE] PURFVIEW_XXL_EXE_PATH no configurat. S'usa el pipeline Python per a purfview-xxl.`);
+        }
       }
 
-      console.log(`[TRANSCRIBE] Engine: ${engine} | Model: ${model} | Device: ${device} | Language: ${language || 'auto'} | Args: ${args.slice(2).join(' ')}`);
+      if (usePurfviewExe) {
+        // ── Ruta A: Exe real de Purfview ──────────────────────────────────────
+        await this.projects.updateJob(jobId, { progress: 15 } as any);
+        job.progress(15);
 
-      if (language) args.push('--language', language);
-      if (offline) args.push('--offline');
+        const exeArgs: string[] = ['--beep_off', '--standard'];
+        if (language) exeArgs.push('--language', language);
+        exeArgs.push('--model', model);
+        // El .exe output al directori del vídeo d'entrada (comportament per defecte)
+        exeArgs.push(mediaPath);
 
-      // runner soporta --no-diarization
-      if (!diarization) args.push('--no-diarization');
+        console.log(`[PURFVIEW-EXE] Device: ${device} | Language: ${language || 'auto'} | Model: ${model}`);
+        console.log(`[PURFVIEW-EXE] Executant: “${purfviewExePath}” ${exeArgs.join(' ')}`);
 
-      if (hfToken) args.push('--hf_token', hfToken);
+        const { stderr: exeStderr, exitCode: exeExitCode } = await new Promise<{
+          stderr: string;
+          exitCode: number;
+        }>((resolve, reject) => {
+          const child = spawn(purfviewExePath, exeArgs, {
+            cwd: path.dirname(purfviewExePath),
+            env: { ...process.env },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
 
-      // Script-align: escribir el guion a un archivo temporal y pasarlo al runner
-      let scriptFilePath: string | null = null;
-      if (engine === 'script-align' && scriptText) {
-        scriptFilePath = path.join(outDir, '_script_input.txt');
-        await fsp.writeFile(scriptFilePath, scriptText, 'utf-8');
-        args.push('--script-file', scriptFilePath);
-      }
+          let stderrBuf = '';
+          let bumped = false;
 
-      await this.projects.updateJob(jobId, { progress: 15 } as any);
-      job.progress(15);
+          child.stdout.on('data', (d: Buffer) => {
+            const s = d.toString();
+            // Log exe stdout for debugging
+            process.stdout.write(`[PURFVIEW-EXE] ${s}`);
+            if (!bumped) {
+              bumped = true;
+              this.projects.updateJob(jobId, { progress: 50 } as any).catch(() => {});
+              job.progress(50);
+            }
+          });
 
-      // 4) Ejecutar runner Python
-      const { stdout, stderr, exitCode } = await new Promise<{
-        stdout: string;
-        stderr: string;
-        exitCode: number;
-      }>((resolve, reject) => {
-        const child = spawn(pythonExe, args, {
-          cwd: path.dirname(runnerPath), // importante para imports del runner
-          env: { ...process.env },       // hereda FFMPEG_BIN, HF_HOME, token, etc.
-          stdio: ['ignore', 'pipe', 'pipe'],
+          child.stderr.on('data', (d: Buffer) => {
+            stderrBuf += d.toString();
+          });
+
+          child.on('error', reject);
+          child.on('close', (code) => resolve({ stderr: stderrBuf, exitCode: code ?? 1 }));
         });
 
-        let stdoutBuf = '';
-        let stderrBuf = '';
-        let bumped = false;
+        if (exeExitCode !== 0) {
+          throw new Error(`faster-whisper-xxl.exe ha fallat (exit ${exeExitCode}).\nSTDERR:\n${exeStderr || '(buit)'}`);
+        }
 
-        child.stdout.on('data', (d) => {
-          const s = d.toString();
-          stdoutBuf += s;
+        // Buscar SRT output: per defecte el .exe escriu al directori del vídeo amb el mateix nom base
+        const baseName = path.basename(mediaPath, path.extname(mediaPath));
+        const mediaDir = path.dirname(mediaPath);
+        const exeSrtPath = path.join(mediaDir, baseName + '.srt');
 
-          // Subida “coarse” de progreso al primer output
-          if (!bumped) {
-            bumped = true;
-            this.projects.updateJob(jobId, { progress: 50 } as any).catch(() => {});
-            job.progress(50);
-          }
+        if (!fs.existsSync(exeSrtPath)) {
+          throw new Error(
+            `faster-whisper-xxl.exe ha completat però el SRT no s'ha trobat a: ${exeSrtPath}\nSTDERR: ${exeStderr}`,
+          );
+        }
+
+        // Copiar SRT al outDir per consistència amb el pipeline Python
+        const copiedSrtPath = path.join(outDir, baseName + '.srt');
+        fs.copyFileSync(exeSrtPath, copiedSrtPath);
+        console.log(`[PURFVIEW-EXE] SRT copiat a: ${copiedSrtPath}`);
+
+        await this.projects.updateJob(jobId, { progress: 80 } as any);
+        job.progress(80);
+
+        // Guardar SRT en Mongo
+        const srtContent = await fsp.readFile(copiedSrtPath, 'utf-8');
+        await this.projects.setSrtContent(ownerId, project.srtDocumentId, srtContent);
+
+        await this.projects.updateJob(jobId, { status: 'done', progress: 100, error: null } as any);
+        await this.projects.updateProject(projectId, { status: 'ready', lastError: null } as any);
+        job.progress(100);
+
+      } else {
+        // ── Ruta B: Pipeline Python (tots els engines, inclòs purfview-xxl sense .exe) ──
+        const pythonExe = this.config.get<string>('WHISPERX_PYTHON', 'python');
+        const runnerPath = this.config.get<string>('WHISPERX_RUNNER');
+        if (!runnerPath) throw new Error('WHISPERX_RUNNER is not set in .env');
+
+        const hfToken = this.config.get<string>('HUGGINGFACE_HUB_TOKEN', '');
+
+        const args: string[] = [
+          runnerPath,
+          '--input',
+          mediaPath,
+          '--output_dir',
+          outDir,
+          '--model',
+          model,
+          '--profile',
+          profile,
+          '--batch_size',
+          batchSize,
+          '--device',
+          device,
+        ];
+
+        args.push('--engine', engine);
+
+        if (timingFix) {
+          args.push('--timing-fix');
+        } else {
+          args.push('--no-timing-fix');
+        }
+
+        // purfview-xxl activa postprocess automáticamente en el runner,
+        // pero lo pasamos explícitamente para que quede en el log.
+        // --subtitle-edit-compat: reduce merges agressius (orphan_gap 1s→0.20s,
+        // small_gap 0.85s→0.20s) per produir ~300-360 cues en lloc de ~235,
+        // similar al resultat de Subtitle Edit amb faster-whisper-xxl.exe.
+        if (engine === 'purfview-xxl') {
+          args.push('--postprocess');
+          args.push('--subtitle-edit-compat');
+        }
+
+        console.log(`[TRANSCRIBE] Engine: ${engine} | Model: ${model} | Device: ${device} | Language: ${language || 'auto'} | Args: ${args.slice(2).join(' ')}`);
+
+        if (language) args.push('--language', language);
+        if (offline) args.push('--offline');
+
+        // runner soporta --no-diarization
+        if (!diarization) args.push('--no-diarization');
+
+        if (hfToken) args.push('--hf_token', hfToken);
+
+        // Script-align: escribir el guion a un archivo temporal y pasarlo al runner
+        let scriptFilePath: string | null = null;
+        if (engine === 'script-align' && scriptText) {
+          scriptFilePath = path.join(outDir, '_script_input.txt');
+          await fsp.writeFile(scriptFilePath, scriptText, 'utf-8');
+          args.push('--script-file', scriptFilePath);
+        }
+
+        await this.projects.updateJob(jobId, { progress: 15 } as any);
+        job.progress(15);
+
+        // 4) Ejecutar runner Python
+        const { stdout, stderr, exitCode } = await new Promise<{
+          stdout: string;
+          stderr: string;
+          exitCode: number;
+        }>((resolve, reject) => {
+          const child = spawn(pythonExe, args, {
+            cwd: path.dirname(runnerPath), // importante para imports del runner
+            env: { ...process.env },       // hereda FFMPEG_BIN, HF_HOME, token, etc.
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+
+          let stdoutBuf = '';
+          let stderrBuf = '';
+          let bumped = false;
+
+          child.stdout.on('data', (d) => {
+            const s = d.toString();
+            stdoutBuf += s;
+
+            // Subida “coarse” de progreso al primer output
+            if (!bumped) {
+              bumped = true;
+              this.projects.updateJob(jobId, { progress: 50 } as any).catch(() => {});
+              job.progress(50);
+            }
+          });
+
+          child.stderr.on('data', (d) => {
+            stderrBuf += d.toString();
+          });
+
+          child.on('error', (err) => reject(err));
+          child.on('close', (code) => resolve({ stdout: stdoutBuf, stderr: stderrBuf, exitCode: code ?? 0 }));
         });
 
-        child.stderr.on('data', (d) => {
-          stderrBuf += d.toString();
-        });
+        // Limpiar archivo de guion temporal
+        if (scriptFilePath && fs.existsSync(scriptFilePath)) {
+          try { fs.unlinkSync(scriptFilePath); } catch (_) {}
+        }
 
-        child.on('error', (err) => reject(err));
-        child.on('close', (code) => resolve({ stdout: stdoutBuf, stderr: stderrBuf, exitCode: code ?? 0 }));
-      });
+        if (exitCode !== 0) {
+          throw new Error(`WhisperX failed (exit ${exitCode}). STDERR:\n${stderr || '(empty)'}`);
+        }
 
-      // Limpiar archivo de guion temporal
-      if (scriptFilePath && fs.existsSync(scriptFilePath)) {
-        try { fs.unlinkSync(scriptFilePath); } catch (_) {}
+        await this.projects.updateJob(jobId, { progress: 80 } as any);
+        job.progress(80);
+
+        // 5) El runner imprime logs [STATUS] y al final un JSON en una línea.
+        // Buscamos la última línea que parezca JSON.
+        const lines = stdout
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+        const jsonLine = [...lines].reverse().find((l) => l.startsWith('{') && l.endsWith('}'));
+        if (!jsonLine) {
+          throw new Error(`Runner did not output JSON. STDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+        }
+
+        const result = JSON.parse(jsonLine) as any;
+        const srtPath: string | undefined = result?.copied?.srt || result?.out_srt;
+
+        if (!srtPath || !fs.existsSync(srtPath)) {
+          throw new Error(`SRT not found. srtPath=${srtPath}\nSTDERR:\n${stderr}`);
+        }
+
+        // 6) Guardar SRT en Mongo (Document.contentByLang._unassigned)
+        const srtText = await fsp.readFile(srtPath, 'utf-8');
+        await this.projects.setSrtContent(ownerId, project.srtDocumentId, srtText);
+
+        await this.projects.updateJob(jobId, { status: 'done', progress: 100, error: null } as any);
+        await this.projects.updateProject(projectId, { status: 'ready', lastError: null } as any);
+        job.progress(100);
       }
-
-      if (exitCode !== 0) {
-        throw new Error(`WhisperX failed (exit ${exitCode}). STDERR:\n${stderr || '(empty)'}`);
-      }
-
-      await this.projects.updateJob(jobId, { progress: 80 } as any);
-      job.progress(80);
-
-      // 5) El runner imprime logs [STATUS] y al final un JSON en una línea.
-      // Buscamos la última línea que parezca JSON.
-      const lines = stdout
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      const jsonLine = [...lines].reverse().find((l) => l.startsWith('{') && l.endsWith('}'));
-      if (!jsonLine) {
-        throw new Error(`Runner did not output JSON. STDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
-      }
-
-      const result = JSON.parse(jsonLine) as any;
-      const srtPath: string | undefined = result?.copied?.srt || result?.out_srt;
-
-      if (!srtPath || !fs.existsSync(srtPath)) {
-        throw new Error(`SRT not found. srtPath=${srtPath}\nSTDERR:\n${stderr}`);
-      }
-
-      // 6) Guardar SRT en Mongo (Document.contentByLang._unassigned)
-      const srtText = await fsp.readFile(srtPath, 'utf-8');
-      await this.projects.setSrtContent(ownerId, project.srtDocumentId, srtText);
-
-      await this.projects.updateJob(jobId, { status: 'done', progress: 100, error: null } as any);
-      await this.projects.updateProject(projectId, { status: 'ready', lastError: null } as any);
-      job.progress(100);
     } catch (e: any) {
       const msg = e?.message || 'Unknown error';
       await this.projects.updateJob(jobId, { status: 'error', error: msg } as any);

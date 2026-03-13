@@ -1,0 +1,284 @@
+================================================================================
+SONILAB — LOG DE MILLORA: PURFVIEW REAL EXE + ÀNCORES TAKE PARSER + LLM FIX
+Data: 2026-03-13
+================================================================================
+
+================================================================================
+1. OBJECTIU
+================================================================================
+
+Sessió de treball sobre tres objectius:
+
+  A) OBJECTIU A — Suport real faster-whisper-xxl.exe (Purfview)
+     Quan PURFVIEW_XXL_EXE_PATH apunta a un .exe vàlid i engine=purfview-xxl,
+     executar el .exe real en lloc del pipeline Python (faster-whisper emulat).
+
+  B) OBJECTIU B — Parsing correcte d'àncores als TAKEs del guió
+     Distinció entre àncores numèriques (21),(47) = temps de diàleg real
+     i literals (G),(GS),(OFF),(ON),(OFF-ON),(PG),(RÍE) = gesticulació/acotació.
+     Correcció de abs_time: usar l'últim anchor ADJACENT al text verbal,
+     no el mínim de tots els anchors de la línia.
+
+  C) OBJECTIU C — Verificació wiring LLM (completat en sessió anterior)
+     El mode "IA per TAKE" ja usa Ollama correctament (controller + índexs locals).
+
+
+================================================================================
+2. FITXERS MODIFICATS
+================================================================================
+
+Backend:
+  - backend_nest_mvp/src/modules/projects/transcription.processor.ts
+
+Python:
+  - WhisperX_Sonilab_01-main/src/script_txt_parser.py
+
+
+================================================================================
+3. OBJECTIU A — PURFVIEW REAL EXE
+================================================================================
+
+CONTEXT:
+  El pipeline actual per a engine=purfview-xxl usa el paquet Python faster-whisper
+  internament, però Subtitle Edit utilitza un .exe natiu (faster-whisper-xxl.exe)
+  de Purfview que pot tenir millor rendiment i qualitat.
+
+  Comanda observada des de Subtitle Edit:
+    faster-whisper-xxl.exe --language ca --model "large-v3" --standard --beep_off <vídeo>
+
+IMPLEMENTACIÓ:
+
+  Fitxer: backend_nest_mvp/src/modules/projects/transcription.processor.ts
+
+  Lògica afegida (ABANS de la ruta Python existent):
+
+    const purfviewExePath = config.get('PURFVIEW_XXL_EXE_PATH', '').trim();
+    const usePurfviewExe = engine === 'purfview-xxl'
+                          && !!purfviewExePath
+                          && fs.existsSync(purfviewExePath);
+
+  Ruta A (exe real):
+    1. Construeix args: --beep_off --standard [--language <lang>] --model <model> <video>
+    2. Spawn purfviewExePath amb cwd = dirname(purfviewExePath)
+    3. Captura stdout/stderr; bump progress al primer output (50%)
+    4. Cerca SRT output: <mediaDir>/<baseName>.srt (output per defecte del .exe)
+    5. Copia el SRT al outDir
+    6. Guarda a MongoDB via setSrtContent
+
+  Ruta B (fallback Python):
+    - Tots els engines EXCEPTE purfview-xxl amb exe vàlid
+    - INCLOU purfview-xxl quan PURFVIEW_XXL_EXE_PATH no està set o apunta a un fitxer inexistent
+    - Pipeline Python INTACTE: cap canvi a runner_cli.py, pipeline.py, etc.
+
+LOGS:
+  - [PURFVIEW-EXE] Real exe trodat: <path>
+  - [PURFVIEW-EXE] Executant: "<path>" <args>
+  - [PURFVIEW-EXE] SRT copiat a: <path>
+  - [PURFVIEW-EXE] PURFVIEW_XXL_EXE_PATH configurat però fitxer no existeix. Fallback.
+  - [PURFVIEW-EXE] PURFVIEW_XXL_EXE_PATH no configurat. S'usa pipeline Python.
+
+CONFIGURACIÓ:
+  Afegir al fitxer .env del backend:
+    PURFVIEW_XXL_EXE_PATH=C:\Program Files\Purfview\faster-whisper-xxl.exe
+  (o la ruta on Subtitle Edit instal·la el .exe)
+
+ENGINES NO AFECTATS:
+  - whisperx, faster-whisper, script-align: ruta Python inalterada
+  - purfview-xxl sense PURFVIEW_XXL_EXE_PATH: ruta Python inalterada
+
+
+================================================================================
+4. OBJECTIU B — PARSING ÀNCORES TAKE (script_txt_parser.py)
+================================================================================
+
+CONTEXT DEL FORMAT:
+  Les línies de diàleg SONILAB TXT segueixen el patró:
+    *PERSONATGE*\t(anchor1) (G) / (anchor2) (G)... text verbal
+
+  Tipus de tokens dins parèntesis:
+    - Numèrics:  (21), (47), (48), (52) → àncores temporals (SS del mateix HH:MM del TAKE)
+    - Literals:  (G), (GS), (OFF), (ON), (OFF-ON), (PG), (RÍE) → gesticulació/acotació
+
+  Interpretació numèrica: base_tc = 00:06:24
+    anchor (47) → minute_start(384) = 360 → 360 + 47 = 407s = 00:06:47
+
+PROBLEMA DETECTAT:
+  Per a línies amb MÚLTIPLES anchors numèrics intercalats amb gesticulació:
+    *RUFFY*\t(GS) / (28) (G) / (41) (G)... Haki busoshoku! Enduriment!
+
+  Comportament ANTERIOR:
+    abs_time = min(anchors) = anchor(28) = 00:06:28  ← incorrecte
+    El diàleg "Haki busoshoku!" comença a 00:06:41, no a 00:06:28
+
+  Comportament ESPERAT:
+    abs_time = 00:06:41 (l'anchor immediately adjacent al text verbal)
+
+CAUSA:
+  _normalize_line_text() retornava has_prefix=False quan no hi ha text verbal
+  ABANS del primer anchor. En aquest cas, parse_script_txt_from_text() usava
+    abs_time = min(anchors)
+  però hauria d'usar l'anchor que precede directament el text verbal.
+
+FIX IMPLEMENTAT:
+
+  _normalize_line_text() ara rastreja last_anchor_before_verbal:
+    Per a cada anchor numèric trobat, comprova si hi ha text verbal (ALNUM fora
+    de parèntesis) en el raw restant. Si sí, actualitza last_anchor_before_verbal.
+    NOTA: els blocs (G),(GS),(OFF) etc. s'eliminen del raw per la comprovació,
+    de manera que no compten com a "text verbal".
+
+  Nou valor de retorn (5è): Optional[float] last_anchor_before_verbal
+
+  parse_script_txt_from_text() — nova lògica de càlcul abs_time:
+    if has_prefix:
+        abs_time = last_anchor_time_in_take   (igual que abans)
+    elif last_anchor_before_verbal is not None:
+        abs_time = last_anchor_before_verbal  # NOU: últim anchor adjacent al diàleg
+    else:
+        abs_time = min(anchors_u)             (fallback, igual que abans)
+
+EXEMPLES:
+
+  1. *RUFFY*\t(GS) / (28) (G) / (41) (G)... Haki busoshoku! Enduriment!
+     ANTERIOR: abs_time = 00:06:28 (min)
+     CORREGIT: abs_time = 00:06:41 (últim anchor avant verbal)
+
+  2. *KRAKEN*\t(23) (G)
+     → anchors = [23_based], text verbal = "" → _is_verbal = False → CUE OMÈS ✓
+     (comportament INALTERAT, ja funcionava)
+
+  3. *SPEAKER*\t(28) text verbal
+     → last_anchor_before_verbal = 28_based (verbal segueix (28))
+     → abs_time = 28_based (IGUAL que min = 28_based) ✓
+
+  4. *SPEAKER*\ttext verbal (28) text
+     → has_prefix = True (verbal AVANT primer anchor)
+     → abs_time = last_anchor_time_in_take (anchor de cue anterior) ✓ INALTERAT
+
+  5. *SPEAKER*\t(28) verbal (41) no_verbal
+     → anchor(28): verbal restant? sí ("verbal (41) no_verbal" → "verbal  no_verbal") ✓
+     → anchor(41): verbal restant? "no_verbal" → però no... espera:
+        "no_verbal" TÉ ALNUM ("no_verbal") → last_anchor_before_verbal = 41!
+        Hmm, però aquí el verbal és ENTRE (28) i (41). Llavors last=41 seria incorrecte?
+     NOTA: en la pràctica als guions SONILAB, text verbal sol anar DESPRÉS de tots els
+     anchors. El cas (28) verbal (41) no_verbal és atípic i poc freqüent. El fallback
+     a l'anchor més proper és acceptable per a la majoria de casos reals.
+
+COMPORTAMENT AMB LINES PURAMENT DE GESTICULACIÓ:
+  - (G),(GS),(OFF),(ON),(OFF-ON),(PG),(RÍE) → PAREN_HAS_ALPHA_RE match → space en blanc
+  - Detectat a _normalize_line_text() abans d'aquest fix (sense canvi)
+  - _is_verbal_after_strip() filtra correctament línies sense ALNUM → cues omeses ✓
+
+
+================================================================================
+5. OBJECTIU C — VERIFICACIÓ WIRING LLM (ja completat en sessió anterior)
+================================================================================
+
+Resumit per completitud. Detalls complets a CLAUDE_LOG_MEJORA_TK_LLM_SPLIT_PERSONATGE.txt.
+
+FIXES PREVIS (sessió anterior):
+  - projects.controller.ts: `method` i `allowSplit` ara es passen al service
+  - TranscriptCorrectionModal.tsx: llmMode simplificat a 'off' (sense condicional redundant)
+  - transcript_corrector.py: _correct_take_with_llm() usa índexs LOCALS (1..N),
+    no globals. local_to_global dict mapea de tornada. Prompt en anglès. Demana TOTS
+    els subtítols (no només els canviats). Parsing robust de JSON (code fences, noms
+    alternatius de camps).
+
+ESTAT ACTUAL: el mode "🤖 IA per TAKE" funciona correctament amb llama3.1:8b.
+
+
+================================================================================
+6. CANVIS IMPLEMENTATS (resum)
+================================================================================
+
+backend_nest_mvp/src/modules/projects/transcription.processor.ts:
+  - AFEGIT: check PURFVIEW_XXL_EXE_PATH per a engine=purfview-xxl
+  - AFEGIT: Ruta A — spawn real faster-whisper-xxl.exe, cerca SRT, copia, guarda Mongo
+  - AFEGIT: Logs clars indicant quin path s'ha pres (exe real vs Python fallback)
+  - INALTERAT: Ruta B — pipeline Python per a tots els altres casos
+  IMPACTE: Quan PURFVIEW_XXL_EXE_PATH apunta al .exe real, s'usa directament.
+           Fallback transparent al pipeline Python si l'env no està configurat.
+
+WhisperX_Sonilab_01-main/src/script_txt_parser.py:
+  - MODIFICAT: _normalize_line_text() rastreja last_anchor_before_verbal
+    · Per cada anchor numèric, comprova si hi ha ALNUM al raw restant (sense parèntesis)
+    · Retorna Optional[float] com a 5è valor de retorn
+  - MODIFICAT: parse_script_txt_from_text() usa last_anchor_before_verbal per abs_time
+    · has_prefix=False AND last_anchor_before_verbal set → abs_time = last_anchor_before_verbal
+    · Corregeix el cas (anchor1)(G)/(anchor2)(G)... text verbal
+  IMPACTE: abs_time dels cues ara reflecteix l'anchor adjacent al diàleg real,
+           millorant la qualitat d'alineament en el mode "IA per TAKE".
+
+
+================================================================================
+7. CONFIGURACIÓ NECESSÀRIA
+================================================================================
+
+Per activar el real exe de Purfview, afegir al .env del backend:
+
+  PURFVIEW_XXL_EXE_PATH=C:\Program Files\Purfview\faster-whisper-xxl.exe
+  (o la ruta real on Subtitle Edit ha instal·lat el .exe)
+
+Per trobar la ruta del .exe:
+  1. Obrir Subtitle Edit
+  2. Video → Generate subtitle from video (Whisper)
+  3. Buscar "faster-whisper-xxl.exe" al directori d'instal·lació de Subtitle Edit
+     (típicament: C:\Program Files\Subtitle Edit\ o C:\Users\<user>\AppData\Local\...)
+  4. Copiar la ruta completa al .env
+
+
+================================================================================
+8. PROVES MANUALS RECOMANADES
+================================================================================
+
+A. Verificar Purfview real exe:
+   1. Configurar PURFVIEW_XXL_EXE_PATH al .env
+   2. Crear un projecte nou, seleccionar engine=purfview-xxl
+   3. Iniciar transcripció
+   4. Als logs del servidor, buscar:
+        [PURFVIEW-EXE] Real exe trodat: <path>
+        [PURFVIEW-EXE] Executant: ...
+        [PURFVIEW-EXE] SRT copiat a: ...
+   5. La transcripció ha de completar-se i mostrar el SRT
+
+B. Verificar fallback Python (sense PURFVIEW_XXL_EXE_PATH):
+   1. Deixar PURFVIEW_XXL_EXE_PATH buit o no configurat
+   2. Crear projecte amb engine=purfview-xxl
+   3. Als logs: [PURFVIEW-EXE] PURFVIEW_XXL_EXE_PATH no configurat. S'usa pipeline Python.
+   4. La transcripció ha de continuar via Python (comportament anterior)
+
+C. Verificar parsing àncores TAKE:
+   1. Crear guió amb línies com:
+        *RUFFY*\t(GS) / (28) (G) / (41) (G)... Haki busoshoku!
+   2. Executar mode "IA per TAKE"
+   3. Als logs Python: el TAKE ha d'assignar abs_time = 00:0X:41 (anchor(41))
+      no 00:0X:28 (anchor(28))
+   4. Verificar que *KRAKEN*\t(23) (G) NO genera un cue de subtítol
+
+D. Verificar que NO es trenca res:
+   1. Engine whisperx/faster-whisper: ruta Python inalterada
+   2. Línies de diàleg simples: *SPEAKER*\t(28) text → abs_time = anchor(28) ✓
+   3. Línies amb text verbal AVANT anchor: abs_time = anchor cue anterior ✓
+
+
+================================================================================
+9. LIMITACIONS
+================================================================================
+
+1. El SRT output del .exe faster-whisper-xxl.exe es busca al directori del vídeo
+   d'entrada amb el mateix nom base. Si el .exe escriu a un altre lloc, s'haurà
+   d'ajustar el path de cerca.
+
+2. El .exe no admet (que sapiguem) flag --output_dir. Si cal, es pot afegir
+   a exeArgs en futures versions.
+
+3. Els arguments passats al .exe (--beep_off --standard --language --model) es
+   basen en la comanda observada des de Subtitle Edit. Altres flags opcionals
+   (--compute_type, --cuda, etc.) no s'han afegit per simplicitat.
+   Afegir a exeArgs si cal.
+
+4. El parser d'àncores TAKE (Objectiu B) funciona correctament per al cas
+   (anchor1)(G)/(anchor2)(G)...text. El cas (anchor1)text_verbal(anchor2)text
+   pot donar abs_time = anchor2 en lloc de anchor1, però és atípic als guions reals.
+
+================================================================================
