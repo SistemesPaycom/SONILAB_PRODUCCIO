@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { OverlayConfig } from '../../types';
 import SegmentItem from './SegmentItem';
@@ -79,17 +79,31 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   const { caretHintRef } = useSubtitleEditor();
   const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
 
+  // Throttle selectionchange: queryCommandState fuerza style recalc.
+  // Limitem a 1 update per 200ms per evitar layout thrashing.
   useEffect(() => {
+    let rafId = 0;
+    let lastUpdate = 0;
     const updateFormatButtons = () => {
-      setFormatState({
-        bold: document.queryCommandState('bold'),
-        italic: document.queryCommandState('italic'),
-        underline: document.queryCommandState('underline')
+      const now = performance.now();
+      if (now - lastUpdate < 200) return;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        lastUpdate = performance.now();
+        setFormatState({
+          bold: document.queryCommandState('bold'),
+          italic: document.queryCommandState('italic'),
+          underline: document.queryCommandState('underline')
+        });
       });
     };
 
     document.addEventListener('selectionchange', updateFormatButtons);
-    return () => document.removeEventListener('selectionchange', updateFormatButtons);
+    return () => {
+      document.removeEventListener('selectionchange', updateFormatButtons);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   const handleFormatAction = (command: string) => {
@@ -97,11 +111,10 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
     document.execCommand(command, false);
   };
 
-  const handleNavigate = (direction: 'next' | 'prev', currentId: number) => {
+  const handleNavigate = useCallback((direction: 'next' | 'prev', currentId: number) => {
     const idx = segments.findIndex(s => s.id === currentId);
     if (direction === 'next' && idx < segments.length - 1) {
         const nextId = segments[idx + 1].id as number;
-        // Utilitzem el sistema de hints global per garantir consistència
         caretHintRef.current = {
             segmentId: nextId,
             target: 'first',
@@ -121,7 +134,11 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
         };
         onSegmentClick(prevId);
     }
-  };
+  }, [segments, onSegmentClick, caretHintRef]);
+
+  // Callbacks estables per a onInsert — eviten crear arrow functions noves a cada render
+  const handleInsertBefore = useCallback((id: number) => onInsert?.(id, 'before'), [onInsert]);
+  const handleInsertAfter = useCallback((id: number) => onInsert?.(id, 'after'), [onInsert]);
 
   return (
     <div 
@@ -271,20 +288,20 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
                 isEditable={isEditable}
                 isCorrected={correctionHighlightIds?.has(segment.id as number)}
                 proposedText={pendingCorrections?.get(segment.id as number)?.proposed}
-                onAccept={onAcceptCorrection ? () => onAcceptCorrection(segment.id as number) : undefined}
-                onReject={onRejectCorrection ? () => onRejectCorrection(segment.id as number) : undefined}
+                onAccept={onAcceptCorrection}
+                onReject={onRejectCorrection}
                 onChange={onSegmentChange}
                 onBlur={onSegmentBlur}
                 onClick={onSegmentClick}
                 onFocus={onSegmentFocus}
                 onSplit={onSplit}
                 onModifyMerge={idx < segments.length - 1 ? onMerge : undefined}
-                onInsertBefore={onInsert ? (id) => onInsert(id, 'before') : undefined}
-                onInsertAfter={onInsert ? (id) => onInsert(id, 'after') : undefined}
+                onInsertBefore={onInsert ? handleInsertBefore : undefined}
+                onInsertAfter={onInsert ? handleInsertAfter : undefined}
                 onDelete={segments.length > 1 ? onDelete : undefined}
                 generalConfig={generalConfig}
                 autoScroll={autoScroll}
-                onNavigate={(dir) => handleNavigate(dir, segment.id)}
+                onNavigate={handleNavigate}
             />
             ))
         ) : (
@@ -298,8 +315,8 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
 };
 
 // SubtitlesEditor requiere SubtitleEditorProvider en un component pare (VideoSubtitlesEditorView / VideoSrtStandaloneEditorView).
-const SubtitlesEditor: React.FC<SubtitlesEditorProps> = (props) => (
+const SubtitlesEditor: React.FC<SubtitlesEditorProps> = React.memo((props) => (
   <SubtitlesEditorInner {...props} />
-);
+));
 
 export default SubtitlesEditor;

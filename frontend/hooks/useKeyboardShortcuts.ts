@@ -1,9 +1,21 @@
 // frontend/hooks/useKeyboardShortcuts.ts
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { AppShortcuts } from '../types';
 import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS } from '../constants';
 
 type ActionHandler = (action: string) => void;
+
+// Cache de dreceres fora del component per evitar JSON.parse a cada keydown
+let _cachedShortcutsRaw: string | null = null;
+let _cachedShortcuts: AppShortcuts = DEFAULT_SHORTCUTS;
+function getCachedShortcuts(): AppShortcuts {
+  const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.SHORTCUTS);
+  if (stored !== _cachedShortcutsRaw) {
+    _cachedShortcutsRaw = stored;
+    _cachedShortcuts = stored ? JSON.parse(stored) : DEFAULT_SHORTCUTS;
+  }
+  return _cachedShortcuts;
+}
 
 /**
  * Hook per gestionar dreceres de teclat globals o per mòdul.
@@ -18,8 +30,7 @@ export function useKeyboardShortcuts(
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!enabled) return;
 
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.SHORTCUTS);
-    const shortcuts: AppShortcuts = stored ? JSON.parse(stored) : DEFAULT_SHORTCUTS;
+    const shortcuts = getCachedShortcuts();
 
     const appShortcuts = [
       ...(shortcuts.general || []),

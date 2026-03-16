@@ -1,0 +1,135 @@
+================================================================================
+CLAUDE_LOG_PURFVIEW_REINYECCION_REGLAS_UX_RENDIMIENTO.txt
+Data: 2026-03-16
+Objectiu: Purfview .exe integration, reinjection, UX i rendiment
+================================================================================
+
+1. OBJECTIU GENERAL
+───────────────────
+Quatre eixos de millora:
+  A) Purfview .exe: output controlat + exit codes robustos
+  B) Reinjecció: SRT del .exe passa pel postprocessador SONILAB
+  C) UX LLM inline: panel de proposta de AMBER a VERMELL
+  D) Rendiment frontend: RAF throttle, React.memo
+
+2. ARXIUS TOCATS
+────────────────
+Backend (TypeScript):
+  backend_nest_mvp/src/modules/projects/transcription.processor.ts
+
+Python (NOU):
+  WhisperX_Sonilab_01-main/src/srt_postprocess.py
+
+Frontend (TypeScript/React):
+  frontend/components/VideoSubtitlesEditor/SegmentItem.tsx
+  frontend/components/VideoEditor/WaveformTimeline.tsx
+  frontend/hooks/usePanelResize.ts
+
+Log:
+  CLAUDE_LOG_PURFVIEW_REINYECCION_REGLAS_UX_RENDIMIENTO.txt (aquest fitxer)
+
+3. OBJECTIU A — PURFVIEW .EXE INTEGRATION
+──────────────────────────────────────────
+CANVIS a transcription.processor.ts:
+
+  3.1 Afegit `--output_dir outDir` als arguments del .exe:
+      - Abans: el .exe escrivia al seu propi directori o al del vídeo
+      - Ara:   forcem output al directori controlat (outDir = MEDIA_ROOT/projects/<id>/whisperx)
+      - L'argument mediaPath segueix sent l'últim (requerit pel .exe)
+
+  3.2 Reordenat srtCandidates per prioritzar outDir:
+      - Prioritat 1: outDir (on hem dit --output_dir)
+      - Prioritat 2: mediaDir (directori del vídeo, fallback)
+      - Prioritat 3: exeDir (directori del .exe, fallback legacy)
+
+  3.3 Exit codes millorats:
+      - 3221226505 (0xC0000409): STATUS_STACK_BUFFER_OVERRUN — CRT cleanup crash
+      - -1073740791: mateixa cosa en signed int
+      - Qualsevol exit code < -1: considerat crash-on-exit (no error real)
+      - exit code 1: error real (model no trobat, CUDA fail, etc.)
+      - En tots els casos: busquem SRT abans de decidir si és error
+
+4. OBJECTIU B — REINJECCIÓ PEL POSTPROCESSADOR
+───────────────────────────────────────────────
+NOU SCRIPT: srt_postprocess.py
+  - Parseja SRT → llista de cues (start, end, text)
+  - Aplica apply_postprocessing() del postprocessor.py existent:
+    * fix_text_artifacts (apòstrofes, números, clítics)
+    * balance_lines (equilibrar text en 2 línies si llarg)
+    * split_long_lines (dividir cues massa llargs)
+    * fix_casing (capitalitzar primera lletra)
+    * add_periods (punt al final si pausa llarga)
+  - Mode --subtitle-edit-compat: NO fa merge_short_lines (manté cues separats)
+  - Escriu SRT resultant a --output
+
+INTEGRACIÓ a transcription.processor.ts:
+  - Després de copiar el SRT raw del .exe:
+    1. Guarda còpia backup com `baseName.raw.srt`
+    2. Executa `python srt_postprocess.py --input raw.srt --output final.srt --subtitle-edit-compat`
+    3. Si el postprocessador falla → fallback al SRT raw (no bloqueja)
+    4. Logs detallats: "[POSTPROCESS] ..." i "[PURFVIEW-EXE] Reinjection OK/FAIL"
+  - Busca l'script a PYTHON_RUNNER_DIR o ../WhisperX_Sonilab_01-main/src
+  - Usa WHISPERX_PYTHON com a executable Python
+
+5. OBJECTIU C — UX LLM INLINE: AMBER → VERMELL
+────────────────────────────────────────────────
+CANVIS a SegmentItem.tsx:
+
+  5.1 Background del segment amb proposta:
+      - Abans: bg-amber-950/20 hover:bg-amber-950/30
+      - Ara:   bg-red-950/20 hover:bg-red-950/30
+
+  5.2 Indicador lateral:
+      - Abans: bg-amber-400/90
+      - Ara:   bg-red-400/90
+
+  5.3 Panel de proposta:
+      - Border: border-amber-600/40 → border-red-600/40
+      - Background: bg-amber-950/40 → bg-red-950/40
+      - Títol: text-amber-400/70 → text-red-400/70
+      - Text: text-amber-100 → text-red-100
+
+  El subtítol original resta visible A DALT (dins la graella editable),
+  i la proposta apareix A SOTA en vermell amb botons ✓/✗.
+
+6. OBJECTIU D — RENDIMENT FRONTEND
+───────────────────────────────────
+  6.1 usePanelResize.ts — RAF throttling:
+      - Tant useVerticalPanelResize com useHorizontalPanelResize
+      - Afegit rafRef per deduplicar setState durant mousemove
+      - cancelAnimationFrame al mouseUp per netejar
+      - Resultat: setHeight/setWidthPercent es criden màx 1 cop per frame
+
+  6.2 SegmentItem.tsx — React.memo:
+      - Wrappejat amb React.memo(SegmentItem)
+      - Evita rerenders innecessaris quan les props no canvien
+      - Especialment important amb llistes llargues de subtítols (300+)
+
+  6.3 WaveformTimeline.tsx — React.memo:
+      - Wrappejat amb React.memo(WaveformTimeline)
+      - El component JA tenia RAF per al render loop i drag deduplication
+      - React.memo evita rerenders del component pare que no afecten el waveform
+
+7. PROVES RECOMANADES
+─────────────────────
+1. Purfview .exe amb --output_dir:
+   → Verificar que el SRT s'escriu a outDir (no al dir del .exe)
+   → Provar amb exit code 0 i amb 3221226505
+
+2. Reinjecció postprocessador:
+   → Executar: python srt_postprocess.py --input test.srt --output out.srt
+   → Verificar: text capitalitzat, línies equilibrades, punts afegits
+   → Verificar: si falla, el backend usa el SRT raw (no crasheja)
+
+3. UX vermell:
+   → Executar correcció amb guió → verificar panel VERMELL (no amber)
+   → Verificar que el subtítol original és visible a dalt
+
+4. Rendiment:
+   → Arrossegar el divisor vertical/horitzontal ràpidament
+   → Verificar fluïdesa (no jank ni stuttering)
+   → Obrir projecte amb 300+ subtítols → verificar scroll fluid
+
+================================================================================
+FI DEL LOG
+================================================================================

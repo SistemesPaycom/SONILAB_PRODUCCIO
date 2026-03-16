@@ -184,14 +184,21 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
     document.body.style.userSelect = 'none';
   }, [isLibraryCollapsed]);
 
+  // RAF throttle per al resize de la librería — evita rerenders+localStorage writes a cada mousemove
+  const libResizeRafRef = useRef(0);
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
-      const newWidth = Math.max(MIN_LIBRARY_WIDTH, Math.min(window.innerWidth, e.clientX));
-      setLibraryWidth(newWidth);
+      if (libResizeRafRef.current) return; // ja hi ha un frame pendent
+      libResizeRafRef.current = requestAnimationFrame(() => {
+        libResizeRafRef.current = 0;
+        const newWidth = Math.max(MIN_LIBRARY_WIDTH, Math.min(window.innerWidth, e.clientX));
+        setLibraryWidth(newWidth);
+      });
     };
     const handleMouseUp = () => {
       isResizingRef.current = false;
+      if (libResizeRafRef.current) { cancelAnimationFrame(libResizeRafRef.current); libResizeRafRef.current = 0; }
       document.body.style.cursor = 'default';
       document.body.style.userSelect = 'auto';
     };
@@ -200,6 +207,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      if (libResizeRafRef.current) cancelAnimationFrame(libResizeRafRef.current);
     };
   }, [setLibraryWidth]);
 
@@ -431,7 +439,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
       />
       <aside 
         style={{ width: isLibraryCollapsed ? COLLAPSED_WIDTH : libraryWidth }}
-        className={`flex-shrink-0 transition-width duration-300 ease-in-out bg-[#020617] relative z-10`}
+        className={`flex-shrink-0 transition-[width] duration-200 ease-out bg-[#020617] relative z-10 will-change-[width]`}
       >
         <LibraryView 
             onOpenDocument={handleOpenDocument} 

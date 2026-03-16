@@ -81,6 +81,38 @@ const VideoSubtitlesEditorViewInner: React.FC<VideoSubtitlesEditorViewProps> = (
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
+  // ── Performance: throttle currentTime updates ─────────────────────────────
+  // currentTime com a state causa rerenders a 60fps. Usem un ref per al valor
+  // real i només actualitzem state a ~4fps (cada 250ms) o quan canvia el segment actiu.
+  const currentTimeRef = useRef(0);
+  const lastTimeUpdateRef = useRef(0);
+  const activeSegIdByTimeRef = useRef<number | null>(null);
+  const handleTimeUpdateThrottled = useCallback((t: number) => {
+    currentTimeRef.current = t;
+    const now = performance.now();
+    // Comprovar si el segment actiu ha canviat (requer rerender)
+    // Usem linkedSegmentsWithDiff via una ref per evitar recrear el callback
+    const segsRef = linkedSegmentsWithDiffRef.current;
+    const prevActiveId = activeSegIdByTimeRef.current;
+    let newActiveId: number | null = null;
+    if (segsRef) {
+      for (const s of segsRef) {
+        if (t >= s.startTime && t < s.endTime) {
+          newActiveId = s.id as number;
+          break;
+        }
+      }
+    }
+    const segChanged = newActiveId !== prevActiveId;
+    if (segChanged) activeSegIdByTimeRef.current = newActiveId;
+
+    // Actualitzar state si: canvi de segment, o cada 250ms per al toolbar/timecodes
+    if (segChanged || now - lastTimeUpdateRef.current > 250) {
+      lastTimeUpdateRef.current = now;
+      setCurrentTime(t);
+    }
+  }, []);
+
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -421,6 +453,10 @@ useEffect(() => {
     [linkedSegments, takeDialogMap],
   );
 
+  // Ref estable per al throttle de currentTime (evita recrear handleTimeUpdateThrottled)
+  const linkedSegmentsWithDiffRef = useRef(linkedSegmentsWithDiff);
+  linkedSegmentsWithDiffRef.current = linkedSegmentsWithDiff;
+
   const handleTakeLayout = useCallback((num: number, y: number) => {
     takeLayoutRef.current.set(num, y);
   }, []);
@@ -452,14 +488,22 @@ useEffect(() => {
   const onTogglePlay = useCallback(() => setIsPlaying((p) => !p), []);
   const onSeek = useCallback((time: number) => {
     if (videoRef.current) videoRef.current.currentTime = time;
+    currentTimeRef.current = time;
     setCurrentTime(time);
   }, []);
-  const onJumpTime = useCallback((seconds: number) => onSeek(Math.max(0, Math.min(duration, currentTime + seconds))), [currentTime, duration, onSeek]);
-  const onChangeRate = (delta: number) => setPlaybackRate((rate) => {
+  const onJumpTime = useCallback((seconds: number) => onSeek(Math.max(0, Math.min(duration, currentTimeRef.current + seconds))), [duration, onSeek]);
+  const onChangeRate = useCallback((delta: number) => setPlaybackRate((rate) => {
     const newRate = Math.max(0.5, Math.min(2.0, parseFloat((rate + delta).toFixed(2))));
     if (videoRef.current) videoRef.current.playbackRate = newRate;
     return newRate;
-  });
+  }), []);
+
+  const handleSegmentFocus = useCallback((id: Id) => {
+    if (isEditing) {
+      const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+      setActiveSegmentId(numericId);
+    }
+  }, [isEditing]);
 
   const handleSegmentClick = useCallback((id: Id) => {
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
@@ -481,16 +525,17 @@ useEffect(() => {
 
   const onJumpSegment = useCallback((direction: 'prev' | 'next') => {
     if (takeRanges.length === 0) return;
+    const t = currentTimeRef.current;
     const starts: number[] = Array.from<number>(new Set(takeRanges.map((r) => r.start))).sort((a, b) => a - b);
     if (direction === 'next') {
-      const next = starts.find((t) => t > currentTime + 0.1);
+      const next = starts.find((s) => s > t + 0.1);
       if (next !== undefined) onSeek(next);
     } else {
-      const prevs = starts.filter((t) => t < currentTime - 0.5);
+      const prevs = starts.filter((s) => s < t - 0.5);
       if (prevs.length > 0) onSeek(prevs[prevs.length - 1]);
       else onSeek(starts[0]);
     }
-  }, [takeRanges, currentTime, onSeek]);
+  }, [takeRanges, onSeek]);
 
 const handleSave = useCallback(() => {
   subsHistory.save((data) => {
@@ -621,34 +666,39 @@ const handleSave = useCallback(() => {
     }
   });
 
-  const handleSegmentChange = (updated: Segment) => {
+  const handleSegmentChange = useCallback((updated: Segment) => {
     if (!isEditing) return;
     subsHistory.updateDraft(prev => prev.map((s) => (s.id === updated.id ? updated : s)));
-  };
+  }, [isEditing, subsHistory]);
 
-  const handleSegmentBlur = () => {
+  const handleSegmentBlur = useCallback(() => {
     if (!isEditing) return;
     subsHistory.commit();
-  };
+  }, [isEditing, subsHistory]);
 
-  const handleSegmentUpdate = (id: Id, newStart: number, newEnd: number) => {
+  const handleSegmentUpdate = useCallback((id: Id, newStart: number, newEnd: number) => {
     if (!isEditing) return;
     subsHistory.updateDraft(prev => prev.map((seg) => (seg.id === id ? { ...seg, startTime: newStart, endTime: newEnd } : seg)));
-  };
+  }, [isEditing, subsHistory]);
 
   const handleSegmentUpdateEnd = useCallback(() => {
     if (!isEditing) return;
     subsHistory.commit();
   }, [isEditing, subsHistory]);
 
-  const handleExportSrt = () => {
+  const handleOpenAIOperations = useCallback((m: 'whisper' | 'translate' | 'revision') => {
+    setAiMode(m);
+    setIsAIModalOpen(true);
+  }, []);
+
+  const handleExportSrt = useCallback(() => {
     if (segments.length === 0) return;
     const srtContent = serializeSrt(segments);
     const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `${currentDoc.name.replace(/\.slsf$/, '')}.srt`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-  };
+  }, [segments, currentDoc.name]);
 
   const verticalContainerRef = useRef<HTMLDivElement>(null);
   const bottomContainerRef = useRef<HTMLDivElement>(null);
@@ -659,16 +709,24 @@ const handleSave = useCallback(() => {
   const { widthPercent: leftPanelWidth, handleMouseDown: handleHorizontalMouseDown } =
     useHorizontalPanelResize(bottomContainerRef as React.RefObject<HTMLElement>, 50, 20, 80);
 
-  const activeSegmentForPlayer = useMemo(() => {
+  // Primer: trobar quin segment és actiu (canvia poques vegades)
+  const activeSegIdForPlayer = useMemo(() => {
     const seg = linkedSegmentsWithDiff.find((s: Segment) => currentTime >= s.startTime && currentTime < s.endTime);
+    return seg?.id ?? null;
+  }, [linkedSegmentsWithDiff, currentTime]);
+
+  // Segon: construir l'objecte NOMÉS quan canvia el segment actiu (no cada 250ms)
+  const activeSegmentForPlayer = useMemo(() => {
+    if (activeSegIdForPlayer === null) return null;
+    const seg = linkedSegmentsWithDiff.find((s: Segment) => s.id === activeSegIdForPlayer);
     return seg ? { id: seg.id, startTime: seg.startTime, endTime: seg.endTime, originalText: seg.originalText, translatedText: '' } : null;
-  }, [linkedSegments, currentTime]);
+  }, [activeSegIdForPlayer, linkedSegmentsWithDiff]);
 
   const playerProps = {
     isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments: linkedSegmentsWithDiff, activeId: activeSegmentId,
     activeSegment: subsOverlayConfig.show ? activeSegmentForPlayer : null,
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
-    onTimeUpdate: setCurrentTime, onDurationChange: setDuration, onPlay: () => setIsPlaying(true), onPause: () => setIsPlaying(false), onTogglePlay, onJumpSegment,
+    onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay: () => setIsPlaying(true), onPause: () => setIsPlaying(false), onTogglePlay, onJumpSegment,
     videoFile, onSegmentUpdate: handleSegmentUpdate, onSegmentUpdateEnd: handleSegmentUpdateEnd, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
   };
 
@@ -711,15 +769,15 @@ const handleSave = useCallback(() => {
             isEditable={isEditing}
             onSegmentChange={handleSegmentChange}
             onSegmentBlur={handleSegmentBlur}
-            onSegmentClick={(id) => handleSegmentClick(id)}
-            onSegmentFocus={(id) => isEditing && setActiveSegmentId(id)}
+            onSegmentClick={handleSegmentClick}
+            onSegmentFocus={handleSegmentFocus}
             syncEnabled={syncSubsEnabled}
             onSyncChange={setSyncSubsEnabled}
             overlayConfig={subsOverlayConfig}
             onOverlayConfigChange={setSubsOverlayConfig}
             generalConfig={generalConfig}
             autoScroll={autoScrollSubs}
-            onOpenAIOperations={(m) => { setAiMode(m); setIsAIModalOpen(true); }}
+            onOpenAIOperations={handleOpenAIOperations}
             onSplit={handleSplitSegmentAtCursor}
             onMerge={handleMergeSegmentWithNext}
             onInsert={handleInsertSegment}

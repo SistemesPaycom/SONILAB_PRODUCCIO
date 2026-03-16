@@ -202,20 +202,6 @@ export const CreateProjectModal: React.FC<{
             timestamp: new Date().toISOString(),
           },
         });
-        dispatch({
-          type: 'ADD_TRANSCRIPTION_TASK',
-          payload: {
-            id: jobId,
-            projectId: res.project.id,
-            projectName: name.trim(),
-            srtDocumentId: srtDocId,
-            mediaDocumentId: mediaDocId,
-            status: res.job.status,
-            progress: Number(res.job.progress || 0),
-            error: null,
-            timestamp: new Date().toISOString(),
-          },
-        });
 
         // polling
         for (let i = 0; i < 600; i++) { // hasta ~10 min

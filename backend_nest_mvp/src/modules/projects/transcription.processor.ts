@@ -103,7 +103,9 @@ export class TranscriptionProcessor {
         const exeArgs: string[] = ['--beep_off', '--standard'];
         if (language) exeArgs.push('--language', language);
         exeArgs.push('--model', model);
-        // El .exe output al directori del vídeo d'entrada (comportament per defecte)
+        // Forçar output al directori controlat (outDir) per evitar que el .exe
+        // escrigui al seu propi directori o al directori del vídeo
+        exeArgs.push('--output_dir', outDir);
         exeArgs.push(mediaPath);
 
         console.log(`[PURFVIEW-EXE] Device: ${device} | Language: ${language || 'auto'} | Model: ${model}`);
@@ -147,27 +149,35 @@ export class TranscriptionProcessor {
         // No tractem exit != 0 com a fallo immediat: busquem el SRT primer.
         // Si el SRT existeix i és vàlid, el tractament és OK (warning al log).
         // Només falla si el SRT no s'ha generat en cap de les ubicacions esperades.
+        // Exit codes coneguts de faster-whisper-xxl.exe:
+        // 0            → OK
+        // 3221226505   → 0xC0000409 STATUS_STACK_BUFFER_OVERRUN (CRT cleanup crash, SRT ja generat)
+        // -1073740791  → mateixa cosa en signed int
+        // 1            → error real (model no trobat, CUDA fail, etc.)
         const EXIT_CODE_SECURITY_CRASH = 3221226505; // 0xC0000409
+        const isCrashOnExit = exeExitCode === EXIT_CODE_SECURITY_CRASH
+          || exeExitCode === -1073740791
+          || (exeExitCode < -1 && exeExitCode !== -1);
         if (exeExitCode !== 0) {
-          const isCrashOnExit = exeExitCode === EXIT_CODE_SECURITY_CRASH || exeExitCode < 0;
           if (isCrashOnExit) {
-            console.warn(`[PURFVIEW-EXE] Exit code ${exeExitCode} (0x${(exeExitCode >>> 0).toString(16).toUpperCase()}) — crash on exit detectat (probablement CRT stack cleanup). Verificant si el SRT s'ha generat...`);
+            console.warn(`[PURFVIEW-EXE] Exit code ${exeExitCode} (0x${(exeExitCode >>> 0).toString(16).toUpperCase()}) — crash on exit detectat (CRT stack cleanup). SRT probablement generat OK. Verificant...`);
           } else {
             console.warn(`[PURFVIEW-EXE] Exit code no-zero: ${exeExitCode}. Intentant recuperar el SRT igualment...`);
           }
         }
 
         // Buscar SRT en múltiples ubicacions possibles:
-        // 1. Directori on es troba el .exe (comportament reportat per l'usuari)
-        // 2. Directori del fitxer de vídeo d'entrada
+        // 1. outDir (on hem dit al .exe que escrigui via --output_dir) — PRIORITARI
+        // 2. Directori del fitxer de vídeo d'entrada (fallback si --output_dir no funciona)
+        // 3. Directori on es troba el .exe (comportament legacy d'algunes versions)
         const baseName = path.basename(mediaPath, path.extname(mediaPath));
         const exeDir = path.dirname(purfviewExePath);
         const mediaDir = path.dirname(mediaPath);
 
         const srtCandidates = [
-          path.join(exeDir, baseName + '.srt'),         // on l'exe realment l'escriu
-          path.join(mediaDir, baseName + '.srt'),        // ruta "natural" prop del vídeo
-          path.join(outDir, baseName + '.srt'),          // ruta del backend (si l'exe suporta output dir)
+          path.join(outDir, baseName + '.srt'),          // PRIORITARI: --output_dir controlat
+          path.join(mediaDir, baseName + '.srt'),         // fallback: prop del vídeo
+          path.join(exeDir, baseName + '.srt'),           // fallback: directori del .exe
         ];
 
         let foundSrtPath: string | null = null;
@@ -197,16 +207,76 @@ export class TranscriptionProcessor {
         }
 
         // Copiar SRT al outDir per consistència amb el pipeline Python
+        const rawSrtPath = path.join(outDir, baseName + '.raw.srt');
         const copiedSrtPath = path.join(outDir, baseName + '.srt');
         if (foundSrtPath !== copiedSrtPath) {
+          // Guardar la versió raw (sense postprocessar) com a backup
+          fs.copyFileSync(foundSrtPath, rawSrtPath);
           fs.copyFileSync(foundSrtPath, copiedSrtPath);
+        } else {
+          // El SRT ja és a outDir — fer backup raw
+          fs.copyFileSync(copiedSrtPath, rawSrtPath);
         }
-        console.log(`[PURFVIEW-EXE] SRT copiat a: ${copiedSrtPath}`);
+        console.log(`[PURFVIEW-EXE] SRT raw guardat a: ${rawSrtPath}`);
 
-        await this.projects.updateJob(jobId, { progress: 80 } as any);
-        job.progress(80);
+        await this.projects.updateJob(jobId, { progress: 70 } as any);
+        job.progress(70);
 
-        // Guardar SRT en Mongo
+        // ── REINJECTION: Aplicar regles internes SONILAB al SRT del .exe ──
+        // El .exe genera SRT amb el seu propi format; el reinjectem pel nostre
+        // postprocessador per assegurar max chars, balance, casing, periods, etc.
+        const pythonExeForPost = this.config.get<string>('WHISPERX_PYTHON', 'python');
+        const runnerDir = this.config.get<string>('PYTHON_RUNNER_DIR', '')
+          || path.join(process.cwd(), '..', 'WhisperX_Sonilab_01-main', 'src');
+        const postprocessScript = path.join(runnerDir, 'srt_postprocess.py');
+
+        if (fs.existsSync(postprocessScript)) {
+          const postArgs = [
+            postprocessScript,
+            '--input', rawSrtPath,
+            '--output', copiedSrtPath,
+            '--subtitle-edit-compat',  // no merge agressiu (compat amb SE)
+          ];
+          console.log(`[PURFVIEW-EXE] Reinjectant SRT per postprocessador: ${postArgs.join(' ')}`);
+
+          try {
+            const { stderr: postStderr, exitCode: postExitCode } = await new Promise<{
+              stderr: string;
+              exitCode: number;
+            }>((resolve, reject) => {
+              const child = spawn(pythonExeForPost, postArgs, {
+                cwd: runnerDir,
+                env: { ...process.env },
+                stdio: ['ignore', 'pipe', 'pipe'],
+              });
+              let stderr = '';
+              child.stdout.on('data', (d: Buffer) => {
+                process.stdout.write(`[POSTPROCESS] ${d.toString()}`);
+              });
+              child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+              child.on('error', reject);
+              child.on('close', (code) => resolve({ stderr, exitCode: code ?? 1 }));
+            });
+
+            if (postExitCode !== 0) {
+              console.warn(`[PURFVIEW-EXE] Postprocessador ha fallat (exit ${postExitCode}). Usant SRT raw. STDERR: ${postStderr}`);
+              // Fallback: copiar el raw com a final
+              fs.copyFileSync(rawSrtPath, copiedSrtPath);
+            } else {
+              console.log(`[PURFVIEW-EXE] Reinjection OK: SRT postprocessat a ${copiedSrtPath}`);
+            }
+          } catch (postErr: any) {
+            console.warn(`[PURFVIEW-EXE] Error executant postprocessador: ${postErr.message}. Usant SRT raw.`);
+            fs.copyFileSync(rawSrtPath, copiedSrtPath);
+          }
+        } else {
+          console.warn(`[PURFVIEW-EXE] Script de postprocessat no trobat a ${postprocessScript}. Usant SRT raw.`);
+        }
+
+        await this.projects.updateJob(jobId, { progress: 85 } as any);
+        job.progress(85);
+
+        // Guardar SRT (postprocessat o raw si el postprocessat ha fallat) en Mongo
         const srtContent = await fsp.readFile(copiedSrtPath, 'utf-8');
         await this.projects.setSrtContent(ownerId, project.srtDocumentId, srtContent);
 

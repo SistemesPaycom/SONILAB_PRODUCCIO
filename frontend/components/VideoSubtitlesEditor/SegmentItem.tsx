@@ -15,10 +15,10 @@ interface SegmentItemProps {
   isCorrected?: boolean;
   /** Text proposat per la correcció pendent de revisió inline (amber) */
   proposedText?: string;
-  /** Acceptar la correcció proposada */
-  onAccept?: () => void;
-  /** Rebutjar la correcció proposada */
-  onReject?: () => void;
+  /** Acceptar la correcció proposada (rep l'ID del segment) */
+  onAccept?: (id: number) => void;
+  /** Rebutjar la correcció proposada (rep l'ID del segment) */
+  onReject?: (id: number) => void;
   onClick: (id: number) => void;
   onFocus: (id: number) => void;
   onBlur?: () => void;
@@ -30,7 +30,7 @@ interface SegmentItemProps {
   onDelete?: (id: number) => void;
   generalConfig: GeneralConfig;
   autoScroll?: boolean;
-  onNavigate?: (direction: 'next' | 'prev') => void;
+  onNavigate?: (direction: 'next' | 'prev', currentId: number) => void;
 }
 
 const placeCaret = (el: HTMLElement, where: 'start' | 'end') => {
@@ -231,8 +231,10 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
     [maxLines, onSplit, segment.id]
   );
 
-  const handleKeyDownForLine = (lineIndex: number) => (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDownForLine = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isEditable) return;
+
+    const lineIndex = parseInt((e.currentTarget as HTMLElement).dataset.lineIndex || '0', 10);
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
@@ -301,7 +303,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           ts: Date.now(),
           retries: 3,
         };
-        onNavigate?.(dir);
+        onNavigate?.(dir, segment.id as number);
       }
       return;
     }
@@ -314,7 +316,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           placeCaret(lineRefs.current.get(lineIndex - 1)!, 'end');
         } else {
           caretHintRef.current = { target: 'lastNonEmpty', where: 'end', ts: Date.now(), retries: 3 };
-          onNavigate?.('prev');
+          onNavigate?.('prev', segment.id as number);
         }
         return;
       }
@@ -358,7 +360,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
       }
       return;
     }
-  };
+  }, [isEditable, performSplitAtCaret, maxLines, syncEditorsToState, isLineNonEmpty, onNavigate, segment.id]);
 
   useLayoutEffect(() => {
     if (!isEditable) return;
@@ -420,11 +422,11 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex flex-col p-2 border-b border-gray-800 transition-all duration-200 ${
+      className={`relative flex flex-col p-2 border-b border-gray-800 transition-colors duration-150 ${
         isActive
           ? 'bg-blue-600/10 ring-1 ring-inset ring-blue-500/30'
           : proposedText
-          ? 'bg-amber-950/20 hover:bg-amber-950/30'
+          ? 'bg-red-950/20 hover:bg-red-950/30'
           : isCorrected
           ? 'bg-rose-900/15 hover:bg-rose-900/25'
           : segment.hasDiff
@@ -440,10 +442,10 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           title="Discrepància amb el guió"
         />
       )}
-      {/* Indicador lateral amber quan hi ha correcció pendent de revisió */}
+      {/* Indicador lateral vermell quan hi ha correcció pendent de revisió */}
       {proposedText && !isActive && (
         <div
-          className="absolute left-0 top-0 bottom-0 w-0.5 bg-amber-400/90"
+          className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-400/90"
           title="Correcció pendent de revisió"
         />
       )}
@@ -541,7 +543,8 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                 onFocus={() => onFocus(segment.id)}
                 onBlur={onBlur}
                 onInput={syncEditorsToState}
-                onKeyDown={handleKeyDownForLine(i)}
+                data-line-index={i}
+                onKeyDown={handleKeyDownForLine}
                 onPaste={(e) => {
                   e.preventDefault();
                   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
@@ -563,19 +566,19 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         ))}
       </div>
 
-      {/* Panel de correcció pendent (inline review) */}
+      {/* Panel de correcció pendent (inline review) — VERMELL */}
       {proposedText && (
         <div
-          className="mt-1 rounded-lg border border-amber-600/40 bg-amber-950/40 overflow-hidden"
+          className="mt-1 rounded-lg border border-red-600/40 bg-red-950/40 overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-start justify-between gap-2 px-2 pt-1.5 pb-1.5">
             <div className="flex-1 min-w-0">
-              <div className="text-[8px] font-black uppercase tracking-widest text-amber-400/70 mb-0.5">
+              <div className="text-[8px] font-black uppercase tracking-widest text-red-400/70 mb-0.5">
                 ✦ Proposta correcció
               </div>
               <div
-                className="text-[13px] text-amber-100 whitespace-pre-wrap break-words leading-snug"
+                className="text-[13px] text-red-100 whitespace-pre-wrap break-words leading-snug"
                 style={{ fontFamily: "'Courier Prime', monospace" }}
               >
                 {proposedText}
@@ -583,14 +586,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             </div>
             <div className="flex gap-1 flex-shrink-0 mt-0.5">
               <button
-                onClick={onAccept}
+                onClick={() => onAccept?.(segment.id as number)}
                 className="px-2 py-1 rounded-lg bg-emerald-800/60 hover:bg-emerald-600 text-emerald-200 text-[10px] font-black uppercase tracking-widest transition-colors"
                 title="Acceptar correcció"
               >
                 ✓
               </button>
               <button
-                onClick={onReject}
+                onClick={() => onReject?.(segment.id as number)}
                 className="px-2 py-1 rounded-lg bg-red-900/60 hover:bg-red-700 text-red-300 text-[10px] font-black uppercase tracking-widest transition-colors"
                 title="Rebutjar correcció"
               >
@@ -662,4 +665,4 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   );
 };
 
-export default SegmentItem;
+export default React.memo(SegmentItem);

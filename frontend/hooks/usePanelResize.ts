@@ -1,22 +1,29 @@
-import { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 
 /**
  * Hook per gestionar el redimensionament vertical d'un panell.
  * Extret del patró duplicat a VideoSubtitlesEditorView i VideoEditorView.
+ * Usa RAF throttling per evitar rerenders excessius durant el drag.
  */
 export function useVerticalPanelResize(initial: number, min = 100) {
   const [height, setHeight] = useState(initial);
   const isResizingRef = useRef(false);
   const startYRef = useRef(0);
   const startHeightRef = useRef(0);
+  const rafRef = useRef<number>(0);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizingRef.current) return;
-    setHeight(Math.max(min, startHeightRef.current + (e.clientY - startYRef.current)));
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      setHeight(Math.max(min, startHeightRef.current + (e.clientY - startYRef.current)));
+      rafRef.current = 0;
+    });
   }, [min]);
 
   const handleMouseUp = useCallback(() => {
     isResizingRef.current = false;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
     document.body.style.cursor = '';
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
@@ -38,6 +45,7 @@ export function useVerticalPanelResize(initial: number, min = 100) {
 /**
  * Hook per gestionar el redimensionament horitzontal d'un panell (en %).
  * El containerRef ha d'apuntar al contenidor pare dels dos panells.
+ * Usa RAF throttling per evitar rerenders excessius durant el drag.
  */
 export function useHorizontalPanelResize(
   containerRef: React.RefObject<HTMLElement>,
@@ -49,17 +57,24 @@ export function useHorizontalPanelResize(
   const isResizingRef = useRef(false);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
+  const rafRef = useRef<number>(0);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizingRef.current || !containerRef.current) return;
-    const delta = e.clientX - startXRef.current;
-    const containerWidth = containerRef.current.offsetWidth;
-    const newPercent = ((startWidthRef.current + delta) / containerWidth) * 100;
-    setWidthPercent(Math.max(min, Math.min(max, newPercent)));
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      if (!containerRef.current) return;
+      const delta = e.clientX - startXRef.current;
+      const containerWidth = containerRef.current.offsetWidth;
+      const newPercent = ((startWidthRef.current + delta) / containerWidth) * 100;
+      setWidthPercent(Math.max(min, Math.min(max, newPercent)));
+      rafRef.current = 0;
+    });
   }, [containerRef, min, max]);
 
   const handleMouseUp = useCallback(() => {
     isResizingRef.current = false;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
     document.body.style.cursor = '';
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);

@@ -90,6 +90,14 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
+  // ── Refs per a valors volàtils dins draw ──────────────────────────────────
+  // Usem refs perquè draw NO es recreï quan canvien segments o activeId,
+  // evitant reinicis del RAF loop que causen salts visibles a la waveform.
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
   const [wavePeaks, setWavePeaks] = useState<WavePeakData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -254,7 +262,7 @@ const flushPendingUpdate = useCallback(() => {
       const handleSeconds = handleWidthPx / (width / visDur);
       if (mouseY < margin || mouseY > height - margin) return null;
 
-      for (const seg of segments) {
+      for (const seg of segmentsRef.current) {
         if (timeAtMouse >= seg.startTime - handleSeconds && timeAtMouse <= seg.endTime + handleSeconds) {
           if (Math.abs(timeAtMouse - seg.startTime) <= handleSeconds) return { id: seg.id, type: 'resize-start' };
           if (Math.abs(timeAtMouse - seg.endTime) <= handleSeconds) return { id: seg.id, type: 'resize-end' };
@@ -263,7 +271,7 @@ const flushPendingUpdate = useCallback(() => {
       }
       return null;
     },
-    [getVisibleDuration, segments]
+    [getVisibleDuration]
   );
 
   const draw = useCallback(
@@ -339,23 +347,20 @@ const flushPendingUpdate = useCallback(() => {
       };
 
       drawRange(0, width, '#4b5563');
-    /*   segments.forEach((seg) => {
-        const x1 = timeToX(seg.startTime, viewportStart, width, visDur);
-        const x2 = timeToX(seg.endTime, viewportStart, width, visDur);
-        if (x2 > 0 && x1 < width) drawRange(Math.max(0, x1), Math.min(width, x2), '#4f46e5');
-      }); */
 
       if (viewMode !== 'hidden') {
         const margin = 5;
         const boxY = margin;
         const boxH = height - margin * 2;
+        const curSegments = segmentsRef.current;
+        const curActiveId = activeIdRef.current;
 
-        segments.forEach((seg) => {
+        curSegments.forEach((seg) => {
           const x1 = timeToX(seg.startTime, viewportStart, width, visDur);
           const x2 = timeToX(seg.endTime, viewportStart, width, visDur);
           if (x2 < 0 || x1 > width) return;
 
-          const isActiveSeg = seg.id === activeId;
+          const isActiveSeg = seg.id === curActiveId;
           ctx.fillStyle = isActiveSeg ? 'rgba(79, 70, 229, 0.2)' : 'rgba(148, 163, 184, 0.1)';
           ctx.fillRect(x1, boxY, x2 - x1, boxH);
 
@@ -391,14 +396,26 @@ const flushPendingUpdate = useCallback(() => {
         ctx.stroke();
       }
     },
-    [wavePeaks, zoomH, zoomV, segments, activeId, viewMode, getVisibleDuration, getViewportStart, timeToX]
+    [wavePeaks, zoomH, zoomV, viewMode, getVisibleDuration, getViewportStart, timeToX]
   );
 
-  const renderLoop = useCallback(() => {
-    if (videoRef?.current) draw(videoRef.current.currentTime);
-    animationFrameRef.current = requestAnimationFrame(renderLoop);
-  }, [draw, videoRef]);
+  // ── drawRef: permet que renderLoop sigui estable (mai es recrea) ──────
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
 
+  const renderLoop = useCallback(() => {
+    if (videoRef?.current) drawRef.current(videoRef.current.currentTime);
+    animationFrameRef.current = requestAnimationFrame(renderLoop);
+  }, [videoRef]);
+  // renderLoop és estable perquè videoRef mai canvia i drawRef és un ref.
+  // Això evita que el RAF loop es reiniciï quan draw canvia (zoom, segments, etc.)
+
+  // ── RAF loop per reproducció + draw estàtic quan pausat ────────────────
+  // Manté la mateixa estructura de deps (4) que l'original per compatibilitat HMR.
+  // renderLoop és estable (via drawRef) → l'efecte NOMÉS es re-executa quan:
+  //   - isPlaying canvia (start/stop) → correcte
+  //   - currentTime canvia (cada 250ms) → renderLoop() es crida SÍNCRONAMENT,
+  //     dibuixa immediatament i programa el proper RAF → sense salt visual
   useEffect(() => {
     if (isPlaying) renderLoop();
     else {
@@ -660,4 +677,4 @@ return;
   );
 };
 
-export default WaveformTimeline;
+export default React.memo(WaveformTimeline);

@@ -1,0 +1,272 @@
+================================================================================
+CLAUDE_LOG_PURFVIEW_REINYECCION_REGLAS_UX_RENDIMIENTO_V2.txt
+Data: 2026-03-16
+================================================================================
+
+1. OBJECTIU GENERAL
+───────────────────
+Cinc eixos de millora:
+  A) Purfview .exe: output controlat + exit codes robustos
+  B) Reinjecció: SRT del .exe passa pel postprocessador SONILAB
+  C) UX LLM inline: panel de proposta de AMBER a VERMELL
+  D) Rendiment real: currentTime throttle, React.memo, RAF, stable callbacks
+  E) Jobs 404 / duplicats / keys React
+
+================================================================================
+2. ARXIUS TOCATS
+================================================================================
+
+Backend (TypeScript):
+  backend_nest_mvp/src/modules/projects/transcription.processor.ts
+    - --output_dir per al .exe
+    - Cerca SRT prioritzant outDir
+    - Exit codes millorats (signed/unsigned 0xC0000409)
+    - Reinjecció via srt_postprocess.py després del .exe
+
+Python (NOU):
+  WhisperX_Sonilab_01-main/src/srt_postprocess.py
+    - Script standalone que parseja SRT i aplica apply_postprocessing()
+    - Mode --subtitle-edit-compat (no merge)
+
+Frontend — Rendiment:
+  frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+    - currentTime throttle (ref + 250ms state updates)
+    - handleSegmentFocus estable (useCallback)
+    - handleTimeUpdateThrottled en lloc de setCurrentTime directe
+    - linkedSegmentsWithDiffRef per evitar recrear callbacks
+    - onSeek actualitza ref + state
+    - Inline functions eliminades del JSX (handleSegmentClick, handleSegmentFocus)
+
+  frontend/components/VideoSubtitlesEditor/SubtitlesEditor.tsx
+    - useCallback per handleNavigate, handleInsertBefore, handleInsertAfter
+    - React.memo al component SubtitlesEditor
+    - Callbacks estables passats a SegmentItem (handleInsertBefore/After)
+
+  frontend/components/VideoSubtitlesEditor/SegmentItem.tsx
+    - React.memo(SegmentItem)
+    - Panel proposta: AMBER → VERMELL (border, bg, text, indicador lateral)
+
+  frontend/components/VideoEditor/WaveformTimeline.tsx
+    - React.memo(WaveformTimeline)
+
+  frontend/hooks/usePanelResize.ts
+    - RAF throttling a useVerticalPanelResize
+    - RAF throttling a useHorizontalPanelResize
+    - cancelAnimationFrame al mouseUp
+
+Frontend — Jobs/Polling:
+  frontend/context/Library/TranscriptionContext.tsx
+    - Deduplicació al reducer (ADD_TRANSCRIPTION_TASK ignora si ID ja existeix)
+    - deduplicateTasks() al carregar des de localStorage
+    - Handling de 404: comptador per task, després de 3x marca com error
+    - REMOVE_TRANSCRIPTION_TASK action afegida
+    - Polling loop usa tasksRef (no depèn de state.transcriptionTasks)
+    - Per-task try/catch (un job 404 no atura el polling dels altres)
+
+  frontend/components/Projects/CreateProjectModal.tsx
+    - Eliminat dispatch duplicat de ADD_TRANSCRIPTION_TASK (era copiat 2x)
+
+================================================================================
+3. OBJECTIU A — PURFVIEW .EXE (sense tocar altres engines)
+================================================================================
+
+Canvis EXCLUSIUS a la ruta `if (usePurfviewExe)`:
+  1. Afegit `--output_dir outDir` als arguments del .exe
+  2. srtCandidates reordenat: outDir > mediaDir > exeDir
+  3. Exit codes: 3221226505, -1073740791, qualsevol < -1 → crash-on-exit
+  4. Si SRT trobat malgrat exit code raro → èxit amb warning
+
+NO s'ha tocat la ruta B (pipeline Python) per a cap altre engine.
+
+================================================================================
+4. OBJECTIU B — REINJECCIÓ EN REGLES INTERNES
+================================================================================
+
+Flux complet:
+  1. .exe genera SRT → es guarda com baseName.raw.srt (backup)
+  2. S'executa: python srt_postprocess.py --input raw.srt --output final.srt --subtitle-edit-compat
+  3. srt_postprocess.py:
+     - Parseja SRT → llista de dicts {start, end, text}
+     - Aplica apply_postprocessing() del postprocessor.py existent
+     - fix_text_artifacts (apòstrofes, números, clítics)
+     - balance_lines (equilibrar 2 línies)
+     - split_long_lines (dividir cues llargs)
+     - fix_casing (capitalitzar)
+     - add_periods (punt si pausa llarga)
+     - --subtitle-edit-compat: NO merge_short_lines (manté cues separats)
+  4. Si postprocessador falla → fallback al SRT raw (no bloqueja)
+  5. SRT final es guarda a MongoDB
+
+================================================================================
+5. OBJECTIU C — UX LLM INLINE
+================================================================================
+
+SegmentItem.tsx:
+  - Subtítol original sempre visible A DALT (graella editable)
+  - Proposta de correcció A SOTA en panel VERMELL
+  - Tots els colors amber → red:
+    * bg-amber-950/20 → bg-red-950/20
+    * border-amber-600/40 → border-red-600/40
+    * text-amber-400/70 → text-red-400/70
+    * text-amber-100 → text-red-100
+    * Indicador lateral: bg-amber-400/90 → bg-red-400/90
+  - Botons ✓ (emerald) / ✗ (red) per acceptar/rebutjar
+  - El text original NO desapareix fins que s'accepta
+
+================================================================================
+6. OBJECTIU D — RENDIMENT REAL (INP / CLS)
+================================================================================
+
+DIAGNÒSTIC (DevTools):
+  - LCP ≈ 0.86s → OK
+  - CLS ≈ 0.37 → massa layout shift
+  - INP ≈ 6440ms → interactivitat molt dolenta
+  - Hot paths: pointer events, canvas.w-full.h-full.block, button.absolute
+
+CAUSA ARREL IDENTIFICADA:
+  currentTime com a state (useState) → setCurrentTime cridat a cada onTimeUpdate
+  del vídeo (30-60fps) → tot el component VideoSubtitlesEditorViewInner rerendera
+  → cascade: linkedSegmentsWithDiff recalculat → SubtitlesEditor rerendera →
+  tots els SegmentItem rerenderen → 300+ DOM nodes actualitzats 60x/s
+
+SOLUCIÓ IMPLEMENTADA:
+
+  6.1 currentTime throttle (VideoSubtitlesEditorView.tsx):
+      - currentTimeRef.current = valor real (actualitzat a cada frame)
+      - setCurrentTime (state) NOMÉS s'actualitza:
+        * Quan canvia el segment actiu (per marcar-lo)
+        * Cada 250ms per al toolbar/timecodes
+      - Resultat: ~4 rerenders/s en lloc de 60
+
+  6.2 React.memo (SegmentItem, SubtitlesEditor, WaveformTimeline):
+      - SegmentItem no rerendera si les props no canvien
+      - Amb currentTime throttled, la majoria de SegmentItems NO reben props noves
+      - Només l'actiu (isActive canvia) es rerenderitza
+
+  6.3 Stable callbacks (VideoSubtitlesEditorView + SubtitlesEditor):
+      - handleSegmentFocus: useCallback amb dep [isEditing]
+      - handleInsertBefore/After: useCallback amb dep [onInsert]
+      - handleNavigate: useCallback amb dep [segments, onSegmentClick]
+      - Inline `(id) => fn(id)` eliminats del JSX
+      - playerProps.onTimeUpdate: handleTimeUpdateThrottled (estable)
+
+  6.4 RAF throttle (usePanelResize.ts):
+      - mousemove durant resize limitat a 1 update per frame
+      - cancelAnimationFrame al mouseUp
+
+  IMPACTE ESPERAT:
+    - INP: de 6440ms a <500ms (rerenders 15x menys freqüents)
+    - CLS: millora per menys layout recalculations durant reproducció
+    - Drag de subtítols: ja tenia RAF, ara sense rerenders innecessaris
+    - Resize de panells: RAF throttle elimina jank
+
+================================================================================
+7. OBJECTIU E — JOBS 404 / DUPLICATS / KEYS REACT
+================================================================================
+
+PROBLEMES IDENTIFICATS:
+
+  7.1 Doble dispatch de ADD_TRANSCRIPTION_TASK:
+      - CreateProjectModal.tsx lines 191-218: dispatch copiat 2x (copy-paste bug)
+      - FIX: Eliminat el segon dispatch duplicat
+
+  7.2 Sense deduplicació al reducer:
+      - ADD_TRANSCRIPTION_TASK simplement feia unshift
+      - FIX: Comprova si t.id ja existeix, ignora si duplicat
+
+  7.3 Polling 404 infinit:
+      - api.getJob(id) retorna 404 → error catchat genèricament → polling continua
+      - FIX: Comptador de 404 per task (notFoundCountRef)
+        * Després de 3x 404 → marca task com 'error' amb missatge clar
+        * Atura polling per a aquell job específic
+
+  7.4 Keys duplicades React:
+      - Causat per tasks amb el mateix ID a l'array (issue 7.1 + 7.2)
+      - FIX: Resolt pels fixes 7.1 + 7.2
+
+  7.5 Hidratació de duplicats des de localStorage:
+      - FIX: deduplicateTasks() aplicat al carregar des de localStorage
+      - Neteja automàtica de duplicats antics
+
+  7.6 Polling loop reiniciat a cada dispatch:
+      - useEffect depenia de state.transcriptionTasks
+      - Qualsevol UPDATE_TRANSCRIPTION_TASK reiniciava el loop sencer
+      - FIX: Usar tasksRef (ref estable) dins el loop
+        * useEffect només depèn de useBackend (estable)
+        * Loop llegeix tasksRef.current per obtenir tasks actius
+
+  CADENA CAUSAL RESOLTA:
+    Dispatch duplicat → Array amb 2x mateixa task → Keys React duplicades
+    → 2x polling per job → Job eliminat → 2x 404 infinit per task
+    → Overhead de xarxa + consola plena de warnings
+
+================================================================================
+8. ALTRES ENGINES — NO TOCATS
+================================================================================
+
+  - whisperx: NO tocat
+  - faster-whisper: NO tocat
+  - script-align: NO tocat
+  - Pipeline Python (runner_cli.py, pipeline.py): NO tocat
+  - Postprocessor.py: NO tocat (només CRIDAT des de srt_postprocess.py)
+  - Rules.py: NO tocat
+  - Cues.py: NO tocat
+
+================================================================================
+9. PROVES RECOMANADES
+================================================================================
+
+A. PURFVIEW .EXE:
+   1. Crear projecte amb engine=purfview-xxl
+   2. Verificar que el SRT es genera a outDir (no al dir del .exe)
+   3. Verificar logs: "[PURFVIEW-EXE] Reinjectant SRT per postprocessador"
+   4. Verificar que el SRT final té casing correcte i línies equilibrades
+
+B. REINJECCIÓ:
+   1. Executar manualment:
+      python srt_postprocess.py --input test.srt --output out.srt --subtitle-edit-compat
+   2. Comparar raw vs postprocessat
+   3. Verificar que si srt_postprocess.py no existeix, el backend no crasheja
+
+C. UX VERMELL:
+   1. Executar correcció de transcripció amb guió
+   2. Verificar panel VERMELL (no amber)
+   3. Verificar subtítol original visible a dalt
+   4. Acceptar/rebutjar individualment
+
+D. RENDIMENT:
+   1. Obrir editor SRT amb 300+ subtítols
+   2. Reproduir vídeo → verificar fluïdesa (NO jank)
+   3. Arrossegar cue a la waveform → verificar fluïdesa
+   4. Arrossegar divisor horitzontal/vertical → fluïdesa
+   5. DevTools Performance: mesurar INP durant reproducció
+   6. Verificar que currentTime no causa rerenders a 60fps
+
+E. JOBS / POLLING:
+   1. Crear projecte → verificar que apareix 1x (no 2x)
+   2. Eliminar job al backend → verificar que polling s'atura després de 3x 404
+   3. Consola React: verificar que NO apareix warning de keys duplicades
+   4. Refrescar pàgina → verificar que tasks antics no es dupliquen
+
+================================================================================
+10. LIMITACIONS CONEGUDES
+================================================================================
+
+  1. SegmentItem onAccept/onReject encara són inline closures per segment
+     (difícil d'eliminar sense canviar la interfície del component).
+     MITIGAT per: React.memo + currentTime throttle redueix rerenders dràsticament.
+
+  2. No s'ha afegit virtualització a la llista de segments.
+     Per a >1000 segments caldria react-window o similar.
+     MITIGAT per: React.memo fa que només l'actiu es rerenderitzi.
+
+  3. El postprocessador Python s'executa de manera síncrona amb timeout implícit
+     del procés fill. Per a SRTs molt grans podria ser lent.
+
+  4. La waveform segueix repintant tot el canvas a cada frame durant reproducció.
+     Això és correcte (necessari per al playhead), però podria optimitzar-se
+     amb dirty regions en el futur.
+
+================================================================================
+FI DEL LOG V2
+================================================================================

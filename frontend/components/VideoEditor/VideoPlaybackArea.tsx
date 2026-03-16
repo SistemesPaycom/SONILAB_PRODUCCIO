@@ -36,22 +36,27 @@ export const VideoPlaybackArea: React.FC<VideoPlaybackAreaProps> = (props) => {
     const isResizingRef = useRef(false);
     const startYRef = useRef(0);
     const startHeightRef = useRef(0);
+    const rafRef = useRef<number>(0);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isResizingRef.current || !containerRef.current) return;
-        const deltaY = e.clientY - startYRef.current;
-        const containerHeight = containerRef.current.offsetHeight;
-        let newHeight = startHeightRef.current + deltaY;
-
-        const separatorHeight = 12;
-        newHeight = Math.max(MIN_PANEL_HEIGHT, newHeight);
-        newHeight = Math.min(containerHeight - MIN_PANEL_HEIGHT - separatorHeight, newHeight);
-
-        setTopPanelHeight(newHeight);
+        if (rafRef.current) return; // RAF throttle: skip if pending
+        rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = 0;
+            if (!containerRef.current) return;
+            const deltaY = e.clientY - startYRef.current;
+            const containerHeight = containerRef.current.offsetHeight;
+            let newHeight = startHeightRef.current + deltaY;
+            const separatorHeight = 12;
+            newHeight = Math.max(MIN_PANEL_HEIGHT, newHeight);
+            newHeight = Math.min(containerHeight - MIN_PANEL_HEIGHT - separatorHeight, newHeight);
+            setTopPanelHeight(newHeight);
+        });
     }, []);
 
     const handleMouseUp = useCallback(() => {
         isResizingRef.current = false;
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         window.removeEventListener('mousemove', handleMouseMove);
