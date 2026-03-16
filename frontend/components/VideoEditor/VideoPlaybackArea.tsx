@@ -1,6 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React from 'react';
 import VideoPlayer from './VideoPlayer';
-import WaveformTimeline from './WaveformTimeline';
 import { Segment, OverlayConfig, Id } from '../../types';
 
 interface VideoPlaybackAreaProps {
@@ -20,7 +19,7 @@ interface VideoPlaybackAreaProps {
     onTogglePlay: () => void;
     onJumpSegment: (direction: 'prev' | 'next') => void;
     videoFile: File | null;
-    // Props opcionals per a la interacció amb subtítols
+    // Waveform-passthrough props (unused here, live at bottom waveform)
     onSegmentUpdate?: (id: Id, newStart: number, newEnd: number) => void;
     onSegmentUpdateEnd?: () => void;
     onSegmentClick?: (id: Id) => void;
@@ -28,59 +27,14 @@ interface VideoPlaybackAreaProps {
     scrollMode?: 'stationary' | 'page';
 }
 
-const MIN_PANEL_HEIGHT = 80;
-
 export const VideoPlaybackArea: React.FC<VideoPlaybackAreaProps> = (props) => {
-    const [topPanelHeight, setTopPanelHeight] = useState(250);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const isResizingRef = useRef(false);
-    const startYRef = useRef(0);
-    const startHeightRef = useRef(0);
-    const rafRef = useRef<number>(0);
-
-    const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (!isResizingRef.current || !containerRef.current) return;
-        if (rafRef.current) return; // RAF throttle: skip if pending
-        rafRef.current = requestAnimationFrame(() => {
-            rafRef.current = 0;
-            if (!containerRef.current) return;
-            const deltaY = e.clientY - startYRef.current;
-            const containerHeight = containerRef.current.offsetHeight;
-            let newHeight = startHeightRef.current + deltaY;
-            const separatorHeight = 12;
-            newHeight = Math.max(MIN_PANEL_HEIGHT, newHeight);
-            newHeight = Math.min(containerHeight - MIN_PANEL_HEIGHT - separatorHeight, newHeight);
-            setTopPanelHeight(newHeight);
-        });
-    }, []);
-
-    const handleMouseUp = useCallback(() => {
-        isResizingRef.current = false;
-        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-    }, [handleMouseMove]);
-
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        isResizingRef.current = true;
-        startYRef.current = e.clientY;
-        startHeightRef.current = topPanelHeight;
-        document.body.style.cursor = 'row-resize';
-        document.body.style.userSelect = 'none';
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-    }, [topPanelHeight, handleMouseMove, handleMouseUp]);
-
     return (
-        <div 
-            ref={containerRef} 
+        <div
             className="flex flex-col h-full w-full bg-black relative group/droparea"
             data-droptarget="true"
             data-drop-action="link-media"
         >
+            {/* Drop overlay */}
             <div className="absolute inset-0 z-50 pointer-events-none border-4 border-dashed border-blue-500/50 bg-blue-600/10 flex items-center justify-center opacity-0 group-[.drop-hover]/droparea:opacity-100 transition-opacity duration-200">
                 <div className="bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex flex-col items-center gap-2 scale-110">
                     <span className="text-3xl">🎬</span>
@@ -88,19 +42,8 @@ export const VideoPlaybackArea: React.FC<VideoPlaybackAreaProps> = (props) => {
                 </div>
             </div>
 
-            <div className="flex-shrink-0 w-full" style={{ height: `${topPanelHeight}px` }}>
-                <VideoPlayer {...props} />
-            </div>
-
-            <div
-                className="flex-shrink-0 h-3 bg-gray-900 hover:bg-gray-800 cursor-row-resize flex items-center justify-center group"
-                onMouseDown={handleMouseDown}
-            >
-                <div className="w-10 h-1 bg-gray-700 group-hover:bg-gray-600 rounded-full" />
-            </div>
-
             <div className="flex-grow min-h-0 w-full">
-                <WaveformTimeline {...props} />
+                <VideoPlayer {...props} />
             </div>
         </div>
     );

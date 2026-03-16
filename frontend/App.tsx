@@ -18,6 +18,7 @@ import { translateScript } from './utils/EditorDeGuions/translator';
 import { csvToSlsf, scriptToCsv } from './utils/EditorDeGuions/csvConverter';
 import { parseScript } from './utils/EditorDeGuions/scriptParser';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useHashRoute } from './hooks/useHashRoute';
 import useLocalStorage from './hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from './constants';
 import SettingsModal from './components/SettingsModal';
@@ -499,8 +500,199 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
 const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 
+// ─── Editor en nova pestanya (sense sidebar) ─────────────────────────────────
+const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, docId }) => {
+  const { state, dispatch, useBackend } = useLibrary();
+  const currentDoc = useMemo(() => state.documents.find(d => d.id === docId), [docId, state.documents]);
+  const [isEditing, setIsEditing] = useState(true);
+  const [activeLang, setActiveLang] = useState('');
+  const [layout, setLayout] = useState<Layout>('cols');
+  const [editorView, setEditorView] = useState<'script' | 'csv'>('script');
+  const [tabSize, setTabSize] = useState(4);
+  const [pageWidth, setPageWidth] = useState('794px');
+  const [editorStyles, setEditorStyles] = useLocalStorage<EditorStyles>(LOCAL_STORAGE_KEYS.EDITOR_STYLES, DEFAULT_STYLES);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const effectiveLang = useMemo(() => {
+    if (!currentDoc) return '';
+    if (activeLang && currentDoc.contentByLang[activeLang] !== undefined) return activeLang;
+    const keys = Object.keys(currentDoc.contentByLang);
+    if (keys.includes('_unassigned')) return '_unassigned';
+    if (currentDoc.sourceLang && keys.includes(currentDoc.sourceLang)) return currentDoc.sourceLang;
+    return keys[0] || '';
+  }, [currentDoc, activeLang]);
+
+  useEffect(() => {
+    if (currentDoc && effectiveLang !== activeLang) setActiveLang(effectiveLang);
+  }, [currentDoc?.id, effectiveLang, activeLang]);
+
+  // Sync request per media (com a MainAppContent)
+  useEffect(() => {
+    if (!useBackend) return;
+    if (mode !== 'editor-video-subs' && mode !== 'editor-srt-standalone') return;
+    if (!docId) return;
+    const doc = state.documents.find(d => d.id === docId);
+    if (!doc) return;
+    const isSrt = (doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt');
+    if (!isSrt) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const proj = await api.getProjectBySrt(doc.id);
+        if (cancelled) return;
+        const mediaId = proj?.mediaDocumentId || proj?.mediaDocId;
+        if (mediaId) dispatch({ type: 'TRIGGER_SYNC_REQUEST', payload: { docId: mediaId, type: 'media' } });
+      } catch (e) { console.warn('getProjectBySrt failed', e); }
+    })();
+    return () => { cancelled = true; };
+  }, [useBackend, mode, docId, state.documents, dispatch]);
+
+  const docContent = useMemo(() => currentDoc?.contentByLang[effectiveLang] || '', [currentDoc, effectiveLang]);
+  const history = useDocumentHistory(docId || 'temp', docContent);
+
+  const csvContentToShow = useMemo(() => {
+    if (!currentDoc || !effectiveLang) return '';
+    const stored = currentDoc.csvContentByLang[effectiveLang];
+    if (stored) return stored;
+    const content = currentDoc.contentByLang[effectiveLang] || '';
+    if (!content) return '';
+    const { takes } = parseScript(content);
+    return scriptToCsv(takes);
+  }, [currentDoc, effectiveLang]);
+
+  const handleSave = useCallback(() => {
+    history.save((data) => {
+      if (currentDoc) {
+        dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: effectiveLang, content: data, csvContent: '' } });
+      }
+    });
+  }, [history, currentDoc, effectiveLang, dispatch]);
+
+  const handleTextChange = (newText: string, sourceView: 'script' | 'csv' | 'mono') => {
+    if (!currentDoc || !isEditing || !effectiveLang) return;
+    if (sourceView === 'csv') {
+      const canonicalContent = csvToSlsf(newText);
+      history.updateDraft(canonicalContent);
+      history.commit(canonicalContent);
+      dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: effectiveLang, content: canonicalContent, csvContent: newText } });
+      return;
+    }
+    history.updateDraft(newText);
+    dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: effectiveLang, content: newText, csvContent: '' } });
+  };
+
+  const handleTranslate = async (from: string, to: string, taskId: string) => {
+    if (!currentDoc) return;
+    try {
+      const translated = await translateScript(docContent, from, to);
+      dispatch({ type: 'ADD_TRANSLATION', payload: { documentId: currentDoc.id, lang: to, content: translated, csvContent: '' } });
+      dispatch({ type: 'UPDATE_TRANSLATION_TASK_STATUS', payload: { id: taskId, status: 'completed' } });
+      setActiveLang(to);
+    } catch (e) {
+      dispatch({ type: 'UPDATE_TRANSLATION_TASK_STATUS', payload: { id: taskId, status: 'error' } });
+    }
+  };
+
+  const enableScriptShortcuts = isEditing && (mode === 'editor' || mode === 'editor-video' || mode === 'editor-ssrtlsf');
+  useKeyboardShortcuts('scriptEditor', (action) => {
+    switch (action) {
+      case 'UNDO': history.undo(); break;
+      case 'REDO': history.redo(); break;
+      case 'SAVE': handleSave(); break;
+    }
+  }, enableScriptShortcuts);
+
+  useEffect(() => {
+    const handleOpenSettings = () => setIsSettingsOpen(true);
+    window.addEventListener('OPEN_SETTINGS', handleOpenSettings);
+    return () => window.removeEventListener('OPEN_SETTINGS', handleOpenSettings);
+  }, []);
+
+  const toolbarProps = {
+    currentDoc, layout, onLayoutChange: setLayout,
+    tabSize, onTabSizeChange: setTabSize,
+    pageWidth, onPageWidthChange: setPageWidth,
+    editorView, onEditorViewChange: setEditorView,
+    activeLang: effectiveLang, onActiveLangChange: setActiveLang,
+    onSetSourceLang: (lang: string) => dispatch({ type: 'SET_SOURCE_LANG', payload: { documentId: currentDoc?.id || '', lang } }),
+    onTranslate: handleTranslate, col1Width: 200, editorStyles
+  };
+
+  const handleGoHome = () => { window.location.hash = '#/home'; };
+
+  const renderEditor = () => {
+    if (!currentDoc) {
+      return (
+        <div className="flex-1 flex items-center justify-center text-gray-500">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-sm">Carregant document…</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (mode === 'editor-video') return <VideoEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
+    if (mode === 'editor-video-subs') return <VideoSubtitlesEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
+    if (mode === 'editor-ssrtlsf') return <SsrtlsfEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={handleGoHome} onUpdateContent={(txt) => handleTextChange(txt, 'script')} />;
+    if (mode === 'editor-srt-standalone') return <VideoSrtStandaloneEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={handleGoHome} />;
+
+    // Mode 'editor' (guió bàsic)
+    return (
+      <div className="flex-1 flex flex-col min-h-0">
+        <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
+        <main className="flex-grow overflow-y-auto bg-[#0f172a] p-8 flex flex-col items-center custom-scrollbar">
+          <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
+            {editorView === 'csv' ? (
+              <CsvView content={csvContentToShow} setContent={handleTextChange} isEditable={isEditing} pageWidth={pageWidth} />
+            ) : layout === 'mono' ? (
+              <Editor content={history.present} setContent={(txt) => handleTextChange(txt, 'mono')} isEditable={isEditing} tabSize={tabSize} />
+            ) : (
+              <ColumnView content={history.present} setContent={(txt) => handleTextChange(txt, 'script')} isEditable={isEditing} col1Width={200} editorStyles={editorStyles} />
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-[#020617] text-white font-sans overflow-hidden">
+      {/* Header amb botó HOME */}
+      <header className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-gray-900/80 border-b border-gray-800">
+        <button
+          onClick={handleGoHome}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+          HOME
+        </button>
+        <div className="w-px h-5 bg-gray-700" />
+        <span className="text-xs text-gray-500 truncate" title={currentDoc?.name || ''}>
+          {currentDoc?.name || 'Carregant…'}
+        </span>
+        {history.isDirty && (
+          <span className="ml-auto px-2 py-0.5 bg-amber-500 text-black text-[9px] font-black uppercase rounded-full animate-pulse">
+            Canvis sense desar
+          </span>
+        )}
+      </header>
+
+      {/* Contingut de l'editor */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {renderEditor()}
+      </div>
+
+      {isSettingsOpen && (
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} editorStyles={editorStyles} onStylesChange={setEditorStyles} />
+      )}
+    </div>
+  );
+};
+
 const AuthedGate: React.FC = () => {
   const { authed, reason, markAuthed } = useAuth();
+  const route = useHashRoute();
 
   return (
     <>
@@ -511,7 +703,11 @@ const AuthedGate: React.FC = () => {
       />
       {(!USE_BACKEND || authed) && (
         <LibraryProvider>
-          <MainAppContent />
+          {route.view === 'editor' && route.mode && route.docId ? (
+            <EditorTabContent mode={route.mode} docId={route.docId} />
+          ) : (
+            <MainAppContent />
+          )}
         </LibraryProvider>
       )}
     </>

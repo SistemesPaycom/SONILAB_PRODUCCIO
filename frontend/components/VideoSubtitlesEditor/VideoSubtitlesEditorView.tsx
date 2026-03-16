@@ -5,6 +5,7 @@ import { ColumnView } from '../EditorDeGuions/ColumnView';
 import { CsvView } from '../EditorDeGuions/CsvView';
 import { VideoSubtitlesToolbar } from './VideoSubtitlesToolbar';
 import { VideoPlaybackArea } from '../VideoEditor/VideoPlaybackArea';
+import WaveformTimeline from '../VideoEditor/WaveformTimeline';
 import SubtitlesEditor from './SubtitlesEditor';
 import SyncLibraryModal from './SyncLibraryModal';
 import SubtitleAIOperationsModal from './SubtitleAIOperationsModal';
@@ -13,7 +14,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
-import { useVerticalPanelResize, useHorizontalPanelResize } from '../../hooks/usePanelResize';
+import { useHorizontalPanelResize } from '../../hooks/usePanelResize';
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
 import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
 import { ScriptViewPanel } from './ScriptViewPanel';
@@ -49,8 +50,6 @@ interface VideoSubtitlesEditorViewProps {
   handleTextChange: (newText: string, sourceView: 'script' | 'csv' | 'mono') => void;
   handleEditorBackgroundClick: (e: React.MouseEvent<HTMLElement>) => void;
 }
-
-const MIN_PANEL_HEIGHT = 100;
 
 const VideoSubtitlesEditorViewInner: React.FC<VideoSubtitlesEditorViewProps> = (props) => {
   const {
@@ -700,14 +699,16 @@ const handleSave = useCallback(() => {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }, [segments, currentDoc.name]);
 
-  const verticalContainerRef = useRef<HTMLDivElement>(null);
-  const bottomContainerRef = useRef<HTMLDivElement>(null);
+  // ── Panell principal: esquerra (guió+subs) | dreta (vídeo+toolbar) ──────────
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
 
-  const { height: topPanelHeight, handleMouseDown: handleVerticalMouseDown } =
-    useVerticalPanelResize(400, MIN_PANEL_HEIGHT);
+  const { widthPercent: mainSplitPercent, handleMouseDown: handleMainSplitMouseDown } =
+    useHorizontalPanelResize(mainContainerRef as React.RefObject<HTMLElement>, 60, 25, 80);
 
-  const { widthPercent: leftPanelWidth, handleMouseDown: handleHorizontalMouseDown } =
-    useHorizontalPanelResize(bottomContainerRef as React.RefObject<HTMLElement>, 50, 20, 80);
+  // ── Split intern del panell esquerre: guió | subtítols ───────────────────
+  const { widthPercent: scriptSplitPercent, handleMouseDown: handleScriptSplitMouseDown } =
+    useHorizontalPanelResize(leftPanelRef as React.RefObject<HTMLElement>, 35, 10, 65);
 
   // Primer: trobar quin segment és actiu (canvia poques vegades)
   const activeSegIdForPlayer = useMemo(() => {
@@ -731,69 +732,116 @@ const handleSave = useCallback(() => {
   };
 
   return (
-    <div ref={verticalContainerRef} className="flex flex-col h-full w-full bg-[#111827] text-gray-200">
-      <div className="bg-black flex-shrink-0" style={{ height: `${topPanelHeight}px` }}>
-        <VideoPlaybackArea {...playerProps} />
-      </div>
-      <div className="h-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-row-resize flex-shrink-0 transition-colors" onMouseDown={handleVerticalMouseDown} />
-      <div className="flex-shrink-0 bg-[#1e293b] border-y border-gray-700/50">
-        <VideoSubtitlesToolbar
-          onOpenSync={() => setIsSyncModalOpen(true)} onExportSrt={handleExportSrt} isPlaying={isPlaying} onTogglePlay={onTogglePlay} onJumpSegment={onJumpSegment} onJumpTime={onJumpTime} currentTime={currentTime} duration={duration} onSeek={onSeek} playbackRate={playbackRate} onChangeRate={onChangeRate} isScriptLinked={isScriptLinked} onToggleScriptLink={() => setIsScriptLinked((p) => !p)} isEditable={isEditing} autoScrollWave={autoScrollWave} onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)} scrollModeWave={scrollModeWave} onScrollModeChangeWave={setScrollModeWave} autoScrollSubs={autoScrollSubs} onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
-          onUndo={() => subsHistory.undo()} onRedo={() => subsHistory.redo()} canUndo={subsHistory.canUndo} canRedo={subsHistory.canRedo} onSave={handleSave}
-        />
-      </div>
-      <div ref={bottomContainerRef} className="flex-1 flex min-h-0 overflow-hidden">
-        <ScriptViewPanel
-          width={leftPanelWidth}
-          content={effectiveGuionContent}
-          csvContent={currentCsvContent}
-          editorView={editorView}
-          layout={layout}
-          tabSize={tabSize}
-          col1Width={col1Width}
-          editorStyles={editorStyles}
-          pageWidth={pageWidth}
-          onTakeLayout={handleTakeLayout}
-          scrollRef={scriptScrollRef}
-          projectId={guionProjectId}
-          docId={currentDoc?.id}
-          onGuionLoaded={handleGuionLoaded}
-          onOpenCorrection={guionProjectId ? () => setIsCorrectionModalOpen(true) : undefined}
-        />
-        <div className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors" onMouseDown={handleHorizontalMouseDown} />
-        <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">
-           <SubtitlesEditor
-            title="Subtítols SRT"
-            segments={linkedSegmentsWithDiff}
-            activeId={activeSegmentId}
-            isEditable={isEditing}
-            onSegmentChange={handleSegmentChange}
-            onSegmentBlur={handleSegmentBlur}
-            onSegmentClick={handleSegmentClick}
-            onSegmentFocus={handleSegmentFocus}
-            syncEnabled={syncSubsEnabled}
-            onSyncChange={setSyncSubsEnabled}
-            overlayConfig={subsOverlayConfig}
-            onOverlayConfigChange={setSubsOverlayConfig}
-            generalConfig={generalConfig}
-            autoScroll={autoScrollSubs}
-            onOpenAIOperations={handleOpenAIOperations}
-            onSplit={handleSplitSegmentAtCursor}
-            onMerge={handleMergeSegmentWithNext}
-            onInsert={handleInsertSegment}
-            onDelete={handleDeleteSegment}
-            correctionHighlightIds={correctionHighlightIds.size > 0 ? correctionHighlightIds : undefined}
-            pendingCorrections={pendingCorrections ?? undefined}
-            onAcceptCorrection={handleAcceptCorrection}
-            onRejectCorrection={handleRejectCorrection}
-            onAcceptAllCorrections={handleAcceptAllCorrections}
-            onRejectAllCorrections={handleRejectAllCorrections}
-            pendingInsertions={pendingInsertions.length > 0 ? pendingInsertions : undefined}
-            onAcceptInsertion={handleAcceptInsertion}
-            onRejectInsertion={handleRejectInsertion}
+    <div className="flex flex-col h-full w-full bg-[#111827] text-gray-200">
+
+      {/* ── Cos principal: panell esquerre + panell dret ───────────────────── */}
+      <div ref={mainContainerRef} className="flex flex-1 min-h-0 overflow-hidden">
+
+        {/* ── PANELL ESQUERRE: Guió (esquerra) + Subtítols (dreta) ──────────── */}
+        <div
+          ref={leftPanelRef}
+          className="flex min-h-0 overflow-hidden flex-shrink-0"
+          style={{ width: `${mainSplitPercent}%` }}
+        >
+          {/* Guió */}
+          <ScriptViewPanel
+            width={scriptSplitPercent}
+            content={effectiveGuionContent}
+            csvContent={currentCsvContent}
+            editorView={editorView}
+            layout={layout}
+            tabSize={tabSize}
+            col1Width={col1Width}
+            editorStyles={editorStyles}
+            pageWidth={pageWidth}
+            onTakeLayout={handleTakeLayout}
+            scrollRef={scriptScrollRef}
+            projectId={guionProjectId}
+            docId={currentDoc?.id}
+            onGuionLoaded={handleGuionLoaded}
+            onOpenCorrection={guionProjectId ? () => setIsCorrectionModalOpen(true) : undefined}
           />
+          {/* Divisor guió | subtítols */}
+          <div
+            className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
+            onMouseDown={handleScriptSplitMouseDown}
+          />
+          {/* Subtítols */}
+          <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">
+            <SubtitlesEditor
+              title="Subtítols SRT"
+              segments={linkedSegmentsWithDiff}
+              activeId={activeSegmentId}
+              isEditable={isEditing}
+              onSegmentChange={handleSegmentChange}
+              onSegmentBlur={handleSegmentBlur}
+              onSegmentClick={handleSegmentClick}
+              onSegmentFocus={handleSegmentFocus}
+              syncEnabled={syncSubsEnabled}
+              onSyncChange={setSyncSubsEnabled}
+              overlayConfig={subsOverlayConfig}
+              onOverlayConfigChange={setSubsOverlayConfig}
+              generalConfig={generalConfig}
+              autoScroll={autoScrollSubs}
+              onOpenAIOperations={handleOpenAIOperations}
+              onSplit={handleSplitSegmentAtCursor}
+              onMerge={handleMergeSegmentWithNext}
+              onInsert={handleInsertSegment}
+              onDelete={handleDeleteSegment}
+              correctionHighlightIds={correctionHighlightIds.size > 0 ? correctionHighlightIds : undefined}
+              pendingCorrections={pendingCorrections ?? undefined}
+              onAcceptCorrection={handleAcceptCorrection}
+              onRejectCorrection={handleRejectCorrection}
+              onAcceptAllCorrections={handleAcceptAllCorrections}
+              onRejectAllCorrections={handleRejectAllCorrections}
+              pendingInsertions={pendingInsertions.length > 0 ? pendingInsertions : undefined}
+              onAcceptInsertion={handleAcceptInsertion}
+              onRejectInsertion={handleRejectInsertion}
+            />
+          </div>
         </div>
+
+        {/* Divisor esquerra | dreta */}
+        <div
+          className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
+          onMouseDown={handleMainSplitMouseDown}
+        />
+
+        {/* ── PANELL DRET: Vídeo (flex-grow) + Toolbar (fix) ───────────────── */}
+        <div className="flex flex-col flex-grow min-h-0 overflow-hidden">
+          <div className="flex-grow min-h-0 bg-black overflow-hidden">
+            <VideoPlaybackArea {...playerProps} />
+          </div>
+          <div className="flex-shrink-0 bg-[#1e293b] border-t border-gray-700/50">
+            <VideoSubtitlesToolbar
+              onOpenSync={() => setIsSyncModalOpen(true)} onExportSrt={handleExportSrt} isPlaying={isPlaying} onTogglePlay={onTogglePlay} onJumpSegment={onJumpSegment} onJumpTime={onJumpTime} currentTime={currentTime} duration={duration} onSeek={onSeek} playbackRate={playbackRate} onChangeRate={onChangeRate} isScriptLinked={isScriptLinked} onToggleScriptLink={() => setIsScriptLinked((p) => !p)} isEditable={isEditing} autoScrollWave={autoScrollWave} onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)} scrollModeWave={scrollModeWave} onScrollModeChangeWave={setScrollModeWave} autoScrollSubs={autoScrollSubs} onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
+              onUndo={() => subsHistory.undo()} onRedo={() => subsHistory.redo()} canUndo={subsHistory.canUndo} canRedo={subsHistory.canRedo} onSave={handleSave}
+            />
+          </div>
+        </div>
+
       </div>
+
+      {/* ── WAVEFORM inferior: alçada fixa 150px, amplada completa ───────────── */}
+      <div className="flex-shrink-0 w-full" style={{ height: '150px' }}>
+        <WaveformTimeline
+          videoFile={videoFile}
+          segments={linkedSegmentsWithDiff}
+          currentTime={currentTime}
+          duration={duration}
+          onSeek={onSeek}
+          isPlaying={isPlaying}
+          videoRef={videoRef}
+          activeId={activeSegmentId}
+          onSegmentUpdate={handleSegmentUpdate}
+          onSegmentUpdateEnd={handleSegmentUpdateEnd}
+          onSegmentClick={handleSegmentClick}
+          autoScroll={autoScrollWave}
+          scrollMode={scrollModeWave}
+        />
+      </div>
+
+      {/* ── Modals ──────────────────────────────────────────────────────────── */}
       {isSyncModalOpen && <SyncLibraryModal isOpen={isSyncModalOpen} onClose={() => setIsSyncModalOpen(false)} onSyncMedia={handleSyncMedia} onSyncSubtitles={handleSyncSubtitles} />}
       {isAIModalOpen && <SubtitleAIOperationsModal isOpen={isAIModalOpen} onClose={() => setIsAIModalOpen(false)} mode={aiMode} isProcessing={isAIProcessing} onWhisper={handleWhisperTranscription} onTranslate={handleAITranslation} onRevision={handleAIRevision} />}
       {isCorrectionModalOpen && guionProjectId && (

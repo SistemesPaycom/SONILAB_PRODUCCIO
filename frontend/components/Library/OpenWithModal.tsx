@@ -94,6 +94,13 @@ const handleConvertToSsrtlsf = () => {
   })();
 };
 
+  /** Obre l'editor en una nova pestanya del navegador */
+  const openInNewTab = (mode: OpenMode) => {
+    const url = `${window.location.origin}${window.location.pathname}#/editor/${mode}/${docId}`;
+    window.open(url, '_blank');
+    onClose();
+  };
+
   if (!doc) return null;
 
   const isSrt = doc.sourceType?.toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt');
@@ -107,7 +114,7 @@ const handleConvertToSsrtlsf = () => {
         <div className="bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md text-gray-200 border border-gray-700">
            <h2 className="text-xl font-bold text-white mb-6">Obrir SSRTLSF</h2>
            <button
-              onClick={() => onOpen(doc.id, 'editor-ssrtlsf', true)}
+              onClick={() => openInNewTab('editor-ssrtlsf')}
               className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-emerald-600/20 hover:border-emerald-500/50 border border-transparent transition-all text-left"
             >
               <Icons.Hash className="w-8 h-8 text-emerald-400 flex-shrink-0" />
@@ -141,7 +148,7 @@ const handleConvertToSsrtlsf = () => {
             <>
               <li>
                 <button
-                  onClick={() => onOpen(doc.id, 'editor-srt-standalone', isEditingMode)}
+                  onClick={() => openInNewTab('editor-srt-standalone')}
                   className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-cyan-600/20 hover:border-cyan-500/50 border border-transparent transition-all text-left"
                 >
                   <Icons.SubtitlesIcon className="w-8 h-8 text-cyan-400 flex-shrink-0" />
@@ -156,7 +163,7 @@ const handleConvertToSsrtlsf = () => {
             <>
               <li>
                 <button
-                  onClick={() => onOpen(doc.id, 'editor', isEditingMode)}
+                  onClick={() => openInNewTab('editor')}
                   className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-blue-600/20 hover:border-blue-500/50 border border-transparent transition-all text-left"
                 >
                   <Icons.ScriptEditorIcon className="w-8 h-8 text-blue-400 flex-shrink-0" />
@@ -169,7 +176,7 @@ const handleConvertToSsrtlsf = () => {
               
               <li>
                 <button
-                  onClick={() => onOpen(doc.id, 'editor-video', isEditingMode)}
+                  onClick={() => openInNewTab('editor-video')}
                   className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-purple-600/20 hover:border-purple-500/50 border border-transparent transition-all text-left"
                 >
                   <Icons.VideoEditorIcon className="w-8 h-8 text-purple-400 flex-shrink-0" />
@@ -183,7 +190,7 @@ const handleConvertToSsrtlsf = () => {
               {isSlsf && (
                   <li>
                     <button
-                    onClick={() => onOpen(doc.id, 'editor-video-subs', isEditingMode)}
+                    onClick={() => openInNewTab('editor-video-subs')}
                     className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-indigo-600/20 hover:border-indigo-500/50 border border-transparent transition-all text-left"
                     >
                     <Icons.Hash className="w-8 h-8 text-indigo-400 flex-shrink-0" />

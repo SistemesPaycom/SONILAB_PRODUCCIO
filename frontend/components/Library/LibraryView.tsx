@@ -600,7 +600,7 @@ const itemsToRender = currentItems.filter((item) => {
       // Comprova si hi ha preferència guardada
       const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SRT_EDITOR_MODE);
       if (saved === 'editor-video-subs' || saved === 'editor-srt-standalone') {
-        onOpenDocument(docId, saved as any, true);
+        window.open(`${window.location.origin}${window.location.pathname}#/editor/${saved}/${docId}`, '_blank');
       } else {
         // Mostrar modal de selecció; consultar si el projecte té guió
         setSrtModeDocId(docId);
@@ -706,7 +706,10 @@ const itemsToRender = currentItems.filter((item) => {
         onSelect={(mode, remember) => {
           if (remember) localStorage.setItem(LOCAL_STORAGE_KEYS.SRT_EDITOR_MODE, mode);
           setSrtModeModalOpen(false);
-          if (srtModeDocId) onOpenDocument(srtModeDocId, mode as any, true);
+          if (srtModeDocId) {
+            const url = `${window.location.origin}${window.location.pathname}#/editor/${mode}/${srtModeDocId}`;
+            window.open(url, '_blank');
+          }
           setSrtModeDocId(null);
         }}
         onClose={() => { setSrtModeModalOpen(false); setSrtModeDocId(null); }}

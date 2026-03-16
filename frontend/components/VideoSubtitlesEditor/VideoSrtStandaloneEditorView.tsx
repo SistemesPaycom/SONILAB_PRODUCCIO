@@ -3,7 +3,9 @@ import { Document, OverlayConfig, Id } from '../../types';
 import * as Icons from '../icons';
 import { VideoSubtitlesToolbar } from './VideoSubtitlesToolbar';
 import { VideoPlaybackArea } from '../VideoEditor/VideoPlaybackArea';
+import WaveformTimeline from '../VideoEditor/WaveformTimeline';
 import SubtitlesEditor from './SubtitlesEditor';
+import { useHorizontalPanelResize } from '../../hooks/usePanelResize';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
 import SyncLibraryModal from './SyncLibraryModal';
@@ -322,6 +324,11 @@ useEffect(() => {
     return seg ? { id: seg.id, startTime: seg.startTime, endTime: seg.endTime, originalText: seg.originalText, translatedText: '' } : null;
   }, [segments, currentTime]);
 
+  // ── Panell principal: esquerra (subtítols) | dreta (vídeo+toolbar) ─────────
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const { widthPercent: mainSplitPercent, handleMouseDown: handleMainSplitMouseDown } =
+    useHorizontalPanelResize(mainContainerRef as React.RefObject<HTMLElement>, 55, 25, 80);
+
   const playerProps = {
     isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments, activeId: activeSegmentId,
     activeSegment: subsOverlayConfig.show ? activeSegmentForPlayer : null,
@@ -332,6 +339,7 @@ useEffect(() => {
 
   return (
     <div className="flex flex-col h-full w-full bg-[#0f172a] text-gray-200">
+      {/* Header */}
       <header className="bg-gray-800 h-14 border-b border-gray-700 flex items-center px-4 justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400">
@@ -350,44 +358,14 @@ useEffect(() => {
         </button>
       </header>
 
-      <div className="flex-grow flex flex-col min-h-0">
-        <div className="h-1/2 bg-black">
-          <VideoPlaybackArea {...playerProps} />
-        </div>
+      {/* ── Cos principal: panell esquerre (subs) + panell dret (vídeo) ───────── */}
+      <div ref={mainContainerRef} className="flex flex-1 min-h-0 overflow-hidden">
 
-        <div className="bg-[#1e293b] border-y border-gray-700/50">
-          <VideoSubtitlesToolbar
-            onOpenSync={() => setIsSyncModalOpen(true)}
-            onExportSrt={() => {}}
-            isPlaying={isPlaying}
-            onTogglePlay={onTogglePlay}
-            onJumpSegment={onJumpSegment}
-            onJumpTime={onJumpTime}
-            currentTime={currentTime}
-            duration={duration}
-            onSeek={onSeek}
-            playbackRate={playbackRate}
-            onChangeRate={onChangeRate}
-            isScriptLinked={false}
-            onToggleScriptLink={() => {}}
-            isEditable={isEditing}
-            autoScrollWave={autoScrollWave}
-            onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)}
-            scrollModeWave={scrollModeWave}
-            onScrollModeChangeWave={setScrollModeWave}
-            autoScrollSubs={autoScrollSubs}
-            onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
-            onUndo={() => subsHistory.undo()}
-            onRedo={() => subsHistory.redo()}
-            canUndo={subsHistory.canUndo}
-            canRedo={subsHistory.canRedo}
-            onSave={handleSave}
-            autosaveEnabled={autosave}
-            onToggleAutosave={() => setAutosave(!autosave)}
-          />
-        </div>
-
-        <div className="flex-grow overflow-hidden bg-[#111827]">
+        {/* ── PANELL ESQUERRE: Subtítols ─────────────────────────────────────── */}
+        <div
+          className="flex-shrink-0 overflow-hidden bg-[#111827]"
+          style={{ width: `${mainSplitPercent}%` }}
+        >
           <SubtitlesEditor
             title="Llista de Subtítols"
             segments={segments}
@@ -410,8 +388,72 @@ useEffect(() => {
             onDelete={handleDeleteSegment}
           />
         </div>
+
+        {/* Divisor esquerra | dreta */}
+        <div
+          className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
+          onMouseDown={handleMainSplitMouseDown}
+        />
+
+        {/* ── PANELL DRET: Vídeo (flex-grow) + Toolbar (fix) ───────────────── */}
+        <div className="flex flex-col flex-grow min-h-0 overflow-hidden">
+          <div className="flex-grow min-h-0 bg-black overflow-hidden">
+            <VideoPlaybackArea {...playerProps} />
+          </div>
+          <div className="flex-shrink-0 bg-[#1e293b] border-t border-gray-700/50">
+            <VideoSubtitlesToolbar
+              onOpenSync={() => setIsSyncModalOpen(true)}
+              onExportSrt={() => {}}
+              isPlaying={isPlaying}
+              onTogglePlay={onTogglePlay}
+              onJumpSegment={onJumpSegment}
+              onJumpTime={onJumpTime}
+              currentTime={currentTime}
+              duration={duration}
+              onSeek={onSeek}
+              playbackRate={playbackRate}
+              onChangeRate={onChangeRate}
+              isScriptLinked={false}
+              onToggleScriptLink={() => {}}
+              isEditable={isEditing}
+              autoScrollWave={autoScrollWave}
+              onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)}
+              scrollModeWave={scrollModeWave}
+              onScrollModeChangeWave={setScrollModeWave}
+              autoScrollSubs={autoScrollSubs}
+              onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
+              onUndo={() => subsHistory.undo()}
+              onRedo={() => subsHistory.redo()}
+              canUndo={subsHistory.canUndo}
+              canRedo={subsHistory.canRedo}
+              onSave={handleSave}
+              autosaveEnabled={autosave}
+              onToggleAutosave={() => setAutosave(!autosave)}
+            />
+          </div>
+        </div>
+
       </div>
 
+      {/* ── WAVEFORM inferior: alçada fixa 150px, amplada completa ───────────── */}
+      <div className="flex-shrink-0 w-full" style={{ height: '150px' }}>
+        <WaveformTimeline
+          videoFile={videoFile}
+          segments={segments}
+          currentTime={currentTime}
+          duration={duration}
+          onSeek={onSeek}
+          isPlaying={isPlaying}
+          videoRef={videoRef}
+          activeId={activeSegmentId}
+          onSegmentUpdate={handleSegmentUpdate}
+          onSegmentClick={handleSegmentClick}
+          autoScroll={autoScrollWave}
+          scrollMode={scrollModeWave}
+        />
+      </div>
+
+      {/* ── Modals ──────────────────────────────────────────────────────────── */}
       {isSyncModalOpen && (
         <SyncLibraryModal
           isOpen={isSyncModalOpen}
