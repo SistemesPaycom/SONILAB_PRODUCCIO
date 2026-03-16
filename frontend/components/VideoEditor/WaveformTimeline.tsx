@@ -106,15 +106,12 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const [zoomH, setZoomH] = useState(MIN_ZOOM_INICI_H);
   const [zoomV, setZoomV] = useState(MIN_ZOOM_INICI_V);
 
-  const pendingUpdateRef = useRef<{ id: Id; s: number; e: number } | null>(null);
-const rafUpdateRef = useRef<number | null>(null);
-
-const flushPendingUpdate = useCallback(() => {
-  rafUpdateRef.current = null;
-  const p = pendingUpdateRef.current;
-  if (!p) return;
-  onSegmentUpdate?.(p.id, p.s, p.e);
-}, [onSegmentUpdate]);
+  // ── Ephemeral drag: visual-only segment position during drag ────────
+  // During drag we do NOT call onSegmentUpdate (avoids React re-renders).
+  // Instead we store the dragged segment's ephemeral position here and
+  // let drawStatic read it. On mouseup we commit once.
+  const ephemeralSegRef = useRef<{ id: Id; startTime: number; endTime: number } | null>(null);
+  const rafRedrawRef = useRef<number | null>(null);
 
   // viewport
   const currentViewportStartRef = useRef<number>(0);
@@ -131,9 +128,9 @@ const flushPendingUpdate = useCallback(() => {
   const pressRef = useRef<PressState | null>(null);
   const holdTimerRef = useRef<number | null>(null);
 
-  // drag
-  const [dragState, setDragState] = useState<DragState | null>(null);
-  const [cursorStyle, setCursorStyle] = useState<string>('default');
+  // drag — refs to avoid re-renders during interaction
+  const dragStateRef = useRef<DragState | null>(null);
+  const cursorRef = useRef<string>('default');
 
   // --- SOLUCIÓ AL SALT VISUAL I BOLA FANTASMA ---
   useEffect(() => {
@@ -274,7 +271,20 @@ const flushPendingUpdate = useCallback(() => {
     [getVisibleDuration]
   );
 
-  const draw = useCallback(
+  // ── Overlay canvas for playhead (separate from main canvas) ─────────
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Track the last viewport params for the static layer so the overlay
+  // layer can position the playhead without recomputing everything.
+  const lastViewportRef = useRef<{
+    viewportStart: number;
+    visDur: number;
+    width: number;
+    height: number;
+  }>({ viewportStart: 0, visDur: 30, width: 0, height: 0 });
+
+  // ── drawStatic: waveform + segments (expensive, called rarely) ────────
+  const drawStatic = useCallback(
     (exactTime: number) => {
       const canvas = canvasRef.current;
       if (!canvas || !wavePeaks) return;
@@ -296,6 +306,9 @@ const flushPendingUpdate = useCallback(() => {
       const height = rect.height;
       const visDur = getVisibleDuration();
       const viewportStart = getViewportStart(exactTime);
+
+      // Store viewport params for overlay layer
+      lastViewportRef.current = { viewportStart, visDur, width, height };
 
       ctx.fillStyle = '#111827';
       ctx.fillRect(0, 0, width, height);
@@ -355,9 +368,14 @@ const flushPendingUpdate = useCallback(() => {
         const curSegments = segmentsRef.current;
         const curActiveId = activeIdRef.current;
 
+        const eph = ephemeralSegRef.current;
         curSegments.forEach((seg) => {
-          const x1 = timeToX(seg.startTime, viewportStart, width, visDur);
-          const x2 = timeToX(seg.endTime, viewportStart, width, visDur);
+          // Use ephemeral position for the segment being dragged
+          const sStart = eph && eph.id === seg.id ? eph.startTime : seg.startTime;
+          const sEnd = eph && eph.id === seg.id ? eph.endTime : seg.endTime;
+
+          const x1 = timeToX(sStart, viewportStart, width, visDur);
+          const x2 = timeToX(sEnd, viewportStart, width, visDur);
           if (x2 < 0 || x1 > width) return;
 
           const isActiveSeg = seg.id === curActiveId;
@@ -367,24 +385,32 @@ const flushPendingUpdate = useCallback(() => {
           ctx.strokeStyle = isActiveSeg ? '#6366f1' : '#64748b';
           ctx.lineWidth = isActiveSeg ? 1.5 : 1;
           ctx.strokeRect(x1, boxY, x2 - x1, boxH);
-
-        /*   if (x2 - x1 > 40) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(x1 + 4, boxY, x2 - x1 - 8, boxH);
-            ctx.clip();
-
-            ctx.fillStyle = isActiveSeg ? '#a5b4fc' : '#9ca3af';
-            ctx.font = '11px sans-serif';
-            ctx.textBaseline = 'top';
-
-            const lines = stripHtml(seg.originalText || '').split('\n');
-            lines.slice(0, 2).forEach((line, i) => ctx.fillText(line, x1 + 6, boxY + 4 + i * 12));
-
-            ctx.restore();
-          } */
         });
       }
+    },
+    [wavePeaks, zoomH, zoomV, viewMode, getVisibleDuration, getViewportStart, timeToX]
+  );
+
+  // ── drawPlayhead: ONLY the playhead line on the overlay canvas (cheap, 60fps) ──
+  const drawPlayhead = useCallback(
+    (exactTime: number) => {
+      const overlay = overlayCanvasRef.current;
+      if (!overlay) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const { viewportStart, visDur, width, height } = lastViewportRef.current;
+      if (width === 0) return;
+
+      if (overlay.width !== width * dpr || overlay.height !== height * dpr) {
+        overlay.width = width * dpr;
+        overlay.height = height * dpr;
+      }
+
+      const ctx = overlay.getContext('2d');
+      if (!ctx) return;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
 
       const playheadX = timeToX(exactTime, viewportStart, width, visDur);
       if (playheadX >= 0 && playheadX <= width) {
@@ -396,29 +422,63 @@ const flushPendingUpdate = useCallback(() => {
         ctx.stroke();
       }
     },
-    [wavePeaks, zoomH, zoomV, viewMode, getVisibleDuration, getViewportStart, timeToX]
+    [timeToX]
+  );
+
+  // ── Full draw = static + playhead ──────────────────────────────────────
+  const draw = useCallback(
+    (exactTime: number) => {
+      drawStatic(exactTime);
+      drawPlayhead(exactTime);
+    },
+    [drawStatic, drawPlayhead]
   );
 
   // ── drawRef: permet que renderLoop sigui estable (mai es recrea) ──────
+  const drawStaticRef = useRef(drawStatic);
+  drawStaticRef.current = drawStatic;
+  const drawPlayheadRef = useRef(drawPlayhead);
+  drawPlayheadRef.current = drawPlayhead;
   const drawRef = useRef(draw);
   drawRef.current = draw;
 
+  // Track last playhead pixel to skip sub-pixel updates
+  const lastPlayheadPxRef = useRef(-1);
+
   const renderLoop = useCallback(() => {
-    if (videoRef?.current) drawRef.current(videoRef.current.currentTime);
+    if (videoRef?.current) {
+      const t = videoRef.current.currentTime;
+      const { viewportStart, visDur, width } = lastViewportRef.current;
+      const px = ((t - viewportStart) / visDur) * width;
+
+      // Only redraw playhead if it moved at least 0.5 pixel
+      if (Math.abs(px - lastPlayheadPxRef.current) >= 0.5) {
+        lastPlayheadPxRef.current = px;
+        drawPlayheadRef.current(t);
+      }
+
+      // Check if viewport needs scrolling (stationary mode) — redraw static if so
+      const newVs = drawStaticRef.current === drawRef.current
+        ? viewportStart // avoid calling getViewportStart in tight loop
+        : viewportStart;
+
+      // For page/stationary scroll modes, check if we scrolled past viewport
+      const visDuration = lastViewportRef.current.visDur;
+      if (t < viewportStart || t > viewportStart + visDuration) {
+        drawRef.current(t);
+        lastPlayheadPxRef.current = -1; // force redraw next frame
+      }
+    }
     animationFrameRef.current = requestAnimationFrame(renderLoop);
   }, [videoRef]);
-  // renderLoop és estable perquè videoRef mai canvia i drawRef és un ref.
-  // Això evita que el RAF loop es reiniciï quan draw canvia (zoom, segments, etc.)
 
   // ── RAF loop per reproducció + draw estàtic quan pausat ────────────────
-  // Manté la mateixa estructura de deps (4) que l'original per compatibilitat HMR.
-  // renderLoop és estable (via drawRef) → l'efecte NOMÉS es re-executa quan:
-  //   - isPlaying canvia (start/stop) → correcte
-  //   - currentTime canvia (cada 250ms) → renderLoop() es crida SÍNCRONAMENT,
-  //     dibuixa immediatament i programa el proper RAF → sense salt visual
   useEffect(() => {
-    if (isPlaying) renderLoop();
-    else {
+    if (isPlaying) {
+      draw(currentTime); // Full draw once when starting playback
+      lastPlayheadPxRef.current = -1;
+      renderLoop();
+    } else {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       draw(currentTime);
     }
@@ -483,13 +543,13 @@ const flushPendingUpdate = useCallback(() => {
         const seg = segments.find((s) => s.id === target.id);
         if (!seg) return;
 
-        setDragState({
+        dragStateRef.current = {
           segmentId: target.id,
           type: target.type,
           startX: ps.latestX,
           originalStart: seg.startTime,
           originalEnd: seg.endTime,
-        });
+        };
       }, effectiveHoldToEditMs);
     }
   };
@@ -509,34 +569,46 @@ const flushPendingUpdate = useCallback(() => {
     const refTime = isPlaying && videoRef?.current ? videoRef.current.currentTime : currentTime;
     const timeAtMouse = xToTime(x, getViewportStart(refTime), rect.width, getVisibleDuration());
 
-    if (dragState && e.buttons === 1) {
-      const timeDelta = (x - dragState.startX) * (getVisibleDuration() / rect.width);
+    const ds = dragStateRef.current;
+    if (ds && e.buttons === 1) {
+      const timeDelta = (x - ds.startX) * (getVisibleDuration() / rect.width);
 
-      let nS = dragState.originalStart;
-      let nE = dragState.originalEnd;
+      let nS = ds.originalStart;
+      let nE = ds.originalEnd;
 
-      if (dragState.type === 'move') {
-        nS = Math.max(0, dragState.originalStart + timeDelta);
-        nE = nS + (dragState.originalEnd - dragState.originalStart);
+      if (ds.type === 'move') {
+        nS = Math.max(0, ds.originalStart + timeDelta);
+        nE = nS + (ds.originalEnd - ds.originalStart);
         if (nE > duration) {
           nE = duration;
-          nS = nE - (dragState.originalEnd - dragState.originalStart);
+          nS = nE - (ds.originalEnd - ds.originalStart);
         }
-      } else if (dragState.type === 'resize-start') {
-        nS = Math.max(0, Math.min(dragState.originalStart + timeDelta, dragState.originalEnd - 0.2));
-      } else if (dragState.type === 'resize-end') {
-        nE = Math.min(duration, Math.max(dragState.originalStart + 0.2, dragState.originalEnd + timeDelta));
+      } else if (ds.type === 'resize-start') {
+        nS = Math.max(0, Math.min(ds.originalStart + timeDelta, ds.originalEnd - 0.2));
+      } else if (ds.type === 'resize-end') {
+        nE = Math.min(duration, Math.max(ds.originalStart + 0.2, ds.originalEnd + timeDelta));
       }
 
-     pendingUpdateRef.current = { id: dragState.segmentId, s: nS, e: nE };
-if (rafUpdateRef.current == null) {
-  rafUpdateRef.current = requestAnimationFrame(flushPendingUpdate);
-}
-return;
+      // Ephemeral: update ref only, redraw canvas visually — NO React state
+      ephemeralSegRef.current = { id: ds.segmentId, startTime: nS, endTime: nE };
+      if (rafRedrawRef.current == null) {
+        rafRedrawRef.current = requestAnimationFrame(() => {
+          rafRedrawRef.current = null;
+          const t = videoRef?.current ? videoRef.current.currentTime : currentTime;
+          drawStaticRef.current(t);
+          drawPlayheadRef.current(t);
+        });
+      }
+      return;
     }
 
+    // Set cursor via DOM — no React state, no re-render
     const target = getHitTarget(x, y, rect.width, rect.height, timeAtMouse);
-    setCursorStyle(target ? (target.type === 'move' ? 'move' : 'col-resize') : 'default');
+    const newCursor = target ? (target.type === 'move' ? 'move' : 'col-resize') : 'default';
+    if (canvasRef.current && cursorRef.current !== newCursor) {
+      cursorRef.current = newCursor;
+      canvasRef.current.style.cursor = newCursor;
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -547,10 +619,19 @@ return;
 
     clearHoldTimer();
 
-    // Si estàvem en mode arrossegament, finalitzem sense fer seek
-    if (dragState) {
+    // Si estàvem en mode arrossegament, commit ephemeral → React state
+    if (dragStateRef.current) {
+      const eph = ephemeralSegRef.current;
+      if (eph) {
+        onSegmentUpdate?.(eph.id, eph.startTime, eph.endTime);
+        ephemeralSegRef.current = null;
+      }
+      if (rafRedrawRef.current) {
+        cancelAnimationFrame(rafRedrawRef.current);
+        rafRedrawRef.current = null;
+      }
       onSegmentUpdateEnd?.();
-      setDragState(null);
+      dragStateRef.current = null;
       pressRef.current = null;
       return;
     }
@@ -636,11 +717,16 @@ return;
       <div className="flex-1 relative min-h-0 w-full" onWheel={handleWheel}>
         <canvas
           ref={canvasRef}
-          className="w-full h-full block"
-          style={{ cursor: cursorStyle }}
+          className="absolute inset-0 w-full h-full block"
+          style={{ cursor: 'default' }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+        />
+        {/* Overlay canvas — playhead only (redrawn 60fps, cheap) */}
+        <canvas
+          ref={overlayCanvasRef}
+          className="absolute inset-0 w-full h-full block pointer-events-none"
         />
 
         {!videoFile && !isLoading && (

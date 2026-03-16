@@ -175,4 +175,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   );
 };
 
-export default VideoPlayer;
+// Custom comparator: skip re-renders caused by currentTime changes.
+// The <video> element manages its own playback time via the ref;
+// subtitle overlay depends on activeSegment (already compared by reference).
+export default React.memo(VideoPlayer, (prev, next) => {
+  // Re-render only when something other than currentTime/duration changes
+  if (prev.src !== next.src) return false;
+  if (prev.isPlaying !== next.isPlaying) return false;
+  if (prev.activeSegment !== next.activeSegment) return false;
+  if (prev.overlayConfig !== next.overlayConfig) return false;
+  if (prev.isFloating !== next.isFloating) return false;
+  // Callbacks — reference equality (parent should memoize these)
+  if (prev.onTogglePlay !== next.onTogglePlay) return false;
+  if (prev.onPlay !== next.onPlay) return false;
+  if (prev.onPause !== next.onPause) return false;
+  // currentTime, duration, onTimeUpdate, onDurationChange, onSeek, onJumpSegment
+  // are intentionally NOT compared — they change frequently but don't affect render output
+  return true;
+});
