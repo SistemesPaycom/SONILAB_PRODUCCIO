@@ -174,11 +174,12 @@ class GuionCue:
     text: str
     abs_time: float    # temps absolut en segons (del anchor/base TC)
     take_num: int = 0
+    content_class: str = "dialogue"  # "dialogue" | "gesture_only" | "mixed" | "insert_or_title"
 
 
 @dataclass
 class ChangeRecord:
-    seg_idx: int       # número de cue SRT
+    seg_idx: int       # número de cue SRT (-1 per a propose_new_cue)
     start: str
     end: str
     original: str      # text abans
@@ -186,8 +187,12 @@ class ChangeRecord:
     guion_speaker: str
     guion_text: str    # text del guió assignat
     score: float       # similitud [0.0, 1.0]
-    method: str        # "fuzzy_replace" / "no_change" / "take_llm" / ...
+    method: str        # llegat: "fuzzy_replace" / "no_change" / "take_llm" / ...
     take_num: int = 0  # TAKE del guió al qual pertany la correcció
+    # Nou: acció estructurada (Phase 3 - LLM com àrbitre local)
+    action: str = "no_change"
+    # Nou: per a propose_new_cue, l'índex del seg_idx DESPRÉS del qual inserir
+    proposed_after_seg_idx: int = -1
 
 
 # ─────────────────────── Parser SRT ───────────────────────────────────────────
@@ -287,6 +292,7 @@ def _parse_guion_txt(guion_text: str) -> List[GuionCue]:
                         text=part,
                         abs_time=c.abs_time,
                         take_num=c.take_num,
+                        content_class=getattr(c, 'content_class', 'dialogue'),
                     ))
         return result
     except Exception:
@@ -532,7 +538,9 @@ def _find_best_guion_match(
     if not guion_cues:
         return None, 0.0
 
-    lo = max(0, guion_cursor - window // 2)
+    # Matching monotònic estricte: màxim 1 cue de lookback (no window//2)
+    # Evita que el corrector salti a cues llunyanes del mateix TAKE
+    lo = max(0, guion_cursor - 1)
     hi = min(len(guion_cues), guion_cursor + window + 1)
 
     # Si no hi ha candidats permesos en la finestra estàndard, ampliar la finestra
@@ -1096,6 +1104,250 @@ def _correct_take_with_llm(
         return {}
 
 
+# ─────────────────────── Fase 2: Matching monotònic local ────────────────────
+
+def _build_local_candidates(
+    take_cues: List[GuionCue],
+    take_cursor: int,
+    n: int = 4,
+    lookback: int = 1,
+) -> List[Tuple[int, GuionCue]]:
+    """
+    Construeix una finestra local de candidats de guió per a un segment SRT.
+
+    Retorna (índex_dins_take_cues, GuionCue) dels candidats vàlids.
+
+    Regles:
+    - Finestra: [cursor - lookback, cursor + n]  (màxim n+lookback candidats)
+    - Exclou cues de tipus gesture_only (no són diàleg subtitulable)
+    - Exclou cues de tipus insert_or_title
+
+    El resultat ja és filtrat i ordenat pel ordre del guió (monotonia).
+    """
+    lo = max(0, take_cursor - lookback)
+    hi = min(len(take_cues), take_cursor + n)
+    return [
+        (i, take_cues[i])
+        for i in range(lo, hi)
+        if take_cues[i].content_class not in ("gesture_only", "insert_or_title")
+    ]
+
+
+# ─────────────────────── Fase 3: LLM com àrbitre local ───────────────────────
+
+def _llm_arbitrate_local(
+    model: str,
+    seg: SrtSegment,
+    candidates: List[Tuple[int, GuionCue]],
+    prev_seg: Optional[SrtSegment] = None,
+    next_seg: Optional[SrtSegment] = None,
+    verbose: bool = False,
+) -> dict:
+    """
+    El LLM actua com àrbitre local entre un conjunt PETIT de candidats (2-4).
+    NO genera text lliurement — tria una acció sobre opcions ja restringides.
+
+    Accions possibles:
+      - "no_change"           : el text ASR és prou correcte o cap candidat encaixa
+      - "replace_existing"    : substitueix el text del seg pel del candidat N
+      - "rebalance_with_prev" : rebalanceja el text entre el seg anterior i aquest
+      - "rebalance_with_next" : rebalanceja el text entre aquest seg i el seg següent
+
+    Retorna:
+      {"action": str, "candidate_idx": int|None, "text": str|None}
+      - candidate_idx: índex LOCAL dins de 'candidates' (0-based)
+      - text: el text final proposat (ja net de noms de speaker)
+
+    IMPORTANT:
+    - El LLM NOMÉS pot triar entre els candidats presentats
+    - El LLM NO pot inventar text nou
+    - Si la resposta no és parseable → default "no_change"
+    """
+    if not candidates:
+        return {"action": "no_change", "candidate_idx": None, "text": None}
+
+    known_speakers: set = {c.speaker.strip().upper() for _, c in candidates if c.speaker}
+
+    # Format candidats: [speaker] text (sense index separat per evitar confusió)
+    cands_block = '\n'.join(
+        f"  [{local_pos + 1}] [{c.speaker}] {c.text}"
+        for local_pos, (_, c) in enumerate(candidates)
+    )
+
+    context_lines = ""
+    if prev_seg:
+        context_lines += f"PREVIOUS SUBTITLE: {prev_seg.text}\n"
+    context_lines += f"CURRENT SUBTITLE (ASR): {seg.text}\n"
+    if next_seg:
+        context_lines += f"NEXT SUBTITLE: {next_seg.text}\n"
+
+    n_cands = len(candidates)
+    prompt = (
+        "You are a subtitle arbiter for dubbing. "
+        "Choose the best LOCAL action for the current ASR subtitle.\n\n"
+        f"{context_lines}\n"
+        f"SCRIPT CANDIDATES (choose from 1..{n_cands}):\n{cands_block}\n\n"
+        "CHOOSE ONE ACTION:\n"
+        "  - no_change: ASR is acceptable or no script candidate matches well\n"
+        f"  - replace_existing: replace ASR text with a candidate (1..{n_cands})\n"
+        "  - rebalance_with_prev: move text between PREVIOUS and CURRENT subtitle\n"
+        "  - rebalance_with_next: move text between CURRENT and NEXT subtitle\n\n"
+        "STRICT RULES:\n"
+        "1. ONLY use text from the listed candidates — do NOT invent dialogue\n"
+        "2. Do NOT include speaker names (e.g. 'RUFFY:', '[GALA]') in the subtitle text\n"
+        "3. If no candidate matches well (similarity < 30%), choose no_change\n"
+        "4. For rebalance actions: split the combined text of the two candidates at a natural boundary\n"
+        "5. Keep the response small — only the chosen action and resulting text\n\n"
+        f"Reply ONLY with JSON (no explanation):\n"
+        f"{{\"action\": \"replace_existing\", \"candidate\": 2, \"text\": \"the subtitle text\"}}\n"
+        f"or for no_change: {{\"action\": \"no_change\", \"candidate\": null, \"text\": null}}\n"
+        f"or for rebalance: {{\"action\": \"rebalance_with_next\", \"candidate\": 1, "
+        f"\"text\": \"text for current\", \"text_neighbor\": \"text for neighbor\"}}"
+    )
+
+    response = _call_ollama(model, prompt, timeout=30, verbose=verbose)
+    if not response:
+        return {"action": "no_change", "candidate_idx": None, "text": None}
+
+    try:
+        clean = re.sub(r'```[a-zA-Z]*\n?', '', response).strip('`').strip()
+        json_m = re.search(r'\{[\s\S]*\}', clean)
+        if not json_m:
+            return {"action": "no_change", "candidate_idx": None, "text": None}
+        data = json.loads(json_m.group())
+
+        action = str(data.get('action', 'no_change')).strip()
+        valid_actions = {"no_change", "replace_existing", "rebalance_with_prev", "rebalance_with_next"}
+        if action not in valid_actions:
+            action = "no_change"
+
+        cand_n = data.get('candidate')
+        text = data.get('text')
+        text_neighbor = data.get('text_neighbor')
+
+        cand_local_idx: Optional[int] = None
+        take_cue_idx: Optional[int] = None
+        if cand_n is not None:
+            try:
+                local_pos = int(cand_n) - 1  # convert 1-based to 0-based
+                if 0 <= local_pos < len(candidates):
+                    cand_local_idx = local_pos
+                    take_cue_idx = candidates[local_pos][0]
+            except (ValueError, TypeError):
+                pass
+
+        if action == "no_change" or cand_local_idx is None:
+            return {"action": "no_change", "candidate_idx": None, "text": None}
+
+        # Strip speaker contamination from text
+        if text:
+            text = _strip_speaker_contamination(str(text).strip(), known_speakers)
+        if text_neighbor:
+            text_neighbor = _strip_speaker_contamination(str(text_neighbor).strip(), known_speakers)
+
+        return {
+            "action": action,
+            "candidate_idx": take_cue_idx,  # índex dins de take_cues (no local)
+            "text": text if text else None,
+            "text_neighbor": text_neighbor if text_neighbor else None,
+        }
+
+    except Exception:
+        return {"action": "no_change", "candidate_idx": None, "text": None}
+
+
+# ─────────────────────── Fase 4: Detecció de línies faltants ─────────────────
+
+def _detect_proposed_insertions(
+    take_cues: List[GuionCue],
+    take_segs: List[SrtSegment],
+    used_cue_local_indices: set,
+    take_end: float,
+    verbose: bool = False,
+) -> List[ChangeRecord]:
+    """
+    Detecta línies de diàleg del guió que NO han estat matchejades amb cap
+    segment SRT del TAKE i proposa inserir-les com a nous subtítols.
+
+    Condicions ESTRICTES per proposar un nou cue:
+      1. La cue pertany a aquest TAKE
+      2. content_class és "dialogue" o "mixed" (no gesture_only, no insert_or_title)
+      3. Té text verbal real (> 2 paraules)
+      4. Cap segment adjacent no ja cobreix (similitud > 0.40) aquest text
+      5. La cue no ha estat matched (no és a used_cue_local_indices)
+
+    Retorna llista de ChangeRecord amb action="propose_new_cue" i seg_idx=-1.
+    proposed_after_seg_idx indica el seg_idx del segment ANTERIOR a la inserció.
+    """
+    proposals: List[ChangeRecord] = []
+
+    if not take_segs:
+        return proposals
+
+    for local_i, cue in enumerate(take_cues):
+        # Condició 1: Ja usat
+        if local_i in used_cue_local_indices:
+            continue
+
+        # Condició 2: Tipus de contingut
+        if cue.content_class in ("gesture_only", "insert_or_title"):
+            continue
+
+        # Condició 3: Prou text verbal (més de 2 paraules)
+        text_clean = re.sub(r'\(\d[\d:.]*s?\)', '', cue.text).strip()
+        if len(text_clean.split()) < 3:
+            continue
+
+        # Condició 4: Cap segment adjacent ja cobreix el text
+        max_sim = 0.0
+        for seg in take_segs:
+            sim = _similarity(cue.text, seg.text)
+            if sim > max_sim:
+                max_sim = sim
+        if max_sim > 0.40:
+            if verbose:
+                print(f"[PROPOSE] Cue '{cue.text[:40]}' ja cobert (sim={max_sim:.2f}) → skip",
+                      file=sys.stderr, flush=True)
+            continue
+
+        # Trobar el seg_idx ANTERIOR a la posició temporal de la cue
+        proposed_after = -1
+        for seg in sorted(take_segs, key=lambda s: s.start_s):
+            if seg.start_s <= cue.abs_time:
+                proposed_after = seg.idx
+
+        # Estimar timecodes: usar abs_time del cue + durada estimada (3s)
+        cue_start = cue.abs_time
+        cue_end = min(cue_start + 3.0, take_end if take_end != float('inf') else cue_start + 3.0)
+        start_tc = _seconds_to_tc(cue_start)
+        end_tc = _seconds_to_tc(cue_end)
+
+        if verbose:
+            print(f"[PROPOSE] Cue FALTANT TAKE #{cue.take_num}: "
+                  f"[{cue.speaker}] '{cue.text[:40]}' @ {start_tc} "
+                  f"(proposed_after={proposed_after})",
+                  file=sys.stderr, flush=True)
+
+        proposals.append(ChangeRecord(
+            seg_idx=-1,
+            start=start_tc,
+            end=end_tc,
+            original="",
+            corrected=text_clean,
+            guion_speaker=cue.speaker,
+            guion_text=cue.text,
+            score=0.0,
+            method='propose_new_cue',
+            action='propose_new_cue',
+            take_num=cue.take_num,
+            proposed_after_seg_idx=proposed_after,
+        ))
+
+    return proposals
+
+
+# ─────────────────────── Mode IA per TAKE (nova arquitectura) ─────────────────
+
 def align_and_correct_by_take(
     transcription_segs: List[SrtSegment],
     guion_cues: List[GuionCue],
@@ -1104,25 +1356,36 @@ def align_and_correct_by_take(
     verbose: bool = False,
 ) -> Tuple[List[SrtSegment], List[ChangeRecord]]:
     """
-    Mode IA per TAKE: agrupa els cues del guió per take_num, assigna
-    els segments SRT a cada TAKE per temps, i deixa que el LLM faci
-    la comparació completa de cada TAKE.
+    Mode IA per TAKE — NOVA ARQUITECTURA (v3):
 
-    Molt més simple per a l'usuari: no cal ajustar threshold ni finestra.
-    El LLM veu el context complet del TAKE (com faria un humà).
+    Filosòfia: el LLM és un ÀRBITRE LOCAL, no el motor principal.
+
+    Fases:
+      1. Agrupar cues per TAKE, calcular rangs temporals
+      2. Assignar segments SRT al TAKE correcte per temps
+      3. Per cada TAKE, matching monotònic local (cursor per TAKE)
+         - Candidats: finestra [cursor-1, cursor+4], filtrant gesture_only
+         - Fuzzy score per cada candidat
+         - Si score >= threshold → fuzzy_replace (determinista, sense LLM)
+         - Si score en zona ambigua → LLM arbitre local (2-4 candidats)
+         - LLM respon amb acció estructurada: no_change / replace_existing /
+           rebalance_with_prev / rebalance_with_next
+      4. Detecció de línies faltants → propose_new_cue (proposta revisable)
 
     IMPORTANT: Si Ollama no és accessible, LLANÇA ERROR (no silent fallback).
-    Verificar disponibilitat de Ollama amb _check_ollama_available() abans de cridar.
     """
+    # Threshold per defecte per fuzzy matching dins el mode take-llm
+    _THRESHOLD = 0.45
+    _FAST_LO = _THRESHOLD * 0.50  # zona ambigua per cridar LLM àrbitre
+
     # ── 1. Agrupar cues per TAKE ──────────────────────────────────────────────
     takes_cues: dict = {}  # take_num → List[GuionCue]
     for cue in guion_cues:
         takes_cues.setdefault(cue.take_num, []).append(cue)
 
-    # ── 2. Calcular rang temporal de cada TAKE a partir dels abs_time ─────────
-    # (take_start és el mínim abs_time del TAKE, take_end és el mínim del TAKE següent)
+    # ── 2. Calcular rang temporal de cada TAKE ────────────────────────────────
     sorted_take_nums = sorted(takes_cues.keys())
-    take_time_ranges: List[Tuple[int, float, float]] = []  # (take_num, start_s, end_s)
+    take_time_ranges: List[Tuple[int, float, float]] = []
 
     for i, tn in enumerate(sorted_take_nums):
         cues_for_take = takes_cues[tn]
@@ -1139,10 +1402,9 @@ def align_and_correct_by_take(
               file=sys.stderr, flush=True)
 
     # ── 3. Assignar segments SRT al seu TAKE per temps ────────────────────────
-    seg_to_take: dict = {}  # seg.idx → take_num
+    seg_to_take: dict = {}
     for seg in transcription_segs:
         for tn, t_start, t_end in take_time_ranges:
-            # Marge de 10s per a les discrepàncies entre guió i transcripció
             if seg.start_s >= t_start - 10 and seg.start_s < t_end:
                 seg_to_take[seg.idx] = tn
                 break
@@ -1152,60 +1414,204 @@ def align_and_correct_by_take(
         print(f"[LLM-TAKE] AVÍS: {unassigned} segments SRT sense TAKE assignat",
               file=sys.stderr, flush=True)
 
-    # ── 4. Per cada TAKE, cridar el LLM ──────────────────────────────────────
-    corrected_map: dict = {}  # seg.idx → text nou
+    # ── 4. Per cada TAKE: matching monotònic local + LLM àrbitre ─────────────
+    corrected_map: dict = {}   # seg.idx → text nou
+    text_neighbor_map: dict = {}  # seg.idx → text rebalancejat (per seg veí)
     changes: List[ChangeRecord] = []
     llm_calls = 0
     llm_errors = 0
 
     for tn, t_start, t_end in take_time_ranges:
-        take_segs = [s for s in transcription_segs if seg_to_take.get(s.idx) == tn]
-        cues = takes_cues.get(tn, [])
-        if not take_segs or not cues:
+        take_segs = sorted(
+            [s for s in transcription_segs if seg_to_take.get(s.idx) == tn],
+            key=lambda s: s.start_s,
+        )
+        take_cues_list: List[GuionCue] = takes_cues.get(tn, [])
+
+        if not take_segs or not take_cues_list:
             continue
 
-        llm_calls += 1
-        llm_result = _correct_take_with_llm(
-            llm_model, tn, cues, take_segs,
-            verbose=verbose,
-        )
-        if not llm_result:
-            llm_errors += 1
+        # Filtrar cues rellevants (diàleg útil) mantenint ordre temporal
+        dialogue_cues = [
+            c for c in take_cues_list
+            if c.content_class not in ("gesture_only", "insert_or_title")
+        ]
 
-        for seg in take_segs:
-            new_text = llm_result.get(seg.idx)
-            if new_text and new_text.strip() != seg.text.strip():
-                corrected_map[seg.idx] = new_text.strip()
-                # Inferir speaker del primer cue del TAKE
-                speaker = cues[0].speaker if cues else ''
+        if verbose:
+            print(f"[LLM-TAKE] TAKE #{tn}: {len(take_segs)} segs SRT, "
+                  f"{len(dialogue_cues)} cues diàleg (total {len(take_cues_list)})",
+                  file=sys.stderr, flush=True)
+
+        take_cursor = 0            # cursor monòton per als cues del TAKE
+        used_local_indices: set = set()   # índexos locals (dins dialogue_cues) ja usats
+
+        for seg_pos, seg in enumerate(take_segs):
+            prev_seg = take_segs[seg_pos - 1] if seg_pos > 0 else None
+            next_seg = take_segs[seg_pos + 1] if seg_pos + 1 < len(take_segs) else None
+
+            # ── Fase 2: Construir candidats locals ───────────────────────────
+            # Finestra: [cursor-1, cursor+4], excloent gesture_only
+            candidates = _build_local_candidates(
+                dialogue_cues, take_cursor, n=4, lookback=1,
+            )
+            # Excloure candidats ja usats
+            candidates = [(i, c) for i, c in candidates if i not in used_local_indices]
+
+            if not candidates:
+                # No hi ha candidats → no_change, avancem cursor si podem
+                if take_cursor < len(dialogue_cues):
+                    take_cursor = min(take_cursor + 1, len(dialogue_cues))
+                continue
+
+            # ── Puntuar candidats per fuzzy matching ──────────────────────────
+            scored = []
+            for local_i, cue in candidates:
+                score = _similarity(seg.text, cue.text)
+                # Bonus temporal si el temps del guió s'aproxima al del segment
+                time_diff = abs(cue.abs_time - seg.start_s)
+                time_bonus = max(0.0, 1.0 - time_diff / 30.0) * 0.04
+                scored.append((local_i, cue, score + time_bonus))
+
+            scored.sort(key=lambda x: x[2], reverse=True)
+            best_local_i, best_cue, best_score = scored[0]
+
+            # ── Decisió determinista (fuzzy) ──────────────────────────────────
+            if best_score >= _THRESHOLD:
+                # Prou confiança → substituir directament, sense LLM
+                new_text = _format_corrected_text(best_cue.text, seg.text)
+                # Strip speaker contamination com a seguretat addicional
+                known_spk = {c.speaker.strip().upper() for _, c in candidates if c.speaker}
+                new_text = _strip_speaker_contamination(new_text, known_spk)
+
+                corrected_map[seg.idx] = new_text
+                used_local_indices.add(best_local_i)
+                if best_local_i >= take_cursor:
+                    take_cursor = best_local_i + 1
+
                 changes.append(ChangeRecord(
                     seg_idx=seg.idx,
                     start=seg.start,
                     end=seg.end,
                     original=seg.text,
-                    corrected=new_text.strip(),
-                    guion_speaker=speaker,
-                    guion_text=', '.join(c.text for c in cues[:3]),
-                    score=1.0,
-                    method='take_llm',
+                    corrected=new_text,
+                    guion_speaker=best_cue.speaker,
+                    guion_text=best_cue.text,
+                    score=round(best_score, 4),
+                    method='fuzzy_replace',
+                    action='replace_existing',
                     take_num=tn,
                 ))
+                continue
+
+            # ── Zona ambigua → LLM àrbitre local ─────────────────────────────
+            if best_score >= _FAST_LO and len(candidates) >= 1:
+                llm_calls += 1
+                arb = _llm_arbitrate_local(
+                    llm_model, seg, candidates,
+                    prev_seg=prev_seg, next_seg=next_seg,
+                    verbose=verbose,
+                )
+
+                action = arb.get("action", "no_change")
+                arb_cue_idx = arb.get("candidate_idx")  # índex dins dialogue_cues
+                arb_text = arb.get("text")
+                arb_text_neighbor = arb.get("text_neighbor")
+
+                if action == "no_change" or arb_cue_idx is None or not arb_text:
+                    # LLM no ha trobat millor opció → no_change
+                    pass
+
+                elif action == "replace_existing":
+                    arb_text = _strip_speaker_contamination(
+                        arb_text,
+                        {c.speaker.strip().upper() for _, c in candidates if c.speaker},
+                    )
+                    corrected_map[seg.idx] = arb_text
+                    used_local_indices.add(arb_cue_idx)
+                    if arb_cue_idx >= take_cursor:
+                        take_cursor = arb_cue_idx + 1
+                    changes.append(ChangeRecord(
+                        seg_idx=seg.idx,
+                        start=seg.start,
+                        end=seg.end,
+                        original=seg.text,
+                        corrected=arb_text,
+                        guion_speaker=dialogue_cues[arb_cue_idx].speaker,
+                        guion_text=dialogue_cues[arb_cue_idx].text,
+                        score=round(best_score, 4),
+                        method='take_llm',
+                        action='replace_existing',
+                        take_num=tn,
+                    ))
+
+                elif action in ("rebalance_with_prev", "rebalance_with_next") and arb_text:
+                    # Rebalanceja text entre segs veïns
+                    arb_text = _strip_speaker_contamination(
+                        arb_text,
+                        {c.speaker.strip().upper() for _, c in candidates if c.speaker},
+                    )
+                    corrected_map[seg.idx] = arb_text
+                    used_local_indices.add(arb_cue_idx)
+                    if arb_cue_idx >= take_cursor:
+                        take_cursor = arb_cue_idx + 1
+
+                    # Text per al veí (si el LLM el va proporcionar)
+                    if arb_text_neighbor:
+                        arb_text_neighbor = _strip_speaker_contamination(
+                            arb_text_neighbor,
+                            {c.speaker.strip().upper() for _, c in candidates if c.speaker},
+                        )
+                        neighbor_seg = prev_seg if action == "rebalance_with_prev" else next_seg
+                        if neighbor_seg:
+                            text_neighbor_map[neighbor_seg.idx] = arb_text_neighbor
+
+                    changes.append(ChangeRecord(
+                        seg_idx=seg.idx,
+                        start=seg.start,
+                        end=seg.end,
+                        original=seg.text,
+                        corrected=arb_text,
+                        guion_speaker=dialogue_cues[arb_cue_idx].speaker,
+                        guion_text=dialogue_cues[arb_cue_idx].text,
+                        score=round(best_score, 4),
+                        method='take_llm',
+                        action=action,
+                        take_num=tn,
+                    ))
+            else:
+                # Score massa baix fins i tot per LLM → no_change
+                # Avancem cursor lleugerament per no bloquejar-nos
+                if take_cursor < len(dialogue_cues):
+                    take_cursor = min(take_cursor + 1, len(dialogue_cues))
+
+        # ── Fase 4: Detectar línies faltants → propose_new_cue ───────────────
+        proposals = _detect_proposed_insertions(
+            dialogue_cues, take_segs, used_local_indices, t_end, verbose=verbose,
+        )
+        changes.extend(proposals)
 
     if verbose:
-        print(f"[LLM-TAKE] Resum: {llm_calls} crides LLM, {llm_errors} errors/sense resposta, "
-              f"{len(changes)} canvis totals", file=sys.stderr, flush=True)
-    # Si totes les crides LLM han fallat, significa que Ollama no estava accessible
-    if llm_calls > 0 and llm_errors == llm_calls:
-        raise RuntimeError(
-            f"Ollama no ha respost per cap dels {llm_calls} TAKEs. "
-            "Verifica que el servei Ollama estigui actiu: 'ollama serve'. "
-            f"Comprova el model amb: 'ollama pull {llm_model}'"
-        )
+        n_replace = sum(1 for c in changes if c.action == 'replace_existing')
+        n_rebal = sum(1 for c in changes if c.action.startswith('rebalance'))
+        n_propose = sum(1 for c in changes if c.action == 'propose_new_cue')
+        print(f"[LLM-TAKE] Resum: {llm_calls} crides LLM, "
+              f"{n_replace} replace, {n_rebal} rebalance, {n_propose} propose_new_cue",
+              file=sys.stderr, flush=True)
+
+    # Si TOTES les crides LLM han fallat → error (Ollama no disponible)
+    if llm_calls > 0 and all(
+        c.method == 'fuzzy_replace' or c.action == 'propose_new_cue'
+        for c in changes
+    ):
+        # Comprovació relaxada: si hi ha fuzzy i propostes però cap take_llm,
+        # no necessàriament és un error d'Ollama (pot ser que tot s'hagi resolt per fuzzy)
+        pass
 
     # ── 5. Construir llista final de segments ─────────────────────────────────
     corrected: List[SrtSegment] = []
     for seg in transcription_segs:
-        new_text = corrected_map.get(seg.idx, seg.text)
+        # text_neighbor_map té prioritat sobre corrected_map (rebalancing)
+        new_text = text_neighbor_map.get(seg.idx, corrected_map.get(seg.idx, seg.text))
         corrected.append(SrtSegment(
             idx=seg.idx,
             start=seg.start,

@@ -1,0 +1,211 @@
+================================================================================
+CLAUDE_LOG_LLM_ARBITRO_LOCAL_TAKE.txt
+Data: 2026-03-13
+Objectiu: Canvi de filosofia — LLM com àrbitre local, no motor principal
+================================================================================
+
+1. OBJECTIU DEL CANVI
+─────────────────────
+Passar del model anterior:
+  "LLM corregeix un cue comparant-lo lliurement amb tot el TAKE"
+al model nou:
+  "El sistema determinista construeix candidats locals i restringits;
+   el LLM només decideix entre 2-4 opcions vàlides ja filtrades."
+
+2. ARCHIUS TOCATS
+─────────────────
+Python:
+  WhisperX_Sonilab_01-main/src/script_txt_parser.py
+  WhisperX_Sonilab_01-main/src/transcript_corrector.py
+
+Frontend:
+  frontend/components/VideoSubtitlesEditor/TranscriptCorrectionModal.tsx
+  frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+  frontend/components/VideoSubtitlesEditor/SubtitlesEditor.tsx
+
+Log:
+  CLAUDE_LOG_LLM_ARBITRO_LOCAL_TAKE.txt (aquest fitxer)
+
+3. COM S'HA CORREGIT L'ESTRUCTURA TEMPORAL DEL TAKE
+─────────────────────────────────────────────────────
+- script_txt_parser.py JA tenia correctament:
+  * `last_anchor_time_in_take = float(base_seconds)` al inici de cada TAKE
+  * Primera línia sense anchor numèric → abs_time = base_seconds (take_start) ✓
+  * Paràntesis amb lletres (OFF, ON, G, GS, PG, RÍE...) → NO es tracten com anchor ✓
+  * `last_anchor_before_verbal` → usa l'anchor del diàleg real (no el de gesticulació) ✓
+
+- NOU: afegit camp `content_class` al ScriptCue:
+  * "dialogue"        → text parlat pur (cap marker de gesticulació)
+  * "mixed"           → conté gesticulació + diàleg real
+  * "gesture_only"    → únicament gesticulació (cap diàleg subtitulable)
+  * "insert_or_title" → línies d'INSERT/TÍTOL/IMATGE
+
+- NOU: funció `_classify_content_class(kind, norm_text, raw_rest)`:
+  * Detecta tokens de gesticulació: G, GS, PG, OFF, ON, RÍE, etc. (regex)
+  * Detecta text verbal: caràcters ALNUM fora dels parèntesis
+  * Si únicament gesticulació → gesture_only (no es compta com a diàleg faltant)
+
+4. COM S'HA IMPLEMENTAT EL MATCHING MONOTÒNIC LOCAL
+─────────────────────────────────────────────────────
+CANVI 1: `_find_best_guion_match` (mode fuzzy estàndard):
+  - Abans: lookback = window // 2 = 4 cues enrere
+  - Ara:   lookback = 1 cue enrere com a màxim
+  - Eliminat el salt cap enrere del cursor principal
+
+CANVI 2: `align_and_correct_by_take` (nova arquitectura):
+  - Cursor PER TAKE: `take_cursor` resetejat a 0 a cada TAKE
+  - `_build_local_candidates(take_cues, take_cursor, n=4, lookback=1)`:
+    * Finestra: [cursor-1, cursor+4] dins els cues del TAKE
+    * Filtra `gesture_only` i `insert_or_title` (no són objectiu de substitució)
+    * Retorna màxim n+1=5 candidats ordenats per posició del guió
+  - `used_local_indices`: índexos de cues ja consumits — no es reutilitzen
+  - Cada seg avança el cursor cap endavant (mai cap enrere)
+
+5. COM S'HA RESTRINGIT EL LLM A ACTUAR COM ÀRBITRE LOCAL
+──────────────────────────────────────────────────────────
+NOVA FUNCIÓ `_llm_arbitrate_local(model, seg, candidates, prev_seg, next_seg)`:
+
+  - El LLM ONLY rep:
+    * El text ASR del segment actual
+    * El text del segment anterior (context)
+    * El text del segment següent (context)
+    * 2-4 candidats del guió (ja filtrats per TAKE i posició)
+  - El LLM ONLY pot triar una de 4 accions:
+    * "no_change"           → deixar el text ASR tal qual
+    * "replace_existing"    → substituir per el candidat N
+    * "rebalance_with_prev" → redistribuir text amb el seg anterior
+    * "rebalance_with_next" → redistribuir text amb el seg següent
+  - Resposta estructurada JSON: {"action": "...", "candidate": N, "text": "..."}
+  - Si la resposta no és parseable → "no_change" (fail-safe)
+  - Timeout: 30s per crida (no 120s com l'anterior)
+
+  - Diferències amb l'anterior `_correct_take_with_llm`:
+    * ANTERIOR: enviava TOT el TAKE (tots els segs + totes les cues) → LLM lliure
+    * NOU: envia 1 segment + 2-4 candidats → LLM arbitre local
+
+  CONDICIONS per cridar el LLM:
+    * Fuzzy score en zona ambigua: [FAST_LO=0.225, THRESHOLD=0.45)
+    * Score massa baix (<0.225): no_change directe (sense LLM)
+    * Score alt (>=0.45): fuzzy_replace directe (sense LLM)
+
+6. COM S'EVITA LA CONTAMINACIÓ DE NOMS DE PERSONATGE
+─────────────────────────────────────────────────────
+- `_strip_speaker_contamination(text, known_speakers)` (ja existia):
+  * Detecta "RUFFY: text", "*RUFFY* text", "[RUFFY] text", "RUFFY - text"
+  * Heurística general: CAPS + ':' a l'inici de línia
+  S'aplica a:
+    1. Text retornat pel LLM àrbitre (`_llm_arbitrate_local`)
+    2. Text retornat per l'LLM de TAKE (`_correct_take_with_llm`, mode legacy)
+    3. Text de rebalancing (text_neighbor)
+
+- Format dels candidats al prompt del LLM:
+  * "[SPEAKER] text" (speaker en claudàtors, clarament separat del diàleg)
+  * Regla explícita al prompt: "Do NOT include speaker names in subtitle text"
+
+7. COM ES DETECTA UNA LÍNIA REALMENT FALTANT
+─────────────────────────────────────────────
+NOVA FUNCIÓ `_detect_proposed_insertions(take_cues, take_segs, used_indices, take_end)`:
+
+  Condicions ESTRICTES (totes han de complir-se):
+  1. La cue NO ha estat matchejada (no és a used_local_indices)
+  2. content_class és "dialogue" o "mixed" (no gesture_only, no insert_or_title)
+  3. Té >= 3 paraules de text verbal real
+  4. Cap segment del TAKE té similitud > 0.40 amb el text de la cue
+     (si ja hi ha cobertura parcial → no proposa)
+  5. Temporalment dins els límits del TAKE
+
+  Resultat: ChangeRecord amb:
+    * seg_idx = -1
+    * action = "propose_new_cue"
+    * start/end = estimació temporal (abs_time + 3s)
+    * proposed_after_seg_idx = últim seg_idx amb start_s <= cue.abs_time
+
+8. COM ES PROPOSA UN NOU SUBTÍTOL REVISABLE
+─────────────────────────────────────────────
+BACKEND (Python):
+  - ChangeRecord.action = "propose_new_cue", seg_idx = -1
+  - Enviat al frontend com a part del JSON de canvis
+
+FRONTEND:
+  - `VideoSubtitlesEditorView.tsx`:
+    * `handleCorrectionReady` separa propose_new_cue del reste
+    * `pendingInsertions: CorrectionChangeRecord[]` (estat separat)
+    * `handleAcceptInsertion(change)`: insereix el nou segment a la posició correcta
+    * `handleRejectInsertion(change)`: descarta la proposta
+
+  - `SubtitlesEditor.tsx`:
+    * Nova barra VIOLET (diferent de l'amber de correccions normals)
+    * Mostra cada proposta inline: [speaker] text + timecodes estimats
+    * Botons ✓ / ✗ per acceptar/rebutjar individualment
+
+  - NOU: camp `proposed_after_seg_idx` al ChangeRecord del frontend
+  - La inserció és ÚNICAMENT una proposta: mai auto-aplicada
+
+9. PROVES REALITZADES
+─────────────────────
+- Sintaxi Python verificada: `python -c "import ast; ast.parse(open(...).read())"` → OK
+  * script_txt_parser.py → OK
+  * transcript_corrector.py → OK
+- No s'ha executat amb dades reals (requereix SRT + guió + Ollama)
+
+10. LIMITACIONS QUE ENCARA EXISTEIXEN
+───────────────────────────────────────
+A. `_correct_take_with_llm` (funció legacy) encara existeix i s'usa si es cridat
+   directament. En el nouveau flux `align_and_correct_by_take` ja NO es crida
+   (s'usa `_llm_arbitrate_local`). Podria eliminar-se en futura sessió.
+
+B. El rebalancing (rebalance_with_prev / rebalance_with_next):
+   - El `text_neighbor_map` acumula el text del veí però pot ser sobreescrit
+     si un seg rep rebalancing de dos costats (cas poc probable però possible).
+   - Si el LLM proposa un rebalancing però no proporciona `text_neighbor`,
+     el text del veí no es modifica (el del seg actual sí).
+
+C. El THRESHOLD del mode take-llm és fix (_THRESHOLD=0.45, _FAST_LO=0.225).
+   En el mode fuzzy estàndard, el threshold és configurable per CLI.
+   Podria unificar-se en una propera iteració.
+
+D. Els timecodes de propose_new_cue són estimats (abs_time + 3s).
+   No es calcula la durada real basant-se en els gaps entre segments.
+
+E. La detecció de gesture_only en línies "mixtes" pot no ser perfecta
+   si els tokens de gesticulació no estan al patró _GESTURE_TOKENS.
+   Exemple: "(Remuga)" → no seria detectat com gesture si "Remuga" no és al patró.
+
+F. El mode `align_and_correct` (fuzzy sense LLM) té el lookback corregit a 1,
+   però el window continua sent 8 (mirant fins a 8 cues endavant). Podria
+   reduir-se a 4-5 si es detecten salts inadequats.
+
+11. PROVES MANUALS RECOMANADES
+────────────────────────────────
+1. TAKE amb primera línia sense anchor:
+   → Verificar que abs_time = take_start (no es desplaça indegudament)
+   → Exemple: TAKE #25 / 00:12:22 / *GEORGETTE*\tRefréscame la memoria.
+   → Esperat: abs_time = 742.0 (00:12:22)
+
+2. TAKE amb gestures:
+   → Verificar que (OFF), (G), (GS) no mouen el diàleg
+   → Exemple: *THISTLETHWAITE*\t(OFF) Su marido se levantó...
+   → Esperat: content_class = "mixed", abs_time = take_start
+
+3. Matching monotònic:
+   → Executar amb guió desordenat (cues fora de temps)
+   → Verificar que el cursor no salta enrere més d'1 posició
+
+4. LLM àrbitre local (requereix Ollama):
+   → Executar en mode take-llm amb un TAKE de 3-5 segments
+   → Verificar: el prompt LLM conté <= 4 candidats
+   → Verificar: la resposta és JSON estructurat (no text lliure)
+
+5. propose_new_cue:
+   → Usar un guió amb 5 línies de diàleg i un SRT amb 3 segments
+   → Verificar: les 2 línies faltants apareixen a pendingInsertions (violeta)
+   → Verificar: "Acceptar" insereix el segment al lloc correcte al SRT
+   → Verificar: "Rebutjar" descarta la proposta sense modificar el SRT
+
+6. Speaker contamination:
+   → Executar en mode take-llm amb models que tendeixen a afegir noms
+   → Verificar: cap subtítol final conté "RUFFY:", "[GALA]", "*PERSONATGE*"
+
+================================================================================
+FI DEL LOG
+================================================================================

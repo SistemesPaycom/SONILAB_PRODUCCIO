@@ -16,7 +16,7 @@ import { api } from '../../services/api';
 // ─────────────────────── Tipus ────────────────────────────────────────────────
 
 interface ChangeRecord {
-  seg_idx: number;
+  seg_idx: number;   // -1 per a propose_new_cue
   start: string;
   end: string;
   original: string;
@@ -26,6 +26,9 @@ interface ChangeRecord {
   score: number;
   method: string;
   take_num?: number;
+  // Camps nous (Phase 3 - LLM àrbitre local)
+  action?: string;   // "no_change"|"replace_existing"|"rebalance_with_prev"|"rebalance_with_next"|"propose_new_cue"
+  proposed_after_seg_idx?: number;  // Per a propose_new_cue: inserir DESPRÉS d'aquest seg_idx
 }
 
 interface CorrectionResult {

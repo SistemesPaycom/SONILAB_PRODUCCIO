@@ -82,6 +82,7 @@ class ScriptCue:
     is_adlib: bool
     anchors: Tuple[float, ...]  # tots els anchors (segons absoluts)
     raw: str                   # línia original
+    content_class: str = "dialogue"  # "dialogue" | "gesture_only" | "mixed" | "insert_or_title"
 
 
 @dataclass
@@ -150,6 +151,52 @@ def _classify_kind(speaker: str) -> str:
         return "insert"
     if sp in IMAGE_SPEAKERS:
         return "image"
+    return "dialogue"
+
+
+# ---------------------------------------------------------------------------
+# Classificació de contingut de línia
+# ---------------------------------------------------------------------------
+
+# Patrons que indiquen gesticulació/acotació (NO diàleg subtitulable)
+_GESTURE_TOKENS = re.compile(
+    r'\b(G|GS|PG|OFF|ON|OFF-ON|ON-OFF|RIE|RIURE|RÍE|ADL|ADLIB|ADLIBS|AD\s+LIB)\b',
+    re.IGNORECASE
+)
+
+
+def _classify_content_class(kind: str, norm_text: str, raw_rest: str) -> str:
+    """
+    Classifica el contingut d'una línia de guió:
+      - "insert_or_title" : speaker és INSERT/TÍTOL/etc.
+      - "gesture_only"    : la línia conté únicament gesticulació/acotació (cap diàleg real)
+      - "mixed"           : conté tant gesticulació com diàleg
+      - "dialogue"        : text parlat pur (cap marker de gesticulació)
+
+    norm_text: text normalitzat (amb time-markers (xxx.xxs))
+    raw_rest:  text original de la línia (sense el speaker)
+    """
+    if kind in ("insert", "title", "image"):
+        return "insert_or_title"
+
+    # Extreure el text verbal pur: eliminar time markers i paràmetres de parèntesis
+    verbal = TIME_MARK_RE.sub(" ", norm_text)
+    verbal = re.sub(r'\(\d[\d:.]*s?\)', ' ', verbal)
+    verbal = WS_RE.sub(' ', verbal).strip()
+
+    # Detectar si hi ha algun token de gesticulació en el raw original
+    has_gesture = bool(_GESTURE_TOKENS.search(raw_rest))
+
+    # Detectar si hi ha contingut verbal (caràcters alphanumèrics fora de gesticulació)
+    # Eliminar els paràntesis d'acotació del raw_rest per veure si queda diàleg
+    raw_no_paren = PAREN_BLOCK_RE.sub(' ', raw_rest)
+    raw_no_paren = WS_RE.sub(' ', raw_no_paren).strip()
+    has_verbal = bool(ALNUM_RE.search(raw_no_paren))
+
+    if has_gesture and not has_verbal:
+        return "gesture_only"
+    if has_gesture and has_verbal:
+        return "mixed"
     return "dialogue"
 
 
@@ -318,7 +365,11 @@ def parse_script_txt_from_text(
             rest, base_tc=base_tc, base_seconds=base_seconds
         )
 
+        content_class = _classify_content_class(kind, norm_text, rest)
+
         if not _is_verbal_after_strip(norm_text):
+            # Gesture-only lines with no verbal content are skipped from cues
+            # (they do not generate subtitle targets)
             continue
 
         anchors_u = tuple(sorted(set(float(a) for a in anchors)))
@@ -354,6 +405,7 @@ def parse_script_txt_from_text(
                 is_adlib=bool(is_adlib),
                 anchors=anchors_u,
                 raw=line,
+                content_class=content_class,
             )
         )
 

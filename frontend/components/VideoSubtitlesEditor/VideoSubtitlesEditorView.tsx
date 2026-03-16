@@ -114,6 +114,8 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
    * Valor: { proposed: text proposat, original: text original, change: registre de canvi }
    */
   const [pendingCorrections, setPendingCorrections] = useState<Map<number, { proposed: string; original: string; change: CorrectionChangeRecord }> | null>(null);
+  /** pendingInsertions: propostes de nous subtítols (propose_new_cue) revisables per separat */
+  const [pendingInsertions, setPendingInsertions] = useState<CorrectionChangeRecord[]>([]);
 
   /** Clau localStorage per al guió d'aquest document (persistència local sense backend) */
   const _localGuionKey = `sonilab_guion_${currentDoc?.id}`;
@@ -161,14 +163,23 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
    */
   const handleCorrectionReady = useCallback((result: CorrectionResult) => {
     const map = new Map<number, { proposed: string; original: string; change: CorrectionChangeRecord }>();
+    const insertions: CorrectionChangeRecord[] = [];
+
     for (const change of result.changes) {
-      map.set(change.seg_idx, {
-        proposed: change.corrected,
-        original: change.original,
-        change,
-      });
+      // propose_new_cue (seg_idx === -1 o action === 'propose_new_cue') → llista separada
+      if (change.action === 'propose_new_cue' || change.seg_idx === -1) {
+        insertions.push(change);
+      } else {
+        map.set(change.seg_idx, {
+          proposed: change.corrected,
+          original: change.original,
+          change,
+        });
+      }
     }
+
     setPendingCorrections(map.size > 0 ? map : null);
+    setPendingInsertions(insertions);
   }, []);
 
   /** Accepta la correcció d'un segment: aplica el text proposat i el marca com a corregit. */
@@ -220,6 +231,49 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   /** Descarta totes les correccions pendents sense aplicar cap canvi. */
   const handleRejectAllCorrections = useCallback(() => {
     setPendingCorrections(null);
+  }, []);
+
+  /**
+   * Accepta una proposta d'inserció (propose_new_cue):
+   * insereix un nou segment al SRT just després de proposed_after_seg_idx.
+   */
+  const handleAcceptInsertion = useCallback((change: CorrectionChangeRecord) => {
+    const afterIdx = change.proposed_after_seg_idx ?? -1;
+    // Crear nou Segment amb timecodes del change
+    const newSeg: import('../../types/Subtitles').Segment = {
+      id: Date.now(),  // ID temporal únic
+      start: change.start,
+      end: change.end,
+      originalText: change.corrected,
+      richText: change.corrected,
+    } as any;
+
+    // Inserir al lloc correcte dins la llista de segments
+    const insertPos = afterIdx < 0
+      ? 0
+      : segments.findIndex((s) => s.id === afterIdx);
+    const insertAt = insertPos < 0 ? segments.length : insertPos + 1;
+
+    const newSegs = [
+      ...segments.slice(0, insertAt),
+      newSeg,
+      ...segments.slice(insertAt),
+    ];
+    subsHistory.commit(newSegs);
+
+    // Rose highlight temporal
+    setCorrectionHighlightIds((prev) => new Set([...prev, newSeg.id as number]));
+    setTimeout(() => {
+      setCorrectionHighlightIds((prev) => { const n = new Set(prev); n.delete(newSeg.id as number); return n; });
+    }, 30_000);
+
+    // Eliminar de la llista de propostes
+    setPendingInsertions((prev) => prev.filter((c) => c !== change));
+  }, [segments, subsHistory]);
+
+  /** Rebutja una proposta d'inserció sense aplicar-la. */
+  const handleRejectInsertion = useCallback((change: CorrectionChangeRecord) => {
+    setPendingInsertions((prev) => prev.filter((c) => c !== change));
   }, []);
 
   const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
@@ -676,6 +730,9 @@ const handleSave = useCallback(() => {
             onRejectCorrection={handleRejectCorrection}
             onAcceptAllCorrections={handleAcceptAllCorrections}
             onRejectAllCorrections={handleRejectAllCorrections}
+            pendingInsertions={pendingInsertions.length > 0 ? pendingInsertions : undefined}
+            onAcceptInsertion={handleAcceptInsertion}
+            onRejectInsertion={handleRejectInsertion}
           />
         </div>
       </div>

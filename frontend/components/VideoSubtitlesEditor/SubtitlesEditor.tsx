@@ -40,6 +40,10 @@ interface SubtitlesEditorProps {
   onRejectCorrection?: (id: number) => void;
   onAcceptAllCorrections?: () => void;
   onRejectAllCorrections?: () => void;
+  /** Propostes d'inserció de nous subtítols (propose_new_cue) */
+  pendingInsertions?: any[];
+  onAcceptInsertion?: (change: any) => void;
+  onRejectInsertion?: (change: any) => void;
 }
 
 const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
@@ -68,6 +72,9 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   onRejectCorrection,
   onAcceptAllCorrections,
   onRejectAllCorrections,
+  pendingInsertions,
+  onAcceptInsertion,
+  onRejectInsertion,
 }) => {
   const { caretHintRef } = useSubtitleEditor();
   const [formatState, setFormatState] = useState({ bold: false, italic: false, underline: false });
@@ -130,6 +137,37 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
       </div>
 
       <header className="flex-shrink-0 flex flex-col border-b border-gray-700 bg-gray-800/80 backdrop-blur-md">
+        {/* Barra de propostes d'inserció (propose_new_cue) */}
+        {pendingInsertions && pendingInsertions.length > 0 && (
+          <div className="flex flex-col px-3 py-1.5 bg-violet-950/50 border-b border-violet-700/40 gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase tracking-widest text-violet-300">
+                + {pendingInsertions.length} {pendingInsertions.length === 1 ? 'nou subtítol proposat' : 'nous subtítols proposats'}
+              </span>
+            </div>
+            {pendingInsertions.map((ins, idx) => (
+              <div key={idx} className="flex items-start justify-between gap-2 rounded-lg bg-violet-900/30 px-2 py-1 border border-violet-600/30">
+                <div className="flex-1 min-w-0">
+                  <span className="text-[8px] font-bold text-violet-400 uppercase tracking-widest mr-1">
+                    [{ins.guion_speaker}]
+                  </span>
+                  <span className="text-[10px] text-violet-100 break-words">{ins.corrected}</span>
+                  <span className="block text-[8px] text-violet-500 mt-0.5">{ins.start} → {ins.end}</span>
+                </div>
+                <div className="flex gap-1 flex-shrink-0 mt-0.5">
+                  <button
+                    onClick={() => onRejectInsertion?.(ins)}
+                    className="px-1.5 py-0.5 rounded text-[9px] font-black bg-red-900/50 hover:bg-red-700/70 text-red-300 transition-colors"
+                  >✗</button>
+                  <button
+                    onClick={() => onAcceptInsertion?.(ins)}
+                    className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-900/50 hover:bg-emerald-700/70 text-emerald-300 transition-colors"
+                  >✓</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {/* Barra de correccions pendents (inline review) */}
         {pendingCorrections && pendingCorrections.size > 0 && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-amber-950/50 border-b border-amber-700/40">
