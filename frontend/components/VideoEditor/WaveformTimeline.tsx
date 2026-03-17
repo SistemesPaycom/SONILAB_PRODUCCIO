@@ -1,14 +1,14 @@
 // components/VideoEditor/WaveformTimeline.tsx
+// Viewport-canvas timeline: canvas always equals visible area, redraws on scroll.
+// Waveform extracted via Web Audio API. DOM playhead with diamond indicator.
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Segment, Id, TimelineViewMode } from '../../types';
-import { CursorStationaryIcon, CursorPageIcon } from './PlayerIcons';
-import useLocalStorage from '../../hooks/useLocalStorage';
-import { LOCAL_STORAGE_KEYS } from '../../constants';
+import { useWaveformExtractor } from '../../hooks/useWaveformExtractor';
 
 const stripHtml = (text: string) => (text ? text.replace(/<[^>]+>/g, '') : '');
 
-// “Public” i configurable des de fora com a valor base inicial
-export const DEFAULT_HOLD_TO_EDIT_MS = 400;
+// ── Props ────────────────────────────────────────────────────────────────────
 
 interface WaveformTimelineProps {
   videoFile: File | null;
@@ -25,50 +25,16 @@ interface WaveformTimelineProps {
   onSegmentUpdateEnd?: () => void;
   onSegmentClick?: (id: Id) => void;
   autoScroll?: boolean;
-  scrollMode?: 'stationary' | 'page';
-
-  // prop opcional (té prioritat sobre localStorage si es passa)
-  holdToEditMs?: number;
+  scrollMode?: string;
 }
 
-interface Peak {
-  min: number;
-  max: number;
-}
+// ── Constants ────────────────────────────────────────────────────────────────
 
-interface WavePeakData {
-  peaks: Peak[];
-  sampleRate: number;
-  highestPeak: number;
-}
+const MIN_ZOOM = 20;
+const MAX_ZOOM = 500;
+const DEFAULT_ZOOM = 100;
 
-type HitType = 'resize-start' | 'resize-end' | 'move';
-type HitTarget = { id: Id; type: HitType };
-
-type DragState = {
-  segmentId: Id;
-  type: HitType;
-  startX: number;
-  originalStart: number;
-  originalEnd: number;
-};
-
-type PressState = {
-  startedAt: number;
-  startX: number;
-  startY: number;
-  latestX: number;
-  latestY: number;
-  target: HitTarget | null;
-  activatedEdit: boolean;
-};
-
-const TARGET_PEAKS_PER_SECOND = 500;
-const MIN_ZOOM = 100;
-const MAX_ZOOM_H = 700;
-const MAX_ZOOM_V = 600;
-const MIN_ZOOM_INICI_H = 250;
-const MIN_ZOOM_INICI_V = 150;
+// ── Component ────────────────────────────────────────────────────────────────
 
 const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   videoFile,
@@ -79,738 +45,428 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   isPlaying,
   videoRef,
   activeId,
-  viewMode = 'both',
   onSegmentUpdate,
   onSegmentUpdateEnd,
   onSegmentClick,
-  autoScroll = true,
-  scrollMode = 'stationary',
-  holdToEditMs: propHoldToEditMs,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  // ── Refs ──
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const isDraggingRef = useRef(false);
 
-  // ── Refs per a valors volàtils dins draw / renderLoop ─────────────────
-  // Usem refs perquè draw NO es recreï quan canvien segments o activeId,
-  // evitant reinicis del RAF loop que causen salts visibles a la waveform.
-  const segmentsRef = useRef(segments);
-  segmentsRef.current = segments;
-  const activeIdRef = useRef(activeId);
-  activeIdRef.current = activeId;
-  // scrollMode + autoScroll refs: renderLoop needs these without recreating
-  const scrollModeRef = useRef(scrollMode);
-  scrollModeRef.current = scrollMode;
-  const autoScrollRef = useRef(autoScroll);
-  autoScrollRef.current = autoScroll;
+  // Keep mutable refs for values used in RAF loop
+  const zoomRef = useRef(DEFAULT_ZOOM);
+  const viewportWRef = useRef(0);
 
-  const [wavePeaks, setWavePeaks] = useState<WavePeakData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
+  // ── State ──
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(120);
 
-  const [zoomH, setZoomH] = useState(MIN_ZOOM_INICI_H);
-  const [zoomV, setZoomV] = useState(MIN_ZOOM_INICI_V);
+  // Sync refs
+  zoomRef.current = zoom;
+  viewportWRef.current = viewportWidth;
 
-  // ── Ephemeral drag: visual-only segment position during drag ────────
-  // During drag we do NOT call onSegmentUpdate (avoids React re-renders).
-  // Instead we store the dragged segment's ephemeral position here and
-  // let drawStatic read it. On mouseup we commit once.
-  const ephemeralSegRef = useRef<{ id: Id; startTime: number; endTime: number } | null>(null);
-  const rafRedrawRef = useRef<number | null>(null);
-
-  // viewport
-  const currentViewportStartRef = useRef<number>(0);
-  const [manualScrollOffset, setManualScrollOffset] = useState<number>(0);
-
-  // Configuració dinàmica des de LocalStorage
-  const [storedHoldMs] = useLocalStorage<number>(
-    LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS,
-    DEFAULT_HOLD_TO_EDIT_MS
-  );
-  const effectiveHoldToEditMs = propHoldToEditMs ?? storedHoldMs;
-
-  // click curt vs pressió llarga
-  const pressRef = useRef<PressState | null>(null);
-  const holdTimerRef = useRef<number | null>(null);
-
-  // drag — refs to avoid re-renders during interaction
-  const dragStateRef = useRef<DragState | null>(null);
-  const cursorRef = useRef<string>('default');
-
-  // --- SOLUCIÓ AL SALT VISUAL I BOLA FANTASMA ---
-  useEffect(() => {
-    if (!autoScroll) {
-      setManualScrollOffset(currentViewportStartRef.current);
-    }
-  }, [autoScroll]);
+  // ── Waveform extraction ──
+  const { extract, peaks, status: waveStatus } = useWaveformExtractor();
 
   useEffect(() => {
-    let cancelled = false;
-    let audioCtx: AudioContext | null = null;
+    if (videoFile) extract(videoFile);
+  }, [videoFile, extract]);
 
-    const load = async () => {
-      if (!videoFile) {
-        setWavePeaks(null);
-        setError(null);
-        return;
+  // ── Viewport resize observer ──
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r) {
+        setViewportWidth(r.width);
+        setViewportHeight(r.height);
       }
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const arrayBuf = await videoFile.arrayBuffer();
-        audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
-        if (cancelled) return;
-
-        const channelData = audioBuf.getChannelData(0);
-        const totalSamples = channelData.length;
-        const audioSampleRate = audioBuf.sampleRate;
-
-        const samplesPerPeak = Math.max(1, Math.floor(audioSampleRate / TARGET_PEAKS_PER_SECOND));
-        const effectivePeaksPerSecond = audioSampleRate / samplesPerPeak;
-
-        const peakCount = Math.floor(totalSamples / samplesPerPeak);
-        const peaks: Peak[] = new Array(peakCount);
-
-        let globalMax = 0;
-        let globalMin = 0;
-
-        for (let i = 0; i < peakCount; i++) {
-          const start = i * samplesPerPeak;
-          const end = Math.min(start + samplesPerPeak, totalSamples);
-          let min = 0;
-          let max = 0;
-
-          for (let j = start; j < end; j++) {
-            const val = channelData[j];
-            if (val < min) min = val;
-            if (val > max) max = val;
-          }
-
-          peaks[i] = { min, max };
-          if (max > globalMax) globalMax = max;
-          if (min < globalMin) globalMin = min;
-        }
-
-        setWavePeaks({
-          peaks,
-          sampleRate: effectivePeaksPerSecond,
-          highestPeak: Math.max(Math.abs(globalMax), Math.abs(globalMin)) || 1,
-        });
-      } catch (e) {
-        if (!cancelled) setError("No s’ha pogut carregar l'àudio.");
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      cancelled = true;
-      if (audioCtx) audioCtx.close();
-    };
-  }, [videoFile]);
-
-  const getVisibleDuration = useCallback(() => 30 * (100 / zoomH), [zoomH]);
-
-  const getViewportStart = useCallback(
-    (exactTime: number) => {
-      if (!autoScroll) return manualScrollOffset;
-
-      const visDur = getVisibleDuration();
-
-      if (scrollMode === 'page') {
-        const isVisible =
-          exactTime >= currentViewportStartRef.current &&
-          exactTime < currentViewportStartRef.current + visDur;
-        if (!isVisible) {
-          currentViewportStartRef.current = Math.floor(exactTime / visDur) * visDur;
-        }
-        return currentViewportStartRef.current;
-      } else {
-        let vs = exactTime - visDur / 2;
-        if (vs < 0) vs = 0;
-        currentViewportStartRef.current = vs;
-        return vs;
-      }
-    },
-    [getVisibleDuration, scrollMode, autoScroll, manualScrollOffset]
-  );
-
-  const timeToX = useCallback((t: number, viewportStart: number, width: number, visibleDuration: number) => {
-    return ((t - viewportStart) / visibleDuration) * width;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
-  const xToTime = useCallback((x: number, viewportStart: number, width: number, visibleDuration: number) => {
-    return viewportStart + (x / width) * visibleDuration;
-  }, []);
+  // ── Derived ──
+  const totalWidth = Math.max(duration * zoom, viewportWidth);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      if (autoScroll) return;
-      const visDur = getVisibleDuration();
-      const deltaSeconds = (e.deltaX + e.deltaY) * (visDur / 1000);
-      setManualScrollOffset((prev) => Math.max(0, Math.min(duration - visDur, prev + deltaSeconds)));
-    },
-    [autoScroll, getVisibleDuration, duration]
-  );
-
-  const getHitTarget = useCallback(
-    (mouseX: number, mouseY: number, width: number, height: number, timeAtMouse: number): HitTarget | null => {
-      const margin = 5;
-      const handleWidthPx = 6;
-      const visDur = getVisibleDuration();
-      const handleSeconds = handleWidthPx / (width / visDur);
-      if (mouseY < margin || mouseY > height - margin) return null;
-
-      for (const seg of segmentsRef.current) {
-        if (timeAtMouse >= seg.startTime - handleSeconds && timeAtMouse <= seg.endTime + handleSeconds) {
-          if (Math.abs(timeAtMouse - seg.startTime) <= handleSeconds) return { id: seg.id, type: 'resize-start' };
-          if (Math.abs(timeAtMouse - seg.endTime) <= handleSeconds) return { id: seg.id, type: 'resize-end' };
-          if (timeAtMouse > seg.startTime && timeAtMouse < seg.endTime) return { id: seg.id, type: 'move' };
-        }
-      }
-      return null;
-    },
-    [getVisibleDuration]
-  );
-
-  // ── Overlay canvas for playhead (separate from main canvas) ─────────
-  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Track the last viewport params for the static layer so the overlay
-  // layer can position the playhead without recomputing everything.
-  const lastViewportRef = useRef<{
-    viewportStart: number;
-    visDur: number;
-    width: number;
-    height: number;
-  }>({ viewportStart: 0, visDur: 30, width: 0, height: 0 });
-
-  // ── drawStatic: waveform + segments (expensive, called rarely) ────────
-  const drawStatic = useCallback(
-    (exactTime: number) => {
+  // ── Draw visible portion of the canvas ──
+  const drawVisible = useCallback(
+    (scrollLeft: number) => {
       const canvas = canvasRef.current;
-      if (!canvas || !wavePeaks) return;
+      if (!canvas || viewportWidth <= 0 || viewportHeight <= 0) return;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
       const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
+      const w = viewportWidth;
+      const h = viewportHeight;
 
-      if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
+      // Resize backing store if needed
+      const bw = Math.ceil(w * dpr);
+      const bh = Math.ceil(h * dpr);
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw;
+        canvas.height = bh;
       }
-
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const width = rect.width;
-      const height = rect.height;
-      const visDur = getVisibleDuration();
-      const viewportStart = getViewportStart(exactTime);
+      // Time range visible in this viewport
+      const timeStart = scrollLeft / zoom;
+      const timeEnd = (scrollLeft + w) / zoom;
 
-      // Store viewport params for overlay layer
-      lastViewportRef.current = { viewportStart, visDur, width, height };
-
+      // ── Background ──
       ctx.fillStyle = '#111827';
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(0, 0, w, h);
 
+      // ── Center line ──
       ctx.strokeStyle = '#374151';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, height / 2);
-      ctx.lineTo(width, height / 2);
+      ctx.moveTo(0, h / 2);
+      ctx.lineTo(w, h / 2);
       ctx.stroke();
 
-      const verticalZoomFactor = zoomV / 100;
-      const scaleY = (height / (wavePeaks.highestPeak * 2.1)) * verticalZoomFactor;
-      const centerY = height / 2;
+      // ── Timecode grid ──
+      let step = 1;
+      if (zoom < 10) step = 30;
+      else if (zoom < 30) step = 10;
+      else if (zoom < 80) step = 5;
+      else if (zoom < 200) step = 2;
 
-      const pixelsPerSecondDiv = wavePeaks.sampleRate * ((width / visDur) / wavePeaks.sampleRate);
+      ctx.strokeStyle = 'rgba(55, 65, 81, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = 'rgba(107, 114, 128, 0.6)';
+      ctx.font = '9px sans-serif';
 
-      const drawRange = (xStart: number, xEnd: number, color: string) => {
-        ctx.strokeStyle = color;
+      const firstMark = Math.floor(timeStart / step) * step;
+      for (let t = firstMark; t <= timeEnd; t += step) {
+        if (t < 0) continue;
+        const x = (t - timeStart) * zoom;
         ctx.beginPath();
-
-        for (let x = Math.floor(xStart); x < xEnd; x++) {
-          if (x < 0) continue;
-          if (x >= width) break;
-
-          const secondsAtX = viewportStart + x / pixelsPerSecondDiv;
-          const pos = secondsAtX * wavePeaks.sampleRate;
-          const p0 = Math.floor(pos);
-
-          if (p0 < 0 || p0 >= wavePeaks.peaks.length - 1) continue;
-
-          const weight = pos - p0;
-          const peak = wavePeaks.peaks[p0];
-          const nextPeak = wavePeaks.peaks[p0 + 1];
-
-          const max = peak.max * (1 - weight) + nextPeak.max * weight;
-          const min = peak.min * (1 - weight) + nextPeak.min * weight;
-
-          const yMax = centerY - max * scaleY;
-          let yMin = centerY - min * scaleY;
-
-          if (Math.abs(yMin - yMax) < 1) yMin = yMax + 1;
-
-          ctx.moveTo(x, yMax);
-          ctx.lineTo(x, yMin);
-        }
-
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
         ctx.stroke();
-      };
+        const mm = Math.floor(t / 60);
+        const ss = Math.floor(t % 60);
+        ctx.fillText(`${mm}:${String(ss).padStart(2, '0')}`, x + 3, 12);
+      }
 
-      drawRange(0, width, '#4b5563');
+      // ── Waveform ──
+      if (peaks && peaks.length > 0) {
+        const data = peaks.data;
+        const amp = h / 2;
+        ctx.fillStyle = isPlaying
+          ? 'rgba(16, 185, 129, 0.6)'
+          : 'rgba(113, 113, 122, 0.5)';
 
-      if (viewMode !== 'hidden') {
-        const margin = 5;
-        const boxY = margin;
-        const boxH = height - margin * 2;
-        const curSegments = segmentsRef.current;
-        const curActiveId = activeIdRef.current;
+        // peaks has ~100 peaks/sec
+        const peaksPerSec = data.length / (peaks.duration || duration || 1);
 
-        const eph = ephemeralSegRef.current;
-        curSegments.forEach((seg) => {
-          // Use ephemeral position for the segment being dragged
-          const sStart = eph && eph.id === seg.id ? eph.startTime : seg.startTime;
-          const sEnd = eph && eph.id === seg.id ? eph.endTime : seg.endTime;
+        for (let px = 0; px < w; px++) {
+          const tAtPx = timeStart + px / zoom;
+          const tAtPxNext = timeStart + (px + 1) / zoom;
 
-          const x1 = timeToX(sStart, viewportStart, width, visDur);
-          const x2 = timeToX(sEnd, viewportStart, width, visDur);
-          if (x2 < 0 || x1 > width) return;
+          const idxStart = Math.floor(tAtPx * peaksPerSec);
+          const idxEnd = Math.min(Math.ceil(tAtPxNext * peaksPerSec), data.length);
 
-          const isActiveSeg = seg.id === curActiveId;
-          ctx.fillStyle = isActiveSeg ? 'rgba(79, 70, 229, 0.2)' : 'rgba(148, 163, 184, 0.1)';
-          ctx.fillRect(x1, boxY, x2 - x1, boxH);
+          if (idxStart < 0 || idxStart >= data.length) continue;
 
-          ctx.strokeStyle = isActiveSeg ? '#6366f1' : '#64748b';
-          ctx.lineWidth = isActiveSeg ? 1.5 : 1;
-          ctx.strokeRect(x1, boxY, x2 - x1, boxH);
-
-          // Text label inside the segment block
-          const segW = x2 - x1;
-          if (segW > 20) {
-            const text = stripHtml(seg.originalText || '');
-            if (text) {
-              const fontSize = 10;
-              ctx.font = `${fontSize}px sans-serif`;
-              ctx.fillStyle = isActiveSeg ? 'rgba(199, 210, 254, 0.9)' : 'rgba(156, 163, 175, 0.8)';
-              ctx.save();
-              ctx.beginPath();
-              ctx.rect(x1 + 3, boxY + 2, segW - 6, boxH - 4);
-              ctx.clip();
-              ctx.fillText(text, x1 + 4, boxY + fontSize + 2, segW - 8);
-              ctx.restore();
-            }
+          let max = 0;
+          for (let j = idxStart; j < idxEnd; j++) {
+            if (data[j] > max) max = data[j];
           }
-        });
-      }
-    },
-    [wavePeaks, zoomH, zoomV, viewMode, getVisibleDuration, getViewportStart, timeToX]
-  );
 
-  // ── drawPlayhead: ONLY the playhead line on the overlay canvas (cheap, 60fps) ──
-  const drawPlayhead = useCallback(
-    (exactTime: number) => {
-      const overlay = overlayCanvasRef.current;
-      if (!overlay) return;
-
-      const dpr = window.devicePixelRatio || 1;
-      const { viewportStart, visDur, width, height } = lastViewportRef.current;
-      if (width === 0) return;
-
-      if (overlay.width !== width * dpr || overlay.height !== height * dpr) {
-        overlay.width = width * dpr;
-        overlay.height = height * dpr;
+          const barH = Math.max(1, max * amp);
+          ctx.fillRect(px, amp - barH, 1, barH * 2);
+        }
       }
 
-      const ctx = overlay.getContext('2d');
-      if (!ctx) return;
+      // ── Segments ──
+      const margin = 4;
+      const boxY = margin;
+      const boxH = h - margin * 2;
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, width, height);
+      segments.forEach((seg) => {
+        const x1 = (seg.startTime - timeStart) * zoom;
+        const x2 = (seg.endTime - timeStart) * zoom;
+        if (x2 < 0 || x1 > w) return;
 
-      const playheadX = timeToX(exactTime, viewportStart, width, visDur);
-      if (playheadX >= 0 && playheadX <= width) {
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(playheadX, 0);
-        ctx.lineTo(playheadX, height);
-        ctx.stroke();
-      }
-    },
-    [timeToX]
-  );
+        const isActive = seg.id === activeId;
 
-  // ── Full draw = static + playhead ──────────────────────────────────────
-  const draw = useCallback(
-    (exactTime: number) => {
-      drawStatic(exactTime);
-      drawPlayhead(exactTime);
-    },
-    [drawStatic, drawPlayhead]
-  );
+        // Background
+        ctx.fillStyle = isActive
+          ? 'rgba(79, 70, 229, 0.2)'
+          : 'rgba(148, 163, 184, 0.08)';
+        ctx.fillRect(x1, boxY, x2 - x1, boxH);
 
-  // ── drawRef: permet que renderLoop sigui estable (mai es recrea) ──────
-  const drawStaticRef = useRef(drawStatic);
-  drawStaticRef.current = drawStatic;
-  const drawPlayheadRef = useRef(drawPlayhead);
-  drawPlayheadRef.current = drawPlayhead;
-  const drawRef = useRef(draw);
-  drawRef.current = draw;
+        // Border
+        ctx.strokeStyle = isActive ? '#6366f1' : '#64748b';
+        ctx.lineWidth = isActive ? 1.5 : 0.5;
+        ctx.strokeRect(x1, boxY, x2 - x1, boxH);
 
-  // Track last playhead pixel to skip sub-pixel updates
-  const lastPlayheadPxRef = useRef(-1);
+        // Edge handles
+        ctx.fillStyle = isActive ? '#818cf8' : '#94a3b8';
+        ctx.fillRect(x1, boxY, 2, boxH);
+        ctx.fillRect(x2 - 2, boxY, 2, boxH);
 
-  // ── Time interpolation: smooth between video frame updates ──────────
-  // HTML5 video currentTime updates at the video's native frame rate (24-30fps).
-  // Between updates the value is constant, causing playhead jumps. We interpolate
-  // using wall-clock time to produce smooth 60fps position.
-  const interpTimeRef = useRef(0);   // last raw currentTime from video
-  const interpWallRef = useRef(0);   // wall-clock when it changed
-
-  const renderLoop = useCallback(() => {
-    if (videoRef?.current) {
-      const rawTime = videoRef.current.currentTime;
-      const now = performance.now();
-
-      // Detect actual video frame update
-      if (rawTime !== interpTimeRef.current) {
-        interpTimeRef.current = rawTime;
-        interpWallRef.current = now;
-      }
-
-      // Interpolate forward from last known video frame
-      const elapsed = (now - interpWallRef.current) / 1000;
-      const rate = videoRef.current.playbackRate || 1;
-      const t = interpTimeRef.current + elapsed * rate;
-
-      const { viewportStart, visDur, width } = lastViewportRef.current;
-
-      if (autoScrollRef.current && scrollModeRef.current === 'stationary') {
-        // ── Stationary mode: viewport continuously shifts (playhead centered) ──
-        // We must call drawStatic every frame to scroll the waveform background.
-        // Optimisation: only redraw when the viewport shift moves >= 1 pixel.
-        const newVs = Math.max(0, t - visDur / 2);
-        const pxShift = Math.abs(newVs - viewportStart) / visDur * width;
-        if (pxShift >= 1) {
-          drawRef.current(t);
-          lastPlayheadPxRef.current = -1;
-        } else {
-          // Sub-pixel shift — just update playhead overlay
-          const px = ((t - viewportStart) / visDur) * width;
-          if (Math.abs(px - lastPlayheadPxRef.current) >= 0.5) {
-            lastPlayheadPxRef.current = px;
-            drawPlayheadRef.current(t);
+        // Text label
+        const segW = x2 - x1;
+        if (segW > 24) {
+          const text = stripHtml(seg.originalText || '');
+          if (text) {
+            const fontSize = 10;
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.fillStyle = isActive
+              ? 'rgba(199, 210, 254, 0.9)'
+              : 'rgba(156, 163, 175, 0.7)';
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x1 + 3, boxY + 2, segW - 6, boxH - 4);
+            ctx.clip();
+            ctx.fillText(text, x1 + 5, boxY + fontSize + 3, segW - 10);
+            ctx.restore();
           }
         }
+      });
+    },
+    [viewportWidth, viewportHeight, zoom, duration, peaks, segments, activeId, isPlaying]
+  );
+
+  // ── Redraw on scroll ──
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    drawVisible(scrollRef.current.scrollLeft);
+    // Also update playhead position
+    const t = videoRef?.current?.currentTime ?? currentTime;
+    updatePlayheadPos(t, scrollRef.current.scrollLeft);
+  }, [drawVisible]);
+
+  // ── Redraw when deps change ──
+  useEffect(() => {
+    const sl = scrollRef.current?.scrollLeft ?? 0;
+    drawVisible(sl);
+  }, [drawVisible]);
+
+  // ── Playhead positioning ──
+  const updatePlayheadPos = useCallback(
+    (time: number, scrollLeft: number) => {
+      const el = playheadRef.current;
+      if (!el) return;
+      const px = time * zoomRef.current - scrollLeft;
+      if (px >= -2 && px <= viewportWRef.current + 2) {
+        el.style.display = 'flex';
+        el.style.transform = `translateX(${px}px)`;
       } else {
-        // ── Page mode / manual scroll: only redraw when playhead exits viewport ──
-        const px = ((t - viewportStart) / visDur) * width;
-        if (Math.abs(px - lastPlayheadPxRef.current) >= 0.5) {
-          lastPlayheadPxRef.current = px;
-          drawPlayheadRef.current(t);
-        }
-        if (t < viewportStart || t > viewportStart + visDur) {
-          drawRef.current(t);
-          lastPlayheadPxRef.current = -1;
+        el.style.display = 'none';
+      }
+    },
+    []
+  );
+
+  // Update playhead when paused
+  useEffect(() => {
+    if (!isPlaying) {
+      const sl = scrollRef.current?.scrollLeft ?? 0;
+      updatePlayheadPos(currentTime, sl);
+    }
+  }, [currentTime, isPlaying, updatePlayheadPos, zoom]);
+
+  // ── Auto-scroll during playback ──
+  useEffect(() => {
+    if (!isPlaying || isDraggingRef.current || !scrollRef.current) return;
+    const px = currentTime * zoom;
+    const sl = scrollRef.current.scrollLeft;
+    const margin = viewportWidth * 0.15;
+    if (px < sl + margin || px > sl + viewportWidth - margin) {
+      scrollRef.current.scrollLeft = px - viewportWidth / 2;
+    }
+  }, [currentTime, isPlaying, zoom, viewportWidth]);
+
+  // ── RAF loop during playback (playhead only) ──
+  useEffect(() => {
+    if (!isPlaying || !videoRef?.current) {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
+      return;
+    }
+
+    const loop = () => {
+      const vid = videoRef.current;
+      const scroll = scrollRef.current;
+      if (vid && scroll) {
+        const t = vid.currentTime;
+        updatePlayheadPos(t, scroll.scrollLeft);
+
+        // Auto-scroll if playhead about to leave viewport
+        if (!isDraggingRef.current) {
+          const px = t * zoomRef.current;
+          const sl = scroll.scrollLeft;
+          const vw = viewportWRef.current;
+          if (px > sl + vw * 0.85 || px < sl + vw * 0.15) {
+            scroll.scrollLeft = px - vw / 2;
+          }
         }
       }
-    }
-    animationFrameRef.current = requestAnimationFrame(renderLoop);
-  }, [videoRef]);
+      animFrameRef.current = requestAnimationFrame(loop);
+    };
+    loop();
 
-  // ── RAF loop: start/stop ONLY on isPlaying change ────────────────────
-  // CRITICAL: Do NOT include currentTime in deps — it updates every 250ms
-  // and would restart the RAF loop, causing visible jumps.
-  useEffect(() => {
-    if (isPlaying) {
-      drawRef.current(videoRef?.current?.currentTime ?? 0);
-      lastPlayheadPxRef.current = -1;
-      renderLoop();
-    } else {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    }
     return () => {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
     };
-  }, [isPlaying, renderLoop]);
+  }, [isPlaying, videoRef, updatePlayheadPos]);
 
-  // ── Redraw when paused (seek, zoom, scroll, segment edits) ──────────
-  useEffect(() => {
-    if (!isPlaying) draw(currentTime);
-  }, [currentTime, isPlaying, draw, scrollMode, manualScrollOffset]);
+  // ── Click / drag to seek ──
+  const pixelToTime = useCallback(
+    (clientX: number) => {
+      if (!scrollRef.current) return 0;
+      const rect = scrollRef.current.getBoundingClientRect();
+      const relX = clientX - rect.left;
+      const scrollLeft = scrollRef.current.scrollLeft;
+      const targetPx = scrollLeft + relX;
+      return Math.max(0, Math.min(duration, targetPx / zoom));
+    },
+    [duration, zoom]
+  );
 
-  const clearHoldTimer = () => {
-    if (holdTimerRef.current) {
-      window.clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      isDraggingRef.current = true;
+      onSeek(pixelToTime(e.clientX));
+    },
+    [pixelToTime, onSeek]
+  );
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      onSeek(pixelToTime(e.clientX));
+    },
+    [pixelToTime, onSeek]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    isDraggingRef.current = false;
+  }, []);
+
+  // ── Zoom with Ctrl+Wheel ──
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      setZoom((prev) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev * factor)));
     }
-  };
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-
-    // IMPORTANT: evitem propagació perquè cap component pare reaccioni a la pressió inicial
-    e.preventDefault();
-    e.stopPropagation();
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const refTime = isPlaying && videoRef?.current ? videoRef.current.currentTime : currentTime;
-    const viewportStart = getViewportStart(refTime);
-    const timeAtMouse = xToTime(x, viewportStart, rect.width, getVisibleDuration());
-
-    const target = getHitTarget(x, y, rect.width, rect.height, timeAtMouse);
-
-    // Guardem l'estat inicial. NO executem onSegmentClick aquí per evitar el salt del videoRef.current.currentTime
-    pressRef.current = {
-      startedAt: performance.now(),
-      startX: x,
-      startY: y,
-      latestX: x,
-      latestY: y,
-      target,
-      activatedEdit: false,
-    };
-
-    clearHoldTimer();
-
-    // Només iniciem el temporitzador de pressió llarga si hi ha un segment sota el ratolí
-    if (target) {
-      holdTimerRef.current = window.setTimeout(() => {
-        const ps = pressRef.current;
-        if (!ps || ps.activatedEdit) return;
-
-        ps.activatedEdit = true;
-
-        // ✅ IMPORTANT: No cridem onSegmentClick aquí per evitar que el vídeo salti
-        // El vídeo només ha de saltar si l'usuari fa un clic curt.
-        // onSegmentClick?.(target.id); <--- Eliminat per evitar marejos.
-
-        const seg = segments.find((s) => s.id === target.id);
-        if (!seg) return;
-
-        dragStateRef.current = {
-          segmentId: target.id,
-          type: target.type,
-          startX: ps.latestX,
-          originalStart: seg.startTime,
-          originalEnd: seg.endTime,
-        };
-      }, effectiveHoldToEditMs);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    if (pressRef.current) {
-      pressRef.current.latestX = x;
-      pressRef.current.latestY = y;
-    }
-
-    const refTime = isPlaying && videoRef?.current ? videoRef.current.currentTime : currentTime;
-    const timeAtMouse = xToTime(x, getViewportStart(refTime), rect.width, getVisibleDuration());
-
-    const ds = dragStateRef.current;
-    if (ds && e.buttons === 1) {
-      const timeDelta = (x - ds.startX) * (getVisibleDuration() / rect.width);
-
-      let nS = ds.originalStart;
-      let nE = ds.originalEnd;
-
-      if (ds.type === 'move') {
-        nS = Math.max(0, ds.originalStart + timeDelta);
-        nE = nS + (ds.originalEnd - ds.originalStart);
-        if (nE > duration) {
-          nE = duration;
-          nS = nE - (ds.originalEnd - ds.originalStart);
-        }
-      } else if (ds.type === 'resize-start') {
-        nS = Math.max(0, Math.min(ds.originalStart + timeDelta, ds.originalEnd - 0.2));
-      } else if (ds.type === 'resize-end') {
-        nE = Math.min(duration, Math.max(ds.originalStart + 0.2, ds.originalEnd + timeDelta));
-      }
-
-      // Ephemeral: update ref only, redraw canvas visually — NO React state
-      ephemeralSegRef.current = { id: ds.segmentId, startTime: nS, endTime: nE };
-      if (rafRedrawRef.current == null) {
-        rafRedrawRef.current = requestAnimationFrame(() => {
-          rafRedrawRef.current = null;
-          const t = videoRef?.current ? videoRef.current.currentTime : currentTime;
-          drawStaticRef.current(t);
-          drawPlayheadRef.current(t);
-        });
-      }
-      return;
-    }
-
-    // Set cursor via DOM — no React state, no re-render
-    const target = getHitTarget(x, y, rect.width, rect.height, timeAtMouse);
-    const newCursor = target ? (target.type === 'move' ? 'move' : 'col-resize') : 'default';
-    if (canvasRef.current && cursorRef.current !== newCursor) {
-      cursorRef.current = newCursor;
-      canvasRef.current.style.cursor = newCursor;
-    }
-  };
-
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    clearHoldTimer();
-
-    // Si estàvem en mode arrossegament, commit ephemeral → React state
-    if (dragStateRef.current) {
-      const eph = ephemeralSegRef.current;
-      if (eph) {
-        onSegmentUpdate?.(eph.id, eph.startTime, eph.endTime);
-        ephemeralSegRef.current = null;
-      }
-      if (rafRedrawRef.current) {
-        cancelAnimationFrame(rafRedrawRef.current);
-        rafRedrawRef.current = null;
-      }
-      onSegmentUpdateEnd?.();
-      dragStateRef.current = null;
-      pressRef.current = null;
-      return;
-    }
-
-    const ps = pressRef.current;
-    pressRef.current = null;
-
-    if (!ps) return;
-
-    const elapsed = performance.now() - ps.startedAt;
-
-    // ✅ Només realitzem la navegació si:
-    // 1. NO s'ha activat el mode d'edició (hold llarg ja complert)
-    // 2. El temps total de pressió és inferior al llindar configurat (Short Click)
-    if (!ps.activatedEdit && elapsed < effectiveHoldToEditMs) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-
-      const refTime = isPlaying && videoRef?.current ? videoRef.current.currentTime : currentTime;
-      const viewportStart = getViewportStart(refTime);
-      const timeAtMouse = xToTime(x, viewportStart, rect.width, getVisibleDuration());
-
-      // Si hem clicat sobre un segment, el seleccionem ara que sabem que és un clic curt
-      if (ps.target) {
-          onSegmentClick?.(ps.target.id);
-      }
-
-      // Fem el seek al reproductor
-      onSeek(Math.max(0, Math.min(duration, timeAtMouse)));
-    }
-  };
+  }, []);
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-900 border-l border-gray-800 select-none overflow-hidden relative">
-      <style>{`
-        .manual-wave-scroll::-webkit-slider-thumb {
-            appearance: none;
-            width: 32px;
-            height: 10px;
-            background: #4b5563;
-            border-radius: 4px;
-            cursor: ew-resize;
-            border: 1px solid #374151;
-        }
-        .manual-wave-scroll::-moz-range-thumb {
-            width: 32px;
-            height: 10px;
-            background: #4b5563;
-            border-radius: 4px;
-            cursor: ew-resize;
-            border: 1px solid #374151;
-        }
-      `}</style>
-
+    <div
+      className="w-full h-full flex flex-col bg-gray-900 border-t border-gray-800 select-none overflow-hidden"
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
+      {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-1 text-xs bg-gray-800 border-b border-gray-700 z-10">
-        <div className="text-gray-300 font-semibold">{isLoading ? 'Generant…' : 'Forma d’ona'}</div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400">H</span>
-            <input
-              type="range"
-              min={MIN_ZOOM}
-              max={MAX_ZOOM_H}
-              value={zoomH}
-              onChange={(e) => setZoomH(Number(e.target.value))}
-              className="w-24 accent-blue-500"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-400">V</span>
-            <input
-              type="range"
-              min={MIN_ZOOM}
-              max={MAX_ZOOM_V}
-              value={zoomV}
-              onChange={(e) => setZoomV(Number(e.target.value))}
-              className="w-24 accent-blue-500"
-            />
-          </div>
+        <div className="flex items-center gap-3">
+          <span className="text-gray-300 font-semibold">Timeline</span>
+          {waveStatus === 'loading' && (
+            <span className="text-amber-400 text-[10px] animate-pulse">
+              Processant àudio…
+            </span>
+          )}
+          {waveStatus === 'error' && (
+            <span className="text-red-400 text-[10px]">Error d&apos;extracció</span>
+          )}
+          {waveStatus === 'ready' && (
+            <span className="text-emerald-400 text-[10px]">✓ Àudio</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.5))}
+            className="px-1.5 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+          >
+            −
+          </button>
+          <input
+            type="range"
+            min={MIN_ZOOM}
+            max={MAX_ZOOM}
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="w-24 accent-blue-500"
+          />
+          <button
+            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.5))}
+            className="px-1.5 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+          >
+            +
+          </button>
+          <span className="text-gray-500 text-[10px] font-mono w-14 text-right">
+            {zoom.toFixed(0)}px/s
+          </span>
         </div>
       </div>
 
-      <div className="flex-1 relative min-h-0 w-full" onWheel={handleWheel}>
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full block"
-          style={{ cursor: 'default' }}
+      {/* ── Timeline viewport ── */}
+      <div
+        ref={containerRef}
+        className="flex-1 relative min-h-0 w-full"
+        onWheel={handleWheel}
+      >
+        {/* Scrollable spacer — provides the scrollbar */}
+        <div
+          ref={scrollRef}
+          className="absolute inset-0 overflow-x-auto overflow-y-hidden"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: '#4b5563 #111827' }}
+          onScroll={handleScroll}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-        />
-        {/* Overlay canvas — playhead only (redrawn 60fps, cheap) */}
+        >
+          {/* Invisible spacer to create correct scroll width */}
+          <div style={{ width: totalWidth, height: 1, pointerEvents: 'none' }} />
+        </div>
+
+        {/* Canvas — viewport-sized, drawn from scroll position */}
         <canvas
-          ref={overlayCanvasRef}
+          ref={canvasRef}
           className="absolute inset-0 w-full h-full block pointer-events-none"
         />
 
-        {!videoFile && !isLoading && (
+        {/* ── DOM Playhead ── */}
+        <div
+          ref={playheadRef}
+          className="absolute top-0 h-full flex flex-col items-center pointer-events-none z-20"
+          style={{ left: 0, willChange: 'transform' }}
+        >
+          <div
+            className="w-2.5 h-2.5 bg-white rotate-45 -mt-1"
+            style={{ boxShadow: '0 0 6px rgba(255,255,255,0.6)' }}
+          />
+          <div
+            className="w-px flex-1"
+            style={{
+              background: 'rgba(255, 255, 255, 0.85)',
+              boxShadow: '0 0 8px rgba(255, 255, 255, 0.4)',
+            }}
+          />
+        </div>
+
+        {/* Empty state */}
+        {!videoFile && (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500 pointer-events-none">
             Sense àudio
-          </div>
-        )}
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400 pointer-events-none">
-            Processant…
-          </div>
-        )}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-red-500 pointer-events-none">
-            {error}
-          </div>
-        )}
-
-        {!autoScroll && duration > 0 && (
-          <div className="absolute bottom-0 left-0 w-full h-2.5 bg-black/40 flex px-2 z-20 border-t border-white/5">
-            <input
-              type="range"
-              min="0"
-              max={Math.max(0, duration - getVisibleDuration())}
-              step="0.01"
-              value={manualScrollOffset}
-              onChange={(e) => setManualScrollOffset(parseFloat(e.target.value))}
-              className="w-full h-full appearance-none bg-transparent cursor-pointer manual-wave-scroll"
-            />
           </div>
         )}
       </div>
@@ -818,29 +474,19 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   );
 };
 
-// Custom comparator: during playback, skip re-renders caused by currentTime
-// changes. The RAF loop reads videoRef.current.currentTime directly at 60fps,
-// so React re-renders from the throttled currentTime prop (every 250ms) only
-// block the main thread and cause visible playhead stutter.
-// When paused, currentTime changes (from seek) DO need a re-render.
 export default React.memo(WaveformTimeline, (prev, next) => {
+  // During playback, skip re-renders when only currentTime changes
   if (prev.isPlaying && next.isPlaying) {
-    // During playback — skip if ONLY currentTime changed
-    if (
+    return (
       prev.videoFile === next.videoFile &&
       prev.segments === next.segments &&
       prev.duration === next.duration &&
       prev.activeId === next.activeId &&
-      prev.autoScroll === next.autoScroll &&
-      prev.scrollMode === next.scrollMode &&
       prev.onSeek === next.onSeek &&
       prev.onSegmentUpdate === next.onSegmentUpdate &&
       prev.onSegmentUpdateEnd === next.onSegmentUpdateEnd &&
-      prev.onSegmentClick === next.onSegmentClick &&
-      prev.holdToEditMs === next.holdToEditMs
-    ) {
-      return true; // skip re-render — RAF loop handles playhead
-    }
+      prev.onSegmentClick === next.onSegmentClick
+    );
   }
-  return false; // allow re-render
+  return false;
 });
