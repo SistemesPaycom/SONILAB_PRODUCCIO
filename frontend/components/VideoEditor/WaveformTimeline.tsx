@@ -56,6 +56,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const playheadRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
+  const seekRafRef = useRef<number | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
 
   // Keep mutable refs for values used in RAF loop
   const zoomRef = useRef(DEFAULT_ZOOM);
@@ -65,6 +67,12 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(120);
+
+  // Mutable refs for values read inside drawVisible / RAF (avoid callback deps)
+  const segmentsRef = useRef(segments);
+  segmentsRef.current = segments;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
   // Sync refs
   zoomRef.current = zoom;
@@ -188,17 +196,19 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         }
       }
 
-      // ── Segments ──
+      // ── Segments (read from refs — no callback dep on segments/activeId) ──
       const margin = 4;
       const boxY = margin;
       const boxH = h - margin * 2;
+      const curSegments = segmentsRef.current;
+      const curActiveId = activeIdRef.current;
 
-      segments.forEach((seg) => {
+      curSegments.forEach((seg) => {
         const x1 = (seg.startTime - timeStart) * zoom;
         const x2 = (seg.endTime - timeStart) * zoom;
         if (x2 < 0 || x1 > w) return;
 
-        const isActive = seg.id === activeId;
+        const isActive = seg.id === curActiveId;
 
         // Background
         ctx.fillStyle = isActive
@@ -236,7 +246,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         }
       });
     },
-    [viewportWidth, viewportHeight, zoom, duration, peaks, segments, activeId, isPlaying]
+    [viewportWidth, viewportHeight, zoom, duration, peaks, isPlaying]
   );
 
   // ── Redraw on scroll ──
@@ -248,11 +258,18 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     updatePlayheadPos(t, scrollRef.current.scrollLeft);
   }, [drawVisible]);
 
-  // ── Redraw when deps change ──
+  // ── Redraw when core deps change (zoom, peaks, viewport) ──
   useEffect(() => {
     const sl = scrollRef.current?.scrollLeft ?? 0;
     drawVisible(sl);
   }, [drawVisible]);
+
+  // ── Redraw when segments or activeId change (refs updated above, just trigger draw) ──
+  useEffect(() => {
+    const sl = scrollRef.current?.scrollLeft ?? 0;
+    drawVisible(sl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments, activeId]);
 
   // ── Playhead positioning ──
   const updatePlayheadPos = useCallback(
@@ -341,10 +358,27 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     [duration, zoom]
   );
 
+  // RAF-throttled seek: coalesces multiple mousemove events into one setState per frame
+  const throttledSeek = useCallback(
+    (time: number) => {
+      pendingSeekRef.current = time;
+      if (seekRafRef.current === null) {
+        seekRafRef.current = requestAnimationFrame(() => {
+          seekRafRef.current = null;
+          if (pendingSeekRef.current !== null) {
+            onSeek(pendingSeekRef.current);
+            pendingSeekRef.current = null;
+          }
+        });
+      }
+    },
+    [onSeek]
+  );
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       isDraggingRef.current = true;
-      onSeek(pixelToTime(e.clientX));
+      onSeek(pixelToTime(e.clientX)); // Immediate on click
     },
     [pixelToTime, onSeek]
   );
@@ -352,14 +386,23 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (!isDraggingRef.current) return;
-      onSeek(pixelToTime(e.clientX));
+      throttledSeek(pixelToTime(e.clientX)); // Throttled during drag
     },
-    [pixelToTime, onSeek]
+    [pixelToTime, throttledSeek]
   );
 
   const handleMouseUp = useCallback(() => {
     isDraggingRef.current = false;
-  }, []);
+    // Flush any pending seek
+    if (seekRafRef.current !== null) {
+      cancelAnimationFrame(seekRafRef.current);
+      seekRafRef.current = null;
+    }
+    if (pendingSeekRef.current !== null) {
+      onSeek(pendingSeekRef.current);
+      pendingSeekRef.current = null;
+    }
+  }, [onSeek]);
 
   // ── Zoom with Ctrl+Wheel ──
   const handleWheel = useCallback((e: React.WheelEvent) => {

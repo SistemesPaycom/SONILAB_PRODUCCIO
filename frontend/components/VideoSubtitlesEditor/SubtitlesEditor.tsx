@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { OverlayConfig } from '../../types';
 import SegmentItem from './SegmentItem';
 import { EyeIcon, EyeOffIcon, EarIcon, Languages } from '../icons';
 import { LinkIcon, LinkOffIcon } from '../VideoEditor/PlayerIcons';
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface PendingCorrectionEntry {
   proposed: string;
@@ -140,6 +141,25 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   // Callbacks estables per a onInsert — eviten crear arrow functions noves a cada render
   const handleInsertBefore = useCallback((id: number) => onInsert?.(id, 'before'), [onInsert]);
   const handleInsertAfter = useCallback((id: number) => onInsert?.(id, 'after'), [onInsert]);
+
+  // ── Virtual scroll ──
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: segments.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 90, // ~90px per segment row
+    overscan: 5,
+  });
+
+  // Auto-scroll to active segment via virtualizer
+  useEffect(() => {
+    if (activeId == null || !autoScroll) return;
+    const idx = segments.findIndex(s => s.id === activeId);
+    if (idx >= 0) {
+      virtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
+    }
+  }, [activeId, autoScroll, segments, virtualizer]);
 
   return (
     <div 
@@ -301,32 +321,56 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
         </div>
       </header>
 
-      <div className="flex-grow overflow-y-auto custom-scrollbar">
+      <div ref={scrollContainerRef} className="flex-grow overflow-y-auto custom-scrollbar">
         {segments.length > 0 ? (
-            segments.map((segment, idx) => (
-            <SegmentItem
-                key={segment.id}
-                segment={segment}
-                isActive={activeId === segment.id}
-                isEditable={isEditable}
-                isCorrected={correctionHighlightIds?.has(segment.id as number)}
-                proposedText={pendingCorrections?.get(segment.id as number)?.proposed}
-                onAccept={onAcceptCorrection}
-                onReject={onRejectCorrection}
-                onChange={onSegmentChange}
-                onBlur={onSegmentBlur}
-                onClick={onSegmentClick}
-                onFocus={onSegmentFocus}
-                onSplit={onSplit}
-                onModifyMerge={idx < segments.length - 1 ? onMerge : undefined}
-                onInsertBefore={onInsert ? handleInsertBefore : undefined}
-                onInsertAfter={onInsert ? handleInsertAfter : undefined}
-                onDelete={segments.length > 1 ? onDelete : undefined}
-                generalConfig={generalConfig}
-                autoScroll={autoScroll}
-                onNavigate={handleNavigate}
-            />
-            ))
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const segment = segments[virtualRow.index];
+              const idx = virtualRow.index;
+              return (
+                <div
+                  key={segment.id}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <SegmentItem
+                    segment={segment}
+                    isActive={activeId === segment.id}
+                    isEditable={isEditable}
+                    isCorrected={correctionHighlightIds?.has(segment.id as number)}
+                    proposedText={pendingCorrections?.get(segment.id as number)?.proposed}
+                    onAccept={onAcceptCorrection}
+                    onReject={onRejectCorrection}
+                    onChange={onSegmentChange}
+                    onBlur={onSegmentBlur}
+                    onClick={onSegmentClick}
+                    onFocus={onSegmentFocus}
+                    onSplit={onSplit}
+                    onModifyMerge={idx < segments.length - 1 ? onMerge : undefined}
+                    onInsertBefore={onInsert ? handleInsertBefore : undefined}
+                    onInsertAfter={onInsert ? handleInsertAfter : undefined}
+                    onDelete={segments.length > 1 ? onDelete : undefined}
+                    generalConfig={generalConfig}
+                    autoScroll={false}
+                    onNavigate={handleNavigate}
+                  />
+                </div>
+              );
+            })}
+          </div>
         ) : (
             <div className="flex items-center justify-center h-full text-gray-500 italic text-sm p-10 text-center">
                 Prems el botó "Vincular" o les eines d'IA per començar.
