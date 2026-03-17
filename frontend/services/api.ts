@@ -209,6 +209,13 @@ async listProjects() {
   async getJob(id: string) {
     return request<any>(`/jobs/${id}`);
   },
+  async listJobs(options?: { limit?: number; status?: string }) {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.status) params.set('status', options.status);
+    const qs = params.toString();
+    return request<any[]>(`/jobs${qs ? `?${qs}` : ''}`);
+  },
   async getProjectBySrt(srtDocId: string) {
     return request<any>(`/projects/by-srt/${srtDocId}`);
   },

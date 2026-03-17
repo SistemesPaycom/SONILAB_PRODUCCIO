@@ -109,16 +109,16 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
                     onChange={handleScrub}
                     className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-pointer custom-scrubber"
                 />
-                <div 
-                    className="absolute top-0 left-0 h-full bg-blue-600 transition-all duration-75 z-10" 
-                    style={{ width: `${progressPercent}%` }}
+                <div
+                    className="absolute top-0 left-0 h-full bg-blue-600 z-10"
+                    style={{ width: `${progressPercent}%`, transition: 'width 230ms linear' }}
                 />
                 <div className="absolute top-0 left-0 w-full h-full bg-gray-700/30 group-hover:bg-gray-700/50 transition-colors" />
-                
+
                 {/* Bola de reproducció (sempre visible sobre la barra) */}
-                <div 
-                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full shadow-lg border-2 border-white z-30 transition-transform duration-75 group-hover:scale-125"
-                    style={{ left: `calc(${progressPercent}% - 6px)` }}
+                <div
+                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full shadow-lg border-2 border-white z-30 group-hover:scale-125"
+                    style={{ left: `calc(${progressPercent}% - 6px)`, transition: 'left 230ms linear, transform 75ms' }}
                 />
             </div>
 

@@ -460,6 +460,8 @@ useEffect(() => {
     takeLayoutRef.current.set(num, y);
   }, []);
 
+  // Script auto-scroll: only scroll when the active TAKE changes (not every 250ms)
+  const lastScrolledTakeRef = useRef<number | null>(null);
   useEffect(() => {
     if (!isScriptLinked || takeRanges.length === 0) {
       activeTakeByTimeRef.current = null;
@@ -467,7 +469,7 @@ useEffect(() => {
     }
     if (activeTakeByTimeRef.current !== null) {
       const current = takeRanges.find(r => r.takeNum === activeTakeByTimeRef.current);
-      if (current && currentTime >= current.start && currentTime < current.end) return; 
+      if (current && currentTime >= current.start && currentTime < current.end) return;
     }
     const containing = takeRanges.filter(r => currentTime >= r.start && currentTime < r.end);
     if (containing.length === 0) {
@@ -476,15 +478,21 @@ useEffect(() => {
     }
     const nextActive = [...containing].sort((a, b) => a.takeNum - b.takeNum)[0];
     if (nextActive.takeNum !== activeTakeByTimeRef.current) {
-      const yPos = takeLayoutRef.current.get(nextActive.takeNum);
-      if (yPos !== undefined && scriptScrollRef.current) {
-        scriptScrollRef.current.scrollTo({ top: yPos, behavior: 'smooth' });
-        activeTakeByTimeRef.current = nextActive.takeNum;
+      activeTakeByTimeRef.current = nextActive.takeNum;
+      // Only scroll DOM if the take actually changed (avoid repeated scrollTo calls)
+      if (nextActive.takeNum !== lastScrolledTakeRef.current) {
+        lastScrolledTakeRef.current = nextActive.takeNum;
+        const yPos = takeLayoutRef.current.get(nextActive.takeNum);
+        if (yPos !== undefined && scriptScrollRef.current) {
+          scriptScrollRef.current.scrollTo({ top: yPos, behavior: 'smooth' });
+        }
       }
     }
   }, [currentTime, isScriptLinked, takeRanges]);
 
   const onTogglePlay = useCallback(() => setIsPlaying((p) => !p), []);
+  const onPlay = useCallback(() => setIsPlaying(true), []);
+  const onPause = useCallback(() => setIsPlaying(false), []);
   const onSeek = useCallback((time: number) => {
     if (videoRef.current) videoRef.current.currentTime = time;
     currentTimeRef.current = time;
@@ -727,7 +735,7 @@ const handleSave = useCallback(() => {
     isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments: linkedSegmentsWithDiff, activeId: activeSegmentId,
     activeSegment: subsOverlayConfig.show ? activeSegmentForPlayer : null,
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
-    onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay: () => setIsPlaying(true), onPause: () => setIsPlaying(false), onTogglePlay, onJumpSegment,
+    onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay, onPause, onTogglePlay, onJumpSegment,
     videoFile, onSegmentUpdate: handleSegmentUpdate, onSegmentUpdateEnd: handleSegmentUpdateEnd, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
   };
 

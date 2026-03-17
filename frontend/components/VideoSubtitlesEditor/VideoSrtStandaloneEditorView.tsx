@@ -37,6 +37,18 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
+  // ── Performance: throttle currentTime updates (same as VideoSubtitlesEditorView) ──
+  const currentTimeRef = useRef(0);
+  const lastTimeUpdateRef = useRef(0);
+  const handleTimeUpdateThrottled = useCallback((t: number) => {
+    currentTimeRef.current = t;
+    const now = performance.now();
+    if (now - lastTimeUpdateRef.current > 250) {
+      lastTimeUpdateRef.current = now;
+      setCurrentTime(t);
+    }
+  }, []);
+
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -91,6 +103,8 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   }, [currentTime, segments, activeSegmentId, syncSubsEnabled]);
 
   const onTogglePlay = useCallback(() => setIsPlaying((p) => !p), []);
+  const onPlay = useCallback(() => setIsPlaying(true), []);
+  const onPause = useCallback(() => setIsPlaying(false), []);
   const onSeek = useCallback((time: number) => {
     if (videoRef.current) videoRef.current.currentTime = time;
     setCurrentTime(time);
@@ -333,7 +347,7 @@ useEffect(() => {
     isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments, activeId: activeSegmentId,
     activeSegment: subsOverlayConfig.show ? activeSegmentForPlayer : null,
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
-    onTimeUpdate: setCurrentTime, onDurationChange: setDuration, onPlay: () => setIsPlaying(true), onPause: () => setIsPlaying(false), onTogglePlay, onJumpSegment,
+    onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay, onPause, onTogglePlay, onJumpSegment,
     videoFile, onSegmentUpdate: handleSegmentUpdate, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
   };
 

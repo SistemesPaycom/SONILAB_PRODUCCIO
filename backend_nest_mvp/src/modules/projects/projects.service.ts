@@ -215,6 +215,63 @@ if (exists) {
     return { ...job, id: job._id.toString() };
   }
 
+  /**
+   * Llista tots els jobs amb info del projecte associat.
+   * Retorna els més recents primer, amb límit configurable.
+   */
+  async listJobs(options: { limit?: number; status?: string } = {}) {
+    const limit = options.limit ?? 50;
+    const query: any = {};
+    if (options.status) {
+      if (options.status === 'active') {
+        query.status = { $in: ['queued', 'processing'] };
+      } else {
+        query.status = options.status;
+      }
+    }
+
+    const jobs = await this.jobModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    // Enriquir amb dades del projecte
+    const projectIds = [...new Set(jobs.map((j: any) => j.projectId))];
+    const projects = await this.projectModel
+      .find({ _id: { $in: projectIds } })
+      .lean();
+    const projectMap = new Map(projects.map((p: any) => [p._id.toString(), p]));
+
+    // Obtenir noms de carpetes dels projectes
+    const folderIds = [...new Set(projects.map((p: any) => p.folderId).filter(Boolean))];
+    let folderMap = new Map<string, string>();
+    if (folderIds.length > 0) {
+      const FolderModel = this.projectModel.db.model('Folder');
+      const folders = await FolderModel.find({ _id: { $in: folderIds } }).lean();
+      folderMap = new Map(folders.map((f: any) => [f._id.toString(), f.name]));
+    }
+
+    return jobs.map((j: any) => {
+      const proj = projectMap.get(j.projectId);
+      const folderName = proj?.folderId ? folderMap.get(proj.folderId) : null;
+      return {
+        id: j._id.toString(),
+        projectId: j.projectId,
+        projectName: folderName || proj?.settings?.name || 'Projecte',
+        srtDocumentId: proj?.srtDocumentId || null,
+        mediaDocumentId: proj?.mediaDocumentId || null,
+        projectStatus: proj?.status || null,
+        type: j.type,
+        status: j.status,
+        progress: j.progress,
+        error: j.error || null,
+        createdAt: (j as any).createdAt,
+        updatedAt: (j as any).updatedAt,
+      };
+    });
+  }
+
   async updateJob(jobId: string, patch: Partial<Job>) {
     await this.jobModel.updateOne({ _id: jobId }, patch);
   }

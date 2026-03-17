@@ -90,13 +90,18 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  // ── Refs per a valors volàtils dins draw ──────────────────────────────────
+  // ── Refs per a valors volàtils dins draw / renderLoop ─────────────────
   // Usem refs perquè draw NO es recreï quan canvien segments o activeId,
   // evitant reinicis del RAF loop que causen salts visibles a la waveform.
   const segmentsRef = useRef(segments);
   segmentsRef.current = segments;
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
+  // scrollMode + autoScroll refs: renderLoop needs these without recreating
+  const scrollModeRef = useRef(scrollMode);
+  scrollModeRef.current = scrollMode;
+  const autoScrollRef = useRef(autoScroll);
+  autoScrollRef.current = autoScroll;
 
   const [wavePeaks, setWavePeaks] = useState<WavePeakData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -385,6 +390,23 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           ctx.strokeStyle = isActiveSeg ? '#6366f1' : '#64748b';
           ctx.lineWidth = isActiveSeg ? 1.5 : 1;
           ctx.strokeRect(x1, boxY, x2 - x1, boxH);
+
+          // Text label inside the segment block
+          const segW = x2 - x1;
+          if (segW > 20) {
+            const text = stripHtml(seg.originalText || '');
+            if (text) {
+              const fontSize = 10;
+              ctx.font = `${fontSize}px sans-serif`;
+              ctx.fillStyle = isActiveSeg ? 'rgba(199, 210, 254, 0.9)' : 'rgba(156, 163, 175, 0.8)';
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(x1 + 3, boxY + 2, segW - 6, boxH - 4);
+              ctx.clip();
+              ctx.fillText(text, x1 + 4, boxY + fontSize + 2, segW - 8);
+              ctx.restore();
+            }
+          }
         });
       }
     },
@@ -445,48 +467,81 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   // Track last playhead pixel to skip sub-pixel updates
   const lastPlayheadPxRef = useRef(-1);
 
+  // ── Time interpolation: smooth between video frame updates ──────────
+  // HTML5 video currentTime updates at the video's native frame rate (24-30fps).
+  // Between updates the value is constant, causing playhead jumps. We interpolate
+  // using wall-clock time to produce smooth 60fps position.
+  const interpTimeRef = useRef(0);   // last raw currentTime from video
+  const interpWallRef = useRef(0);   // wall-clock when it changed
+
   const renderLoop = useCallback(() => {
     if (videoRef?.current) {
-      const t = videoRef.current.currentTime;
-      const { viewportStart, visDur, width } = lastViewportRef.current;
-      const px = ((t - viewportStart) / visDur) * width;
+      const rawTime = videoRef.current.currentTime;
+      const now = performance.now();
 
-      // Only redraw playhead if it moved at least 0.5 pixel
-      if (Math.abs(px - lastPlayheadPxRef.current) >= 0.5) {
-        lastPlayheadPxRef.current = px;
-        drawPlayheadRef.current(t);
+      // Detect actual video frame update
+      if (rawTime !== interpTimeRef.current) {
+        interpTimeRef.current = rawTime;
+        interpWallRef.current = now;
       }
 
-      // Check if viewport needs scrolling (stationary mode) — redraw static if so
-      const newVs = drawStaticRef.current === drawRef.current
-        ? viewportStart // avoid calling getViewportStart in tight loop
-        : viewportStart;
+      // Interpolate forward from last known video frame
+      const elapsed = (now - interpWallRef.current) / 1000;
+      const rate = videoRef.current.playbackRate || 1;
+      const t = interpTimeRef.current + elapsed * rate;
 
-      // For page/stationary scroll modes, check if we scrolled past viewport
-      const visDuration = lastViewportRef.current.visDur;
-      if (t < viewportStart || t > viewportStart + visDuration) {
-        drawRef.current(t);
-        lastPlayheadPxRef.current = -1; // force redraw next frame
+      const { viewportStart, visDur, width } = lastViewportRef.current;
+
+      if (autoScrollRef.current && scrollModeRef.current === 'stationary') {
+        // ── Stationary mode: viewport continuously shifts (playhead centered) ──
+        // We must call drawStatic every frame to scroll the waveform background.
+        // Optimisation: only redraw when the viewport shift moves >= 1 pixel.
+        const newVs = Math.max(0, t - visDur / 2);
+        const pxShift = Math.abs(newVs - viewportStart) / visDur * width;
+        if (pxShift >= 1) {
+          drawRef.current(t);
+          lastPlayheadPxRef.current = -1;
+        } else {
+          // Sub-pixel shift — just update playhead overlay
+          const px = ((t - viewportStart) / visDur) * width;
+          if (Math.abs(px - lastPlayheadPxRef.current) >= 0.5) {
+            lastPlayheadPxRef.current = px;
+            drawPlayheadRef.current(t);
+          }
+        }
+      } else {
+        // ── Page mode / manual scroll: only redraw when playhead exits viewport ──
+        const px = ((t - viewportStart) / visDur) * width;
+        if (Math.abs(px - lastPlayheadPxRef.current) >= 0.5) {
+          lastPlayheadPxRef.current = px;
+          drawPlayheadRef.current(t);
+        }
+        if (t < viewportStart || t > viewportStart + visDur) {
+          drawRef.current(t);
+          lastPlayheadPxRef.current = -1;
+        }
       }
     }
     animationFrameRef.current = requestAnimationFrame(renderLoop);
   }, [videoRef]);
 
-  // ── RAF loop per reproducció + draw estàtic quan pausat ────────────────
+  // ── RAF loop: start/stop ONLY on isPlaying change ────────────────────
+  // CRITICAL: Do NOT include currentTime in deps — it updates every 250ms
+  // and would restart the RAF loop, causing visible jumps.
   useEffect(() => {
     if (isPlaying) {
-      draw(currentTime); // Full draw once when starting playback
+      drawRef.current(videoRef?.current?.currentTime ?? 0);
       lastPlayheadPxRef.current = -1;
       renderLoop();
     } else {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      draw(currentTime);
     }
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [isPlaying, renderLoop, draw, currentTime]);
+  }, [isPlaying, renderLoop]);
 
+  // ── Redraw when paused (seek, zoom, scroll, segment edits) ──────────
   useEffect(() => {
     if (!isPlaying) draw(currentTime);
   }, [currentTime, isPlaying, draw, scrollMode, manualScrollOffset]);
@@ -763,4 +818,29 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   );
 };
 
-export default React.memo(WaveformTimeline);
+// Custom comparator: during playback, skip re-renders caused by currentTime
+// changes. The RAF loop reads videoRef.current.currentTime directly at 60fps,
+// so React re-renders from the throttled currentTime prop (every 250ms) only
+// block the main thread and cause visible playhead stutter.
+// When paused, currentTime changes (from seek) DO need a re-render.
+export default React.memo(WaveformTimeline, (prev, next) => {
+  if (prev.isPlaying && next.isPlaying) {
+    // During playback — skip if ONLY currentTime changed
+    if (
+      prev.videoFile === next.videoFile &&
+      prev.segments === next.segments &&
+      prev.duration === next.duration &&
+      prev.activeId === next.activeId &&
+      prev.autoScroll === next.autoScroll &&
+      prev.scrollMode === next.scrollMode &&
+      prev.onSeek === next.onSeek &&
+      prev.onSegmentUpdate === next.onSegmentUpdate &&
+      prev.onSegmentUpdateEnd === next.onSegmentUpdateEnd &&
+      prev.onSegmentClick === next.onSegmentClick &&
+      prev.holdToEditMs === next.holdToEditMs
+    ) {
+      return true; // skip re-render — RAF loop handles playhead
+    }
+  }
+  return false; // allow re-render
+});

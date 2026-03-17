@@ -116,9 +116,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  const sessionSaveRef = useRef(0);
   const handleTimeUpdateWithSave = (time: number) => {
     onTimeUpdate(time);
-    sessionStorage.setItem(SESSION_STORAGE_TIME_KEY, time.toString());
+    // Throttle sessionStorage writes to every 2s — sync I/O on every frame kills perf
+    const now = performance.now();
+    if (now - sessionSaveRef.current > 2000) {
+      sessionSaveRef.current = now;
+      sessionStorage.setItem(SESSION_STORAGE_TIME_KEY, time.toString());
+    }
   };
 
 

@@ -7,6 +7,7 @@ import { VideoSubtitlesEditorView } from './components/VideoSubtitlesEditor/Vide
 import { LectorView } from './components/LectorDeGuions/LectorView';
 import { SsrtlsfEditorView } from './components/SsrtlsfEditor/SsrtlsfEditorView';
 import { VideoSrtStandaloneEditorView } from './components/VideoSubtitlesEditor/VideoSrtStandaloneEditorView';
+import SrtPreviewView from './components/VideoSubtitlesEditor/SrtPreviewView';
 import { MediaPreviewView } from './components/VideoEditor/MediaPreviewView';
 import Toolbar from './components/EditorDeGuions/Toolbar';
 import Editor from './components/EditorDeGuions/Editor';
@@ -27,6 +28,7 @@ import { AuthModal } from './components/Auth/AuthModal';
 
 import { AuthProvider, useAuth } from './context/Auth/AuthContext';
 import { api } from './services/api';
+import TasksIAPanel, { JobRecord } from './components/TasksIA/TasksIAPanel';
 
 const DEFAULT_STYLES: EditorStyles = {
   take: { fontFamily: 'Courier Prime, monospace', fontSize: 16, color: '#000000', bold: true, italic: false },
@@ -174,6 +176,46 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // Toasts de tasques completades (notificació HOME)
+  const [completedToasts, setCompletedToasts] = useState<JobRecord[]>([]);
+  const handleTaskCompleted = useCallback((job: JobRecord) => {
+    setCompletedToasts(prev => {
+      // Evitar duplicats
+      if (prev.some(j => j.id === job.id)) return prev;
+      return [...prev, job];
+    });
+    // Auto-dismiss after 8s
+    setTimeout(() => {
+      setCompletedToasts(prev => prev.filter(j => j.id !== job.id));
+    }, 8000);
+  }, []);
+
+  // ── Background poller: detecta tasques completades per mostrar toast ──
+  const bgJobStatusRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!useBackend) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const jobs: JobRecord[] = await api.listJobs({ limit: 20 });
+        if (cancelled) return;
+        const prevMap = bgJobStatusRef.current;
+        for (const j of jobs) {
+          const prev = prevMap.get(j.id);
+          if (prev && prev !== 'done' && prev !== 'error' && j.status === 'done') {
+            handleTaskCompleted(j);
+          }
+        }
+        const newMap = new Map<string, string>();
+        for (const j of jobs) newMap.set(j.id, j.status);
+        bgJobStatusRef.current = newMap;
+      } catch { /* ignore */ }
+    };
+    poll();
+    const id = setInterval(poll, 10_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [useBackend, handleTaskCompleted]);
 
   const currentDoc = useMemo(() => state.documents.find(d => d.id === openDocId), [openDocId, state.documents]);
 
@@ -377,7 +419,10 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
     if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
     if (openMode === 'editor-video-subs') return <VideoSubtitlesEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
     if (openMode === 'editor-ssrtlsf') return <SsrtlsfEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={() => handleOpenDocument(null, null, false)} onUpdateContent={(txt) => handleTextChange(txt, 'script')} />;
-    if (openMode === 'editor-srt-standalone') return <VideoSrtStandaloneEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={() => handleOpenDocument(null, null, false)} />;
+    if (openMode === 'editor-srt-standalone') {
+      if (!isEditing) return <SrtPreviewView currentDoc={currentDoc} onClose={() => handleOpenDocument(null, null, false)} />;
+      return <VideoSrtStandaloneEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={() => handleOpenDocument(null, null, false)} />;
+    }
 
     // --- CORRECCIÓ: Previsualització multimèdia o de text ---
     if (!isEditing) {
@@ -480,18 +525,40 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
       )}
 
       {isNotificationsOpen && (
-        <NotificationModal
-  translationTasks={state.translationTasks}
-  transcriptionTasks={state.transcriptionTasks}
-  onClearTranslations={() => dispatch({ type: 'CLEAR_COMPLETED_TASKS' })}
-  onClearTranscriptions={() => dispatch({ type: 'CLEAR_COMPLETED_TRANSCRIPTION_TASKS' })}
-  onClose={() => setIsNotificationsOpen(false)}
-/>
+        <TasksIAPanel
+          onClose={() => setIsNotificationsOpen(false)}
+          onTaskCompleted={handleTaskCompleted}
+        />
       )}
 
       {history.isDirty && (
         <div className="fixed bottom-4 right-4 px-3 py-1 bg-amber-500 text-black text-[10px] font-black uppercase rounded-full shadow-lg animate-pulse z-[100]">
           Canvis sense desar
+        </div>
+      )}
+
+      {/* Toast notifications per tasques completades */}
+      {completedToasts.length > 0 && (
+        <div className="fixed top-4 right-4 z-[600] flex flex-col gap-2 pointer-events-auto">
+          {completedToasts.map(toast => (
+            <div
+              key={toast.id}
+              className="bg-emerald-900/90 border border-emerald-600/50 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 min-w-[320px] backdrop-blur-md"
+              style={{ animation: 'slideInRight 0.3s ease-out' }}
+            >
+              <span className="text-emerald-400 text-lg">✓</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-emerald-100 truncate">{toast.projectName}</p>
+                <p className="text-[10px] text-emerald-400/80 uppercase tracking-widest font-bold">Transcripció completada</p>
+              </div>
+              <button
+                onClick={() => setCompletedToasts(prev => prev.filter(j => j.id !== toast.id))}
+                className="text-emerald-500 hover:text-white text-lg transition-colors"
+              >
+                &times;
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

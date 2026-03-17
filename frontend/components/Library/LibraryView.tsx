@@ -377,7 +377,7 @@ setUploadProgress(null);
   const doc = state.documents.find(d => d.id === docId);
   const isSrt = doc && ((doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt'));
   if (isSrt) {
-    onOpenDocument(docId, 'editor-srt-standalone' as any, true);
+    onOpenDocument(docId, 'editor-srt-standalone' as any, false);
     return;
   }
   onOpenDocument(docId, 'editor', false);
