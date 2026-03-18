@@ -34,6 +34,11 @@ const MIN_ZOOM = 20;
 const MAX_ZOOM = 500;
 const DEFAULT_ZOOM = 100;
 
+// Segment interaction constants
+const HOLD_MS = 500;           // ms threshold for long-press to arm drag
+const EDGE_HIT_PX = 8;        // pixels from segment edge for resize hit zone
+const MIN_SEG_DURATION = 0.1;  // minimum segment duration in seconds
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
@@ -59,6 +64,19 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const isDraggingRef = useRef(false);
   const seekRafRef = useRef<number | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
+
+  // ── Segment drag interaction refs ──
+  const mouseDownActiveRef = useRef(false);
+  const mouseDownTsRef = useRef(0);
+  const mouseDownClientRef = useRef({ x: 0, y: 0 });
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragArmedRef = useRef(false);
+  const dragTypeRef = useRef<'move' | 'resize-start' | 'resize-end' | null>(null);
+  const dragSegIdRef = useRef<Id | null>(null);
+  const dragAnchorTimeRef = useRef(0);
+  const dragSegOrigStartRef = useRef(0);
+  const dragSegOrigEndRef = useRef(0);
+  const seekDragActiveRef = useRef(false);
 
   // Keep mutable refs for values used in RAF loop
   const zoomRef = useRef(DEFAULT_ZOOM);
@@ -332,7 +350,6 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       const scroll = scrollRef.current;
       if (vid && scroll) {
         const t = vid.currentTime;
-        updatePlayheadPos(t, scroll.scrollLeft);
 
         // Auto-scroll if playhead about to leave viewport
         if (!isDraggingRef.current) {
@@ -349,6 +366,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
             scroll.scrollLeft = px - vw / 2;
           }
         }
+
+        updatePlayheadPos(t, scroll.scrollLeft);
       }
       animFrameRef.current = requestAnimationFrame(loop);
     };
@@ -392,34 +411,256 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     [onSeek]
   );
 
+  // ── Hit-test: find segment and zone under cursor ──
+  const hitTestSegment = useCallback(
+    (clientX: number): { id: Id; zone: 'start' | 'end' | 'body' } | null => {
+      const sc = scrollRef.current;
+      if (!sc) return null;
+      const rect = sc.getBoundingClientRect();
+      const absX = clientX - rect.left + sc.scrollLeft; // absolute pixel in timeline
+      const z = zoomRef.current;
+      const segs = segmentsRef.current;
+      // Check in reverse so later-drawn (top) segments get priority
+      for (let i = segs.length - 1; i >= 0; i--) {
+        const s = segs[i];
+        const x1 = s.startTime * z;
+        const x2 = s.endTime * z;
+        if (absX >= x1 - 2 && absX <= x2 + 2) {
+          if (absX <= x1 + EDGE_HIT_PX) return { id: s.id, zone: 'start' };
+          if (absX >= x2 - EDGE_HIT_PX) return { id: s.id, zone: 'end' };
+          return { id: s.id, zone: 'body' };
+        }
+      }
+      return null;
+    },
+    []
+  );
+
+  const clearHold = useCallback(() => {
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }, []);
+
+  // ── Neighbor bounds for overlap prevention ──
+  const getNeighborBounds = useCallback(
+    (segId: Id) => {
+      const segs = segmentsRef.current;
+      const idx = segs.findIndex((s) => s.id === segId);
+      return {
+        prevEnd: idx > 0 ? segs[idx - 1].endTime : 0,
+        nextStart: idx < segs.length - 1 ? segs[idx + 1].startTime : duration,
+      };
+    },
+    [duration]
+  );
+
+  // ── Mouse handlers with short-click / long-press discrimination ──
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      isDraggingRef.current = true;
-      onSeek(pixelToTime(e.clientX)); // Immediate on click
+      if (e.button !== 0) return; // left button only
+      mouseDownTsRef.current = performance.now();
+      mouseDownClientRef.current = { x: e.clientX, y: e.clientY };
+      mouseDownActiveRef.current = true;
+      dragArmedRef.current = false;
+      dragTypeRef.current = null;
+      dragSegIdRef.current = null;
+      seekDragActiveRef.current = false;
+      clearHold();
+
+      const hit = hitTestSegment(e.clientX);
+      if (hit) {
+        // Do NOT call onSegmentClick here — it causes a seek via the parent.
+        // Selection + seek will happen on mouseUp if it's a short click.
+        const seg = segmentsRef.current.find((s) => s.id === hit.id);
+        if (seg) {
+          dragSegIdRef.current = hit.id;
+          dragAnchorTimeRef.current = pixelToTime(e.clientX);
+          dragSegOrigStartRef.current = seg.startTime;
+          dragSegOrigEndRef.current = seg.endTime;
+          const zone = hit.zone;
+          // Start hold timer — if user holds > HOLD_MS, arm drag
+          holdTimerRef.current = setTimeout(() => {
+            holdTimerRef.current = null;
+            dragArmedRef.current = true;
+            isDraggingRef.current = true; // suppress auto-scroll
+            dragTypeRef.current =
+              zone === 'start'
+                ? 'resize-start'
+                : zone === 'end'
+                ? 'resize-end'
+                : 'move';
+            const sc = scrollRef.current;
+            if (sc) sc.style.cursor = zone === 'body' ? 'grabbing' : 'col-resize';
+          }, HOLD_MS);
+        }
+      }
+      // Don't seek on mouseDown — decision happens on mouseUp
     },
-    [pixelToTime, onSeek]
+    [hitTestSegment, pixelToTime, clearHold]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      throttledSeek(pixelToTime(e.clientX)); // Throttled during drag
+      // ── 1. Segment drag in progress ──
+      if (dragArmedRef.current && dragSegIdRef.current && dragTypeRef.current) {
+        const curT = pixelToTime(e.clientX);
+        const delta = curT - dragAnchorTimeRef.current;
+        const allowOverlap = e.shiftKey;
+        const { prevEnd, nextStart } = getNeighborBounds(dragSegIdRef.current);
+        const origS = dragSegOrigStartRef.current;
+        const origE = dragSegOrigEndRef.current;
+        let ns = origS,
+          ne = origE;
+
+        if (dragTypeRef.current === 'move') {
+          const dur = origE - origS;
+          ns = origS + delta;
+          ne = ns + dur;
+          if (!allowOverlap) {
+            if (ns < prevEnd) {
+              ns = prevEnd;
+              ne = ns + dur;
+            }
+            if (ne > nextStart) {
+              ne = nextStart;
+              ns = ne - dur;
+            }
+          }
+          if (ns < 0) {
+            ns = 0;
+            ne = dur;
+          }
+          if (ne > duration) {
+            ne = duration;
+            ns = duration - dur;
+          }
+        } else if (dragTypeRef.current === 'resize-start') {
+          ns = origS + delta;
+          ne = origE;
+          if (!allowOverlap) ns = Math.max(ns, prevEnd);
+          ns = Math.max(0, ns);
+          if (ne - ns < MIN_SEG_DURATION) ns = ne - MIN_SEG_DURATION;
+        } else {
+          // resize-end
+          ns = origS;
+          ne = origE + delta;
+          if (!allowOverlap) ne = Math.min(ne, nextStart);
+          ne = Math.min(duration, ne);
+          if (ne - ns < MIN_SEG_DURATION) ne = ns + MIN_SEG_DURATION;
+        }
+
+        onSegmentUpdate?.(dragSegIdRef.current, ns, ne);
+        return;
+      }
+
+      // ── 2. Waiting for hold timer on a segment ──
+      if (holdTimerRef.current !== null) {
+        // Don't act while waiting — small movement is tolerated
+        return;
+      }
+
+      // ── 3. Empty-space seek-drag (scrubbing) ──
+      if (mouseDownActiveRef.current && !dragSegIdRef.current) {
+        const dx = Math.abs(e.clientX - mouseDownClientRef.current.x);
+        if (dx > 3 || seekDragActiveRef.current) {
+          seekDragActiveRef.current = true;
+          isDraggingRef.current = true;
+          throttledSeek(pixelToTime(e.clientX));
+        }
+        return;
+      }
+
+      // ── 4. Hover cursor feedback (no button held) ──
+      if (!mouseDownActiveRef.current) {
+        const hit = hitTestSegment(e.clientX);
+        const sc = scrollRef.current;
+        if (sc) {
+          sc.style.cursor = hit
+            ? hit.zone === 'body'
+              ? 'grab'
+              : 'col-resize'
+            : '';
+        }
+      }
     },
-    [pixelToTime, throttledSeek]
+    [
+      pixelToTime,
+      throttledSeek,
+      onSegmentUpdate,
+      duration,
+      hitTestSegment,
+      getNeighborBounds,
+    ]
   );
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback(
+    (e?: React.MouseEvent) => {
+      clearHold();
+      const wasArmed = dragArmedRef.current;
+      const wasSeekDrag = seekDragActiveRef.current;
+
+      // Finish segment drag
+      if (wasArmed && dragSegIdRef.current) {
+        onSegmentUpdateEnd?.();
+      }
+
+      // Short click → select segment + seek on mouseUp (only if no drag occurred)
+      if (!wasArmed && !wasSeekDrag && e) {
+        const elapsed = performance.now() - mouseDownTsRef.current;
+        if (elapsed < HOLD_MS) {
+          // If the short click was on a segment, select it now (triggers parent seek too)
+          if (dragSegIdRef.current) {
+            onSegmentClick?.(dragSegIdRef.current);
+          } else {
+            // Empty space: direct seek
+            onSeek(pixelToTime(e.clientX));
+          }
+        }
+      }
+
+      // Flush pending seek from scrub-drag
+      if (wasSeekDrag) {
+        if (seekRafRef.current !== null) {
+          cancelAnimationFrame(seekRafRef.current);
+          seekRafRef.current = null;
+        }
+        if (pendingSeekRef.current !== null) {
+          onSeek(pendingSeekRef.current);
+          pendingSeekRef.current = null;
+        }
+      }
+
+      // Reset all interaction state
+      isDraggingRef.current = false;
+      dragArmedRef.current = false;
+      dragTypeRef.current = null;
+      dragSegIdRef.current = null;
+      seekDragActiveRef.current = false;
+      mouseDownActiveRef.current = false;
+      const sc = scrollRef.current;
+      if (sc) sc.style.cursor = '';
+    },
+    [clearHold, onSegmentUpdateEnd, onSeek, onSegmentClick, pixelToTime]
+  );
+
+  // Separate handler for mouse leave — cleans up without seeking
+  const handleMouseLeave = useCallback(() => {
+    clearHold();
+    if (dragArmedRef.current && dragSegIdRef.current) {
+      onSegmentUpdateEnd?.();
+    }
     isDraggingRef.current = false;
-    // Flush any pending seek
-    if (seekRafRef.current !== null) {
-      cancelAnimationFrame(seekRafRef.current);
-      seekRafRef.current = null;
-    }
-    if (pendingSeekRef.current !== null) {
-      onSeek(pendingSeekRef.current);
-      pendingSeekRef.current = null;
-    }
-  }, [onSeek]);
+    dragArmedRef.current = false;
+    dragTypeRef.current = null;
+    dragSegIdRef.current = null;
+    seekDragActiveRef.current = false;
+    mouseDownActiveRef.current = false;
+    const sc = scrollRef.current;
+    if (sc) sc.style.cursor = '';
+  }, [clearHold, onSegmentUpdateEnd]);
 
   // ── Zoom with Ctrl+Wheel ──
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -434,7 +675,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     <div
       className="w-full h-full flex flex-col bg-gray-900 border-t border-gray-800 select-none overflow-hidden"
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
     >
       {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-1 text-xs bg-gray-800 border-b border-gray-700 z-10">
