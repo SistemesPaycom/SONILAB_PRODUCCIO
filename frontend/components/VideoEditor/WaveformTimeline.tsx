@@ -48,6 +48,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   onSegmentUpdate,
   onSegmentUpdateEnd,
   onSegmentClick,
+  scrollMode = 'stationary',
 }) => {
   // ── Refs ──
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,6 +63,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   // Keep mutable refs for values used in RAF loop
   const zoomRef = useRef(DEFAULT_ZOOM);
   const viewportWRef = useRef(0);
+  const scrollModeRef = useRef(scrollMode);
 
   // ── State ──
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -77,6 +79,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   // Sync refs
   zoomRef.current = zoom;
   viewportWRef.current = viewportWidth;
+  scrollModeRef.current = scrollMode;
 
   // ── Waveform extraction ──
   const { extract, peaks, status: waveStatus } = useWaveformExtractor();
@@ -295,16 +298,24 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     }
   }, [currentTime, isPlaying, updatePlayheadPos, zoom]);
 
-  // ── Auto-scroll during playback ──
+  // ── Auto-scroll when paused (e.g. after manual seek) ──
+  // During playback the RAF loop handles auto-scroll at 60fps with the real
+  // video time.  This effect only fires on the throttled currentTime state
+  // (~250ms), so running it while playing would fight the RAF loop — especially
+  // in page mode where a stale time can trigger a backwards page jump.
   useEffect(() => {
-    if (!isPlaying || isDraggingRef.current || !scrollRef.current) return;
+    if (isPlaying || isDraggingRef.current || !scrollRef.current) return;
     const px = currentTime * zoom;
     const sl = scrollRef.current.scrollLeft;
-    const margin = viewportWidth * 0.15;
-    if (px < sl + margin || px > sl + viewportWidth - margin) {
+    if (scrollMode === 'page') {
+      if (px > sl + viewportWidth * 0.97 || px < sl) {
+        scrollRef.current.scrollLeft = px - viewportWidth * 0.03;
+      }
+    } else {
+      // Stationary: always center on cursor position
       scrollRef.current.scrollLeft = px - viewportWidth / 2;
     }
-  }, [currentTime, isPlaying, zoom, viewportWidth]);
+  }, [currentTime, isPlaying, zoom, viewportWidth, scrollMode]);
 
   // ── RAF loop during playback (playhead only) ──
   useEffect(() => {
@@ -326,9 +337,15 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         // Auto-scroll if playhead about to leave viewport
         if (!isDraggingRef.current) {
           const px = t * zoomRef.current;
-          const sl = scroll.scrollLeft;
           const vw = viewportWRef.current;
-          if (px > sl + vw * 0.85 || px < sl + vw * 0.15) {
+          if (scrollModeRef.current === 'page') {
+            // Page mode: jump when cursor reaches ~97% of right edge or goes before page start
+            const sl = scroll.scrollLeft;
+            if (px > sl + vw * 0.97 || px < sl) {
+              scroll.scrollLeft = px - vw * 0.03;
+            }
+          } else {
+            // Stationary mode: keep cursor fixed at center, timeline scrolls underneath
             scroll.scrollLeft = px - vw / 2;
           }
         }
@@ -525,6 +542,7 @@ export default React.memo(WaveformTimeline, (prev, next) => {
       prev.segments === next.segments &&
       prev.duration === next.duration &&
       prev.activeId === next.activeId &&
+      prev.scrollMode === next.scrollMode &&
       prev.onSeek === next.onSeek &&
       prev.onSegmentUpdate === next.onSegmentUpdate &&
       prev.onSegmentUpdateEnd === next.onSegmentUpdateEnd &&
