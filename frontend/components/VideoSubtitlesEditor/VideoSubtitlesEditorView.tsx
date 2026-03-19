@@ -823,7 +823,8 @@ const handleSave = useCallback(() => {
           <div className="flex-shrink-0 bg-[#1e293b] border-t border-gray-700/50">
             <VideoSubtitlesToolbar
               onOpenSync={() => setIsSyncModalOpen(true)} onExportSrt={handleExportSrt} isPlaying={isPlaying} onTogglePlay={onTogglePlay} onJumpSegment={onJumpSegment} onJumpTime={onJumpTime} currentTime={currentTime} duration={duration} onSeek={onSeek} playbackRate={playbackRate} onChangeRate={onChangeRate} isScriptLinked={isScriptLinked} onToggleScriptLink={() => setIsScriptLinked((p) => !p)} isEditable={isEditing} autoScrollWave={autoScrollWave} onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)} scrollModeWave={scrollModeWave} onScrollModeChangeWave={setScrollModeWave} autoScrollSubs={autoScrollSubs} onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
-              onUndo={() => subsHistory.undo()} onRedo={() => subsHistory.redo()} canUndo={subsHistory.canUndo} canRedo={subsHistory.canRedo} onSave={handleSave}
+              subtitleOverlayShow={subsOverlayConfig.show}
+              onToggleSubtitleOverlay={() => setSubsOverlayConfig(c => ({ ...c, show: !c.show }))}
             />
           </div>
         </div>
@@ -846,6 +847,16 @@ const handleSave = useCallback(() => {
           onSegmentClick={handleSegmentClick}
           autoScroll={autoScrollWave}
           scrollMode={scrollModeWave}
+          onUndo={() => subsHistory.undo()}
+          onRedo={() => subsHistory.redo()}
+          canUndo={subsHistory.canUndo}
+          canRedo={subsHistory.canRedo}
+          autoScrollWave={autoScrollWave}
+          onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)}
+          scrollModeWave={scrollModeWave}
+          onScrollModeChangeWave={setScrollModeWave}
+          onSave={handleSave}
+          onExportSrt={handleExportSrt}
         />
       </div>
 

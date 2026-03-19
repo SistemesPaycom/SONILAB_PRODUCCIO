@@ -436,13 +436,8 @@ useEffect(() => {
               onScrollModeChangeWave={setScrollModeWave}
               autoScrollSubs={autoScrollSubs}
               onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
-              onUndo={() => subsHistory.undo()}
-              onRedo={() => subsHistory.redo()}
-              canUndo={subsHistory.canUndo}
-              canRedo={subsHistory.canRedo}
-              onSave={handleSave}
-              autosaveEnabled={autosave}
-              onToggleAutosave={() => setAutosave(!autosave)}
+              subtitleOverlayShow={subsOverlayConfig.show}
+              onToggleSubtitleOverlay={() => setSubsOverlayConfig(c => ({ ...c, show: !c.show }))}
             />
           </div>
         </div>
@@ -464,6 +459,18 @@ useEffect(() => {
           onSegmentClick={handleSegmentClick}
           autoScroll={autoScrollWave}
           scrollMode={scrollModeWave}
+          onUndo={() => subsHistory.undo()}
+          onRedo={() => subsHistory.redo()}
+          canUndo={subsHistory.canUndo}
+          canRedo={subsHistory.canRedo}
+          autoScrollWave={autoScrollWave}
+          onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)}
+          scrollModeWave={scrollModeWave}
+          onScrollModeChangeWave={setScrollModeWave}
+          autosaveEnabled={autosave}
+          onToggleAutosave={() => setAutosave(!autosave)}
+          onSave={handleSave}
+          onExportSrt={() => {}}
         />
       </div>
 

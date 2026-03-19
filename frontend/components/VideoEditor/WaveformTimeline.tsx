@@ -5,6 +5,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Segment, Id, TimelineViewMode } from '../../types';
 import { useWaveformExtractor } from '../../hooks/useWaveformExtractor';
+import * as Icons from '../icons';
+import {
+  DownloadIcon,
+  CursorStationaryIcon,
+  CursorPageIcon,
+} from './PlayerIcons';
 
 const stripHtml = (text: string) => (text ? text.replace(/<[^>]+>/g, '') : '');
 
@@ -26,6 +32,19 @@ interface WaveformTimelineProps {
   onSegmentClick?: (id: Id) => void;
   autoScroll?: boolean;
   scrollMode?: string;
+  // ── Toolbar controls relocated from video toolbar ──
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  autoScrollWave?: boolean;
+  onToggleAutoScrollWave?: () => void;
+  scrollModeWave?: 'stationary' | 'page';
+  onScrollModeChangeWave?: (mode: 'stationary' | 'page') => void;
+  autosaveEnabled?: boolean;
+  onToggleAutosave?: () => void;
+  onSave?: () => void;
+  onExportSrt?: () => void;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -54,6 +73,19 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   onSegmentUpdateEnd,
   onSegmentClick,
   scrollMode = 'stationary',
+  // Relocated toolbar controls
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  autoScrollWave,
+  onToggleAutoScrollWave,
+  scrollModeWave,
+  onScrollModeChangeWave,
+  autosaveEnabled,
+  onToggleAutosave,
+  onSave,
+  onExportSrt,
 }) => {
   // ── Refs ──
   const containerRef = useRef<HTMLDivElement>(null);
@@ -678,45 +710,136 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       onMouseLeave={handleMouseLeave}
     >
       {/* ── Header ── */}
-      <div className="flex-shrink-0 flex items-center justify-between px-4 py-1 text-xs bg-gray-800 border-b border-gray-700 z-10">
-        <div className="flex items-center gap-3">
-          <span className="text-gray-300 font-semibold">Timeline</span>
+      <div className="flex-shrink-0 flex items-center justify-between px-3 py-1 text-xs bg-gray-800 border-b border-gray-700 z-10 gap-2">
+        {/* LEFT: Title + status + undo/redo */}
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-gray-300 font-semibold whitespace-nowrap">Timeline</span>
           {waveStatus === 'loading' && (
-            <span className="text-amber-400 text-[10px] animate-pulse">
+            <span className="text-amber-400 text-[10px] animate-pulse whitespace-nowrap">
               Processant àudio…
             </span>
           )}
           {waveStatus === 'error' && (
-            <span className="text-red-400 text-[10px]">Error d&apos;extracció</span>
+            <span className="text-red-400 text-[10px] whitespace-nowrap">Error d&apos;extracció</span>
           )}
           {waveStatus === 'ready' && (
-            <span className="text-emerald-400 text-[10px]">✓ Àudio</span>
+            <span className="text-emerald-400 text-[10px] whitespace-nowrap">✓ Àudio</span>
+          )}
+
+          {/* Undo / Redo */}
+          {(onUndo || onRedo) && (
+            <>
+              <div className="w-px h-5 bg-gray-700 mx-0.5" />
+              <div className="flex items-center gap-0.5">
+                <button
+                  disabled={!canUndo}
+                  onClick={onUndo}
+                  className="p-1 rounded text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-20 transition-all"
+                  title="Desfer (Ctrl+Z)"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 10h10a8 8 0 018 8v2M3 10l5-5m-5 5l5 5" />
+                  </svg>
+                </button>
+                <button
+                  disabled={!canRedo}
+                  onClick={onRedo}
+                  className="p-1 rounded text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-20 transition-all"
+                  title="Refer (Ctrl+Shift+Z)"
+                >
+                  <svg className="w-3.5 h-3.5 scale-x-[-1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 10h10a8 8 0 018 8v2M3 10l5-5m-5 5l5 5" />
+                  </svg>
+                </button>
+              </div>
+            </>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.5))}
-            className="px-1.5 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-          >
-            −
-          </button>
-          <input
-            type="range"
-            min={MIN_ZOOM}
-            max={MAX_ZOOM}
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-            className="w-24 accent-blue-500"
-          />
-          <button
-            onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.5))}
-            className="px-1.5 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-          >
-            +
-          </button>
-          <span className="text-gray-500 text-[10px] font-mono w-14 text-right">
-            {zoom.toFixed(0)}px/s
-          </span>
+
+        {/* CENTER: Auto-scroll + scroll mode */}
+        <div className="flex items-center gap-2">
+          {onToggleAutoScrollWave && (
+            <div className="flex items-center gap-1 bg-black/30 rounded-full p-0.5 border border-white/5">
+              <button
+                onClick={onToggleAutoScrollWave}
+                className={`p-1 rounded-full transition-all ${autoScrollWave ? 'bg-blue-600 text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
+                title={autoScrollWave ? 'Seguiment actiu' : 'Seguiment inactiu'}
+              >
+                <Icons.ArrowDown className={`w-3 h-3 ${autoScrollWave && isPlaying ? 'animate-bounce' : ''}`} />
+              </button>
+              {onScrollModeChangeWave && (
+                <button
+                  onClick={() => onScrollModeChangeWave(scrollModeWave === 'stationary' ? 'page' : 'stationary')}
+                  className="p-1 rounded-full bg-gray-700 text-gray-400 hover:text-white transition-all"
+                  title={scrollModeWave === 'stationary' ? 'Mode estacionari' : 'Mode pàgina'}
+                >
+                  {scrollModeWave === 'stationary' ? <CursorStationaryIcon className="w-3 h-3" /> : <CursorPageIcon className="w-3 h-3" />}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.5))}
+              className="px-1 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={MIN_ZOOM}
+              max={MAX_ZOOM}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="w-20 accent-blue-500"
+            />
+            <button
+              onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.5))}
+              className="px-1 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+            >
+              +
+            </button>
+            <span className="text-gray-500 text-[10px] font-mono w-12 text-right whitespace-nowrap">
+              {zoom.toFixed(0)}px/s
+            </span>
+          </div>
+        </div>
+
+        {/* RIGHT: Save / Autosave / Export */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          {onToggleAutosave && (
+            <button
+              onClick={onToggleAutosave}
+              className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border whitespace-nowrap ${
+                autosaveEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-gray-800 text-gray-500 border-gray-700'
+              }`}
+              title="Autosave"
+            >
+              AUTO
+            </button>
+          )}
+          {onSave && (
+            <button
+              onClick={onSave}
+              className="p-1 text-blue-300 hover:text-blue-200 transition-colors"
+              title="Guardar (Ctrl+S)"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"/>
+              </svg>
+            </button>
+          )}
+          {onExportSrt && (
+            <button
+              onClick={onExportSrt}
+              className="p-1 text-emerald-400 hover:text-emerald-300 transition-colors"
+              title="Exportar SRT final"
+            >
+              <DownloadIcon className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -787,7 +910,12 @@ export default React.memo(WaveformTimeline, (prev, next) => {
       prev.onSeek === next.onSeek &&
       prev.onSegmentUpdate === next.onSegmentUpdate &&
       prev.onSegmentUpdateEnd === next.onSegmentUpdateEnd &&
-      prev.onSegmentClick === next.onSegmentClick
+      prev.onSegmentClick === next.onSegmentClick &&
+      prev.canUndo === next.canUndo &&
+      prev.canRedo === next.canRedo &&
+      prev.autoScrollWave === next.autoScrollWave &&
+      prev.scrollModeWave === next.scrollModeWave &&
+      prev.autosaveEnabled === next.autosaveEnabled
     );
   }
   return false;

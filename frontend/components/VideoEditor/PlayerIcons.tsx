@@ -34,8 +34,8 @@ export const RewindIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 export const ForwardIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-        <path d="M4 6v12l8.5-6L4 6zm8.5 6l8.5 6V6l-8.5 6z" transform="translate(-1.5)"/>
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" style={{ transform: 'scaleX(-1)' }}>
+        <path d="M11 18V6l-8.5 6 8.5 6zm-8.5-6 8.5 6V6l-8.5 6z" transform="translate(2.5)"/>
     </svg>
 );
 
