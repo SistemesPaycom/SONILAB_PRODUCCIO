@@ -93,10 +93,12 @@ export const VideoEditorToolbar: React.FC<VideoEditorToolbarProps> = (props) => 
             </div>
             
             {/* Controls a la dreta */}
-            <div className="flex items-center gap-4">
-                <Timecode currentTime={props.currentTime} duration={props.duration} onSeek={props.onSeek} />
+            <div className="flex flex-col items-stretch gap-0.5 justify-center">
+                <div className="flex justify-end">
+                    <Timecode currentTime={props.currentTime} duration={props.duration} onSeek={props.onSeek} />
+                </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 justify-end">
                     <ControlButton onClick={() => props.onChangeRate(-0.1)} title="Disminuir velocitat">
                         <MinusIcon className="w-4 h-4" />
                     </ControlButton>

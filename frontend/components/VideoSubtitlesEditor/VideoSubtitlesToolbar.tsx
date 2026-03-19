@@ -183,10 +183,12 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
                 </div>
 
                 {/* RIGHT: Timecode + speed */}
-                <div className="flex items-center gap-3 min-w-0 flex-shrink-0 justify-end">
-                    <Timecode currentTime={props.currentTime} duration={props.duration} onSeek={props.onSeek} />
+                <div className="flex flex-col items-stretch gap-0.5 min-w-0 flex-shrink-0 justify-center">
+                    <div className="flex justify-end">
+                        <Timecode currentTime={props.currentTime} duration={props.duration} onSeek={props.onSeek} />
+                    </div>
 
-                    <div className="flex items-center gap-1 bg-black/30 rounded-lg px-2 py-0.5 border border-white/5">
+                    <div className="flex items-center gap-1 justify-end">
                         <ControlButton onClick={() => props.onChangeRate(-0.1)} title="Disminuir velocitat" className="!p-1"><MinusIcon className="w-3 h-3" /></ControlButton>
                         <span className="text-[11px] font-mono font-bold text-blue-400 w-9 text-center">{props.playbackRate.toFixed(2)}x</span>
                         <ControlButton onClick={() => props.onChangeRate(0.1)} title="Augmentar velocitat" className="!p-1"><PlusIcon className="w-3 h-3" /></ControlButton>
