@@ -180,6 +180,25 @@ async listProjects() {
   streamUrl(docId: string) {
     return `${API_URL}/media/${docId}/stream`;
   },
+  /** Fetch cached waveform peaks from backend. Returns null if unavailable. */
+  async getWaveform(docId: string): Promise<{
+    cached: boolean;
+    waveform: {
+      version: number;
+      peaksPerSecond: number;
+      duration: number;
+      sampleRate: number;
+      peakCount: number;
+      peaks: number[];
+    };
+  } | null> {
+    try {
+      return await request(`/media/${docId}/waveform`);
+    } catch {
+      return null;
+    }
+  },
+
   async downloadMediaAsFile(docId: string, filename: string): Promise<File> {
     const token = getToken();
     if (!token) throw new Error('Not authenticated');

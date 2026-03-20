@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Delete, Get, Param, Post, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Controller, Delete, Get, Param, Post, Res, UploadedFile, UseGuards, UseInterceptors, Logger } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
@@ -11,6 +11,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequestUser } from '../../common/types/request-user';
 import { LibraryService } from '../library/library.service';
+import { MediaCacheService } from './media-cache.service';
 import { createHash } from 'crypto';
 import { NotFoundException } from '@nestjs/common';
 
@@ -59,7 +60,31 @@ async function sha256File(filePath: string): Promise<string> {
 @UseGuards(JwtAuthGuard)
 @Controller('/media')
 export class MediaController {
-  constructor(private readonly config: ConfigService, private readonly library: LibraryService) {}
+  private readonly logger = new Logger(MediaController.name);
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    private readonly config: ConfigService,
+    private readonly library: LibraryService,
+    private readonly mediaCache: MediaCacheService,
+  ) {
+    // Start periodic cleanup check every 30 minutes
+    this.cleanupTimer = setInterval(() => {
+      this.tryNightlyCleanup();
+    }, 30 * 60 * 1000);
+    // Also run once at startup if in window
+    setTimeout(() => this.tryNightlyCleanup(), 5000);
+  }
+
+  private tryNightlyCleanup() {
+    if (this.mediaCache.isInCleanupWindow()) {
+      this.logger.log('Running nightly cache cleanup...');
+      const result = this.mediaCache.cleanOldCaches();
+      if (result.deleted > 0) {
+        this.logger.log(`Nightly cleanup: removed ${result.deleted} old cache files`);
+      }
+    }
+  }
 
   @Post('/upload')
   @UseInterceptors(
@@ -122,6 +147,12 @@ if (!allowedMime.has(mimeType)) {
 if (existing) {
   // borrar el archivo recién subido (duplicado)
   try { fs.unlinkSync(file.path); } catch {}
+
+  // Ensure waveform cache exists for the existing media (async, non-blocking)
+  if (existing.media?.sha256 && existing.media?.path) {
+    this.ensureWaveformCache(existing.media.sha256, existing.media.path, mediaRootAbs);
+  }
+
   return { document: existing, duplicated: true };
 }
 
@@ -138,7 +169,36 @@ if (existing) {
       },
     });
 
+    // Generate waveform cache immediately after import (async, non-blocking).
+    // The response returns to the user right away; waveform generation continues
+    // in background so it's ready when the editor opens.
+    this.ensureWaveformCache(sha256, relPathPosix, mediaRootAbs);
+
     return { document: doc };
+  }
+
+  /**
+   * Fire-and-forget: generate waveform cache if it doesn't exist yet.
+   * Called during upload/import so the cache is ready before the editor opens.
+   */
+  private ensureWaveformCache(sha256: string, mediaRelPath: string, mediaRootAbs: string) {
+    if (this.mediaCache.hasCache(sha256)) {
+      this.logger.log(`Waveform cache already exists for ${sha256.substring(0, 12)}...`);
+      return;
+    }
+
+    const filePath = resolveSafeMediaPath(mediaRootAbs, mediaRelPath);
+    if (!fs.existsSync(filePath)) {
+      this.logger.warn(`Cannot pre-generate waveform: media file not found at ${filePath}`);
+      return;
+    }
+
+    // Run generation in background — don't block the upload response
+    this.mediaCache.generateAndCache(filePath, sha256).then(() => {
+      this.logger.log(`Waveform pre-generated successfully for ${sha256.substring(0, 12)}...`);
+    }).catch((err) => {
+      this.logger.warn(`Waveform pre-generation failed for ${sha256.substring(0, 12)}...: ${err.message}`);
+    });
   }
   @Delete('/delete/:docId')
   async delete(@CurrentUser() user: RequestUser, @Param('docId') docId: string) {
@@ -203,5 +263,52 @@ if (!fs.existsSync(filePath)) {
 
     fs.createReadStream(filePath, { start, end }).pipe(res);
   }
-  
+
+  /**
+   * GET /media/:docId/waveform
+   * Returns cached waveform peaks as JSON.
+   * If no cache exists, generates it on-the-fly using FFmpeg.
+   */
+  @Get('/:docId/waveform')
+  async waveform(@CurrentUser() user: RequestUser, @Param('docId') docId: string) {
+    const doc = await this.library.getDocument(user.userId, docId);
+    if (!doc.media?.path) throw new BadRequestException('Document has no media');
+    if (doc.isDeleted) throw new NotFoundException('Media not found');
+
+    const sha256 = doc.media.sha256;
+    if (!sha256) throw new BadRequestException('Media has no SHA-256 hash');
+
+    // 1. Try to read from cache
+    const cached = this.mediaCache.readCacheAsJSON(sha256);
+    if (cached) {
+      this.logger.log(`Waveform cache HIT for ${docId} (${sha256.substring(0, 12)}...)`);
+      return { cached: true, waveform: cached };
+    }
+
+    // 2. Cache miss → generate via FFmpeg
+    this.logger.log(`Waveform cache MISS for ${docId} (${sha256.substring(0, 12)}...) — generating...`);
+
+    const mediaRoot = process.env.MEDIA_ROOT || './media';
+    const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
+    const filePath = resolveSafeMediaPath(mediaRootAbs, doc.media.path);
+
+    if (!fs.existsSync(filePath)) {
+      throw new BadRequestException('Media file not found on disk');
+    }
+
+    try {
+      await this.mediaCache.generateAndCache(filePath, sha256);
+    } catch (err) {
+      this.logger.error(`Failed to generate waveform for ${docId}: ${err}`);
+      throw new BadRequestException('Failed to generate waveform. FFmpeg may not be available.');
+    }
+
+    const result = this.mediaCache.readCacheAsJSON(sha256);
+    if (!result) {
+      throw new BadRequestException('Waveform generation succeeded but cache read failed');
+    }
+
+    return { cached: false, waveform: result };
+  }
+
 }

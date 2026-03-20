@@ -50,6 +50,7 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   }, []);
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [mediaDocId, setMediaDocId] = useState<string | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -278,6 +279,7 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
       if (file) {
         if (videoSrc) URL.revokeObjectURL(videoSrc);
         setVideoFile(file);
+        setMediaDocId(doc.id);
         setVideoSrc(URL.createObjectURL(file));
         setIsPlaying(false);
         setCurrentTime(0);
@@ -348,7 +350,7 @@ useEffect(() => {
     activeSegment: subsOverlayConfig.show ? activeSegmentForPlayer : null,
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
     onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay, onPause, onTogglePlay, onJumpSegment,
-    videoFile, onSegmentUpdate: handleSegmentUpdate, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
+    videoFile, mediaDocId, onSegmentUpdate: handleSegmentUpdate, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
   };
 
   return (
@@ -448,6 +450,7 @@ useEffect(() => {
       <div className="flex-shrink-0 w-full" style={{ height: '150px' }}>
         <WaveformTimeline
           videoFile={videoFile}
+          mediaDocId={mediaDocId}
           segments={segments}
           currentTime={currentTime}
           duration={duration}

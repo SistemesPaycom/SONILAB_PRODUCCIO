@@ -20,6 +20,7 @@ interface VideoPlaybackAreaProps {
     onTogglePlay: () => void;
     onJumpSegment: (direction: 'prev' | 'next') => void;
     videoFile: File | null;
+    mediaDocId?: string | null;
     onSegmentUpdate?: (id: Id, newStart: number, newEnd: number) => void;
     onSegmentClick?: (id: Id) => void;
 }

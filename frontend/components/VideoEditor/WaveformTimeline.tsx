@@ -18,6 +18,7 @@ const stripHtml = (text: string) => (text ? text.replace(/<[^>]+>/g, '') : '');
 
 interface WaveformTimelineProps {
   videoFile: File | null;
+  mediaDocId?: string | null;
   segments: Segment[];
   duration: number;
   currentTime: number;
@@ -62,6 +63,7 @@ const MIN_SEG_DURATION = 0.1;  // minimum segment duration in seconds
 
 const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   videoFile,
+  mediaDocId,
   segments,
   duration,
   currentTime,
@@ -135,8 +137,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const { extract, peaks, status: waveStatus } = useWaveformExtractor();
 
   useEffect(() => {
-    if (videoFile) extract(videoFile);
-  }, [videoFile, extract]);
+    if (videoFile) extract(videoFile, mediaDocId ?? undefined);
+  }, [videoFile, mediaDocId, extract]);
 
   // ── Viewport resize observer ──
   useEffect(() => {
@@ -903,6 +905,7 @@ export default React.memo(WaveformTimeline, (prev, next) => {
   if (prev.isPlaying && next.isPlaying) {
     return (
       prev.videoFile === next.videoFile &&
+      prev.mediaDocId === next.mediaDocId &&
       prev.segments === next.segments &&
       prev.duration === next.duration &&
       prev.activeId === next.activeId &&
