@@ -77,6 +77,8 @@ export class TranscriptionProcessor {
       const offline = Boolean(s.offline);
       const timingFix = s.timingFix !== false;
       const scriptText = String(s.scriptText || '').trim();
+      const minSpeakers = s.minSpeakers ? Number(s.minSpeakers) : null;
+      const maxSpeakers = s.maxSpeakers ? Number(s.maxSpeakers) : null;
 
       // ─── PURFVIEW REAL EXE CHECK ──────────────────────────────────────────────
       // Si PURFVIEW_XXL_EXE_PATH apunta a un faster-whisper-xxl.exe real i l'engine
@@ -236,6 +238,8 @@ export class TranscriptionProcessor {
             '--input', rawSrtPath,
             '--output', copiedSrtPath,
             '--subtitle-edit-compat',  // no merge agressiu (compat amb SE)
+            '--no-balance',            // Purfview ja fa el seu propi format de línies
+            // --no-fix-casing i --no-periods NO s'afegeixen: volem majúscules i punts
           ];
           console.log(`[PURFVIEW-EXE] Reinjectant SRT per postprocessador: ${postArgs.join(' ')}`);
 
@@ -336,12 +340,24 @@ export class TranscriptionProcessor {
 
         if (hfToken) args.push('--hf_token', hfToken);
 
-        // Script-align: escribir el guion a un archivo temporal y pasarlo al runner
+        // Diarización: número de speakers (mejora detección si se conoce)
+        if (minSpeakers) args.push('--min-speakers', String(minSpeakers));
+        if (maxSpeakers) args.push('--max-speakers', String(maxSpeakers));
+
+        // Guió: escriure a fitxer temporal i passar-lo al runner.
+        // Per a script-align: és obligatori per al forced alignment.
+        // Per a altres engines (faster-whisper, purfview, whisperx): es passa com
+        // a referència opcional per al guion-snap (ancoratge temporal del guió).
         let scriptFilePath: string | null = null;
-        if (engine === 'script-align' && scriptText) {
+        if (scriptText) {
           scriptFilePath = path.join(outDir, '_script_input.txt');
           await fsp.writeFile(scriptFilePath, scriptText, 'utf-8');
           args.push('--script-file', scriptFilePath);
+          if (engine !== 'script-align') {
+            // Per a engines que no fan forced alignment, el guió s'usa per
+            // al guion-snap post-process (si el runner ho suporta).
+            args.push('--guion-snap');
+          }
         }
 
         await this.projects.updateJob(jobId, { progress: 15 } as any);

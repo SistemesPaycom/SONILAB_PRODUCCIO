@@ -43,6 +43,18 @@ export class TranscriptionSettingsDto {
   @IsOptional()
   @IsString()
   scriptText?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  minSpeakers?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  maxSpeakers?: number;
 }
 
 export class CreateProjectDto {

@@ -547,6 +547,9 @@ useEffect(() => {
   }, [takeRanges, onSeek]);
 
 const handleSave = useCallback(() => {
+  // En mode lectura (document bloquejat per un altre usuari), no guardem
+  if (!isEditing) return;
+
   subsHistory.save((data) => {
     const srtContent = serializeSrt(data);
 
@@ -556,14 +559,14 @@ const handleSave = useCallback(() => {
       payload: { documentId: currentDoc.id, lang: '_unassigned', content: srtContent, csvContent: '' },
     });
 
-    // 2) ✅ persistencia backend (lo que te faltaba)
+    // 2) ✅ persistencia backend
     if (useBackend) {
       void api.updateSrt(currentDoc.id, srtContent).catch((e) => {
         console.error('updateSrt failed', e);
       });
     }
   });
-}, [subsHistory, currentDoc.id, dispatch, useBackend]);
+}, [isEditing, subsHistory, currentDoc.id, dispatch, useBackend]);
 
   const handleSplitSegmentAtCursor = useCallback((idParam?: number) => {
     const payload = splitPayloadRef.current;

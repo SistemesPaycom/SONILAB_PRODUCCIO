@@ -123,6 +123,29 @@ async listProjects() {
     return request<any>(`/documents/${id}/srt`, { method: 'PATCH', body: { srtText } });
   },
 
+  // ── Edit lock ──────────────────────────────────────────────────────────
+  async acquireLock(docId: string, userName?: string) {
+    return request<any>(`/documents/${docId}/lock`, { method: 'POST', body: { userName } });
+  },
+  async releaseLock(docId: string) {
+    return request<any>(`/documents/${docId}/lock`, { method: 'DELETE' });
+  },
+  /**
+   * Versió keepalive de releaseLock per usar en beforeunload.
+   * fetch keepalive=true sobreviu al tancament de pàgina (el browser no la cancel·la).
+   */
+  releaseLockBeacon(docId: string) {
+    const token = getToken();
+    fetch(`${API_URL}/documents/${docId}/lock`, {
+      method: 'DELETE',
+      keepalive: true,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).catch(() => {});
+  },
+  async getLockStatus(docId: string) {
+    return request<{ lockedByUserId: string | null; lockedByUserName: string | null; lockedAt: string | null; isExpired: boolean }>(`/documents/${docId}/lock`);
+  },
+
   // Media
  async uploadMedia(file: File, onProgress?: (pct: number) => void) {
   const token = getToken(); // tu helper actual

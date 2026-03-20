@@ -98,6 +98,19 @@ def main():
     p.add_argument("--subtitle-edit-compat", dest="subtitle_edit_compat",
                    action="store_true", default=False,
                    help="Mode compat Subtitle Edit: no merge lines")
+    p.add_argument("--no-balance", dest="no_balance",
+                   action="store_true", default=False,
+                   help=(
+                       "Desactiva balance_lines i split_long_lines. "
+                       "Recomanat per a sortida de Purfview XXL, que ja fa "
+                       "el seu propi format de línies."
+                   ))
+    p.add_argument("--no-fix-casing", dest="no_fix_casing",
+                   action="store_true", default=False,
+                   help="Desactiva fix_casing.")
+    p.add_argument("--no-periods", dest="no_periods",
+                   action="store_true", default=False,
+                   help="Desactiva add_periods.")
     args = p.parse_args()
 
     inp = Path(args.input)
@@ -116,13 +129,17 @@ def main():
     print(f"[srt_postprocess] Input: {len(cues)} cues", flush=True)
 
     do_merge = not args.subtitle_edit_compat
+    do_balance = not args.no_balance
+    do_fix_casing = not args.no_fix_casing
+    do_periods = not args.no_periods
 
     cues = apply_postprocessing(
         cues,
-        do_fix_casing=True,
-        do_add_periods=True,
+        do_fix_casing=do_fix_casing,
+        do_add_periods=do_periods,
         do_merge_lines=do_merge,
-        do_balance_lines=True,
+        do_balance_lines=do_balance,
+        do_split_long_lines=do_balance,   # desactivar junt amb balance
         status_cb=lambda msg: print(msg, flush=True),
     )
 

@@ -18,10 +18,15 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
   const [filter, setFilter] = useState('');
 
   const segments = useMemo(() => {
-    const raw = currentDoc.content || '';
+    // SRT content is stored in contentByLang._unassigned (backend field)
+    const raw =
+      (currentDoc as any).contentByLang?._unassigned ||
+      (currentDoc as any).contentByLang?.raw ||
+      (currentDoc as any).content ||
+      '';
     if (!raw.trim()) return [];
     return parseSrt(raw);
-  }, [currentDoc.content]);
+  }, [(currentDoc as any).contentByLang, (currentDoc as any).content]);
 
   const filtered = useMemo(() => {
     if (!filter.trim()) return segments;

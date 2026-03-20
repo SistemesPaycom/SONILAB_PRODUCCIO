@@ -90,4 +90,28 @@ updateSrt(
     contentByLang: { _unassigned: dto.srtText },
   } as any);
 }
+
+  // ── Edit lock endpoints ─────────────────────────────────────────────────
+
+  @Post('/documents/:id/lock')
+  acquireLock(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { userName?: string },
+  ) {
+    return this.library.acquireLock(id, user.userId, body?.userName || user.userId);
+  }
+
+  @Delete('/documents/:id/lock')
+  releaseLock(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+  ) {
+    return this.library.releaseLock(id, user.userId);
+  }
+
+  @Get('/documents/:id/lock')
+  getLockStatus(@Param('id') id: string) {
+    return this.library.getLockStatus(id);
+  }
 }

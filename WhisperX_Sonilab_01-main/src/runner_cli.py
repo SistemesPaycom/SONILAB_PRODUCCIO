@@ -112,6 +112,47 @@ def main():
         )
     )
 
+    p.add_argument(
+        "--guion-snap",
+        dest="guion_snap",
+        action="store_true",
+        default=False,
+        help=(
+            "Aplica guion_snap.py al SRT final usant el fitxer --script-file com a guió. "
+            "Re-segmenta les fronteres del SRT per coincidir amb els ancoratges temporals "
+            "del guió TXT SONILAB. Actiu per a qualsevol engine quan es passa --script-file."
+        )
+    )
+
+    p.add_argument(
+        "--guion-snap-tolerance",
+        dest="guion_snap_tolerance",
+        type=float,
+        default=2.0,
+        help="Temps màxim (s) per fer snap d'un start de cue a un ancoratge del guió. Default: 2.0"
+    )
+
+    p.add_argument(
+        "--min-speakers",
+        dest="min_speakers",
+        type=int,
+        default=None,
+        help=(
+            "Número mínim d'interlocutors per a la diarització pyannote. "
+            "Si es coneix el nombre exacte, passar min=max=N. Default: auto-detecció."
+        )
+    )
+    p.add_argument(
+        "--max-speakers",
+        dest="max_speakers",
+        type=int,
+        default=None,
+        help=(
+            "Número màxim d'interlocutors per a la diarització pyannote. "
+            "Si es coneix el nombre exacte, passar min=max=N. Default: auto-detecció."
+        )
+    )
+
     args = p.parse_args()
 
     inp = Path(args.input).resolve()
@@ -182,11 +223,61 @@ def main():
         postprocess_add_periods=postprocess_periods,
         postprocess_merge_lines=postprocess_merge,
         postprocess_balance_lines=postprocess_balance,
+        min_speakers=getattr(args, 'min_speakers', None),
+        max_speakers=getattr(args, 'max_speakers', None),
     )
 
     # Vuestro pipeline devuelve tupla de paths:
     # (out_srt, words_txt, words_csv, cues_debug_csv, subs_speakers_csv, speakers_map_path)
     out_srt, words_txt, words_csv, cues_debug_csv, subs_speakers_csv, speakers_map_path = outputs
+
+    # ── GUION SNAP (opcional) ────────────────────────────────────────────────
+    # Si s'ha passat --guion-snap i hi ha un --script-file, apliquem guion_snap.py
+    # per re-segmentar el SRT final usant els ancoratges del guió TXT.
+    # Només s'aplica per a engines que NO fan forced alignment (no script-align):
+    # faster-whisper, purfview-xxl, whisperx.
+    guion_snap = getattr(args, 'guion_snap', False)
+    guion_snap_tolerance = getattr(args, 'guion_snap_tolerance', 2.0)
+    do_guion_snap = (
+        guion_snap
+        and engine != 'script-align'
+        and script_file
+        and out_srt
+        and Path(out_srt).exists()
+    )
+
+    if do_guion_snap:
+        try:
+            from guion_snap import _parse_srt, _load_guion_anchors, _snap_srt_to_guion, _write_srt as _ws
+
+            print(f"[STATUS] Guion-snap: re-segmentant SRT amb ancoratges del guió...", flush=True)
+
+            srt_raw_path = Path(out_srt)
+            srt_snapped_path = srt_raw_path.with_suffix('.snapped.srt')
+
+            srt_text_in = srt_raw_path.read_text(encoding='utf-8')
+            cues_in = _parse_srt(srt_text_in)
+
+            guion_text_for_snap = Path(script_file).read_text(encoding='utf-8')
+            anchors = _load_guion_anchors(guion_text_for_snap)
+
+            if anchors and cues_in:
+                snapped = _snap_srt_to_guion(
+                    cues_in,
+                    anchors,
+                    snap_tolerance=guion_snap_tolerance,
+                    status_cb=status_cb,
+                )
+                srt_snapped_path.write_text(_ws(snapped), encoding='utf-8')
+                # Substituir el SRT final pel snapped
+                import shutil as _shutil
+                _shutil.copy2(str(srt_snapped_path), out_srt)
+                print(f"[STATUS] Guion-snap OK: {len(cues_in)} → {len(snapped)} cues", flush=True)
+            else:
+                print(f"[STATUS] Guion-snap: cap ancoratge detectat, SRT sense canvis", flush=True)
+
+        except Exception as _snap_err:
+            print(f"[WARN] Guion-snap ha fallat ({_snap_err}). SRT original mantingut.", flush=True)
 
     copied = {}
     if args.output_dir:

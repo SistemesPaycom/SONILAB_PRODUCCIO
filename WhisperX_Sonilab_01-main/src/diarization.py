@@ -435,6 +435,95 @@ def write_speakers_map(mapping: Dict[str, str], out_base: str) -> str:
     return path
 
 
+def smooth_word_speakers(
+    word_segments: List[Dict],
+    min_run_words: int = 1,
+    min_run_dur: float = 0.15,
+) -> List[Dict]:
+    """
+    Suaviza asignaciones de speaker a nivel de palabra.
+    Agrupa palabras consecutivas del mismo speaker en "runs".
+    Si un run es demasiado corto (< min_run_words palabras Y < min_run_dur segundos),
+    lo absorbe al run vecino más largo.
+
+    min_run_words=1 preserva interjecciones de una sola palabra (Sí/No/Vale).
+    min_run_words=2 es más agresivo (absorbe palabras sueltas).
+    """
+    if not word_segments:
+        return word_segments
+
+    # Agrupar en runs consecutivos del mismo speaker
+    runs: List[Dict] = []
+    for w in word_segments:
+        spk = w.get("speaker")
+        if runs and runs[-1]["speaker"] == spk:
+            runs[-1]["words"].append(w)
+            runs[-1]["end"] = safe_float(w.get("end"), runs[-1]["end"])
+        else:
+            runs.append({
+                "speaker": spk,
+                "words": [w],
+                "start": safe_float(w.get("start"), 0.0),
+                "end": safe_float(w.get("end"), 0.0),
+            })
+
+    if len(runs) <= 1:
+        return word_segments
+
+    # Absorber runs cortos al vecino más largo
+    changed = True
+    while changed:
+        changed = False
+        new_runs = []
+        i = 0
+        while i < len(runs):
+            r = runs[i]
+            dur = (r["end"] or 0.0) - (r["start"] or 0.0)
+            nwords = len(r["words"])
+
+            if nwords < min_run_words and dur < min_run_dur and len(runs) > 1:
+                # Determinar vecinos
+                prev_run = new_runs[-1] if new_runs else None
+                next_run = runs[i + 1] if i + 1 < len(runs) else None
+
+                if prev_run and next_run:
+                    prev_dur = (prev_run["end"] or 0.0) - (prev_run["start"] or 0.0)
+                    next_dur = (next_run["end"] or 0.0) - (next_run["start"] or 0.0)
+                    absorb_into = prev_run if prev_dur >= next_dur else next_run
+                elif prev_run:
+                    absorb_into = prev_run
+                elif next_run:
+                    absorb_into = next_run
+                else:
+                    new_runs.append(r)
+                    i += 1
+                    continue
+
+                # Re-etiquetar palabras del run corto con el speaker del vecino
+                new_spk = absorb_into["speaker"]
+                for w in r["words"]:
+                    ww = dict(w)
+                    if new_spk is not None:
+                        ww["speaker"] = new_spk
+                    new_runs.append(ww) if False else None  # placeholder
+                    absorb_into["words"].append(ww)
+                absorb_into["start"] = min(absorb_into["start"] or 0.0, r["start"] or 0.0)
+                absorb_into["end"] = max(absorb_into["end"] or 0.0, r["end"] or 0.0)
+                changed = True
+                i += 1
+                continue
+
+            new_runs.append(r)
+            i += 1
+        runs = new_runs
+
+    # Reconstruir lista de palabras
+    out = []
+    for r in runs:
+        out.extend(r["words"])
+    return out
+
+
 def try_run_diarization(
     wav_path: str,
     audio_arr,
@@ -442,12 +531,16 @@ def try_run_diarization(
     hf_token: str,
     offline_mode: bool,
     status_cb,
-    log_path: str
+    log_path: str,
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
 ) -> Optional[List[Dict]]:
     """
     Devuelve segmentos [{start,end,speaker}] o None.
     - Online: normalmente necesitas token (modelos gated).
     - Offline: intentamos aunque token esté vacío SI el modelo ya está cacheado.
+    - min_speakers/max_speakers: constrains de pyannote para mejorar detección.
+      Si se conoce el número exacto de speakers, pasar min=max=N.
     """
     if (not offline_mode) and (not hf_token):
         return None
@@ -457,7 +550,10 @@ def try_run_diarization(
 
         import whisperx  # local import para evitar dependencias en import-time
 
-        status_cb("Diarizando interlocutores (pyannote)...")
+        n_hint = ""
+        if min_speakers is not None or max_speakers is not None:
+            n_hint = f" (min_speakers={min_speakers}, max_speakers={max_speakers})"
+        status_cb(f"Diarizando interlocutores (pyannote){n_hint}...")
 
         DP = getattr(whisperx, "DiarizationPipeline", None)
         if DP is None:
@@ -465,14 +561,21 @@ def try_run_diarization(
 
         diarize_pipeline = DP(use_auth_token=(hf_token or None), device=device)
 
+        # Construir kwargs opcionales para el pipeline
+        diar_kwargs: dict = {}
+        if min_speakers is not None:
+            diar_kwargs["min_speakers"] = int(min_speakers)
+        if max_speakers is not None:
+            diar_kwargs["max_speakers"] = int(max_speakers)
+
         diar_res = None
         try:
             if isinstance(wav_path, str) and os.path.isfile(wav_path):
-                diar_res = diarize_pipeline(wav_path)
+                diar_res = diarize_pipeline(wav_path, **diar_kwargs)
             else:
-                diar_res = diarize_pipeline(audio_arr)
+                diar_res = diarize_pipeline(audio_arr, **diar_kwargs)
         except Exception:
-            diar_res = diarize_pipeline(audio_arr)
+            diar_res = diarize_pipeline(audio_arr, **diar_kwargs)
 
         segs = _extract_diarization_segments(diar_res)
         if not segs:

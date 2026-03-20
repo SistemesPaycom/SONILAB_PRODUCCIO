@@ -401,6 +401,7 @@ def apply_postprocessing(
     do_add_periods: bool = True,
     do_merge_lines: bool = True,
     do_balance_lines: bool = True,
+    do_split_long_lines: bool = True,
     status_cb=None,
 ) -> List[Dict]:
     """
@@ -437,8 +438,9 @@ def apply_postprocessing(
         cues = balance_lines(cues)
         _st("[postprocessor] balance_lines: OK")
 
-    cues = split_long_lines(cues)
-    _st(f"[postprocessor] split_long_lines: {len(cues)} cues")
+    if do_split_long_lines:
+        cues = split_long_lines(cues)
+        _st(f"[postprocessor] split_long_lines: {len(cues)} cues")
 
     if do_fix_casing:
         cues = fix_casing(cues)

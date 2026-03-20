@@ -266,7 +266,7 @@ setUploadProgress(null);
   const ids = Array.from(state.selectedIds).map((v) => String(v));
 
   if (!useBackend) {
-    dispatch({ type: 'DELETE_ITEMS', payload: { itemIds: ids } });
+    dispatch({ type: 'PERMANENTLY_DELETE_ITEMS', payload: { itemIds: ids } });
     return;
   }
 
@@ -275,8 +275,8 @@ setUploadProgress(null);
     const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
 
     await Promise.all([
-      ...folderIds.map((id) => api.deleteFolder(id)),
-      ...docIds.map((id) => api.deleteDocument(id)),
+      ...folderIds.map((id) => api.purgeFolder(id)),
+      ...docIds.map((id) => api.purgeDocument(id)),
     ]);
 
     await reloadTree();
@@ -495,7 +495,7 @@ const itemsToRender = currentItems.filter((item) => {
   </button>
 )}
                             {view === 'library' && (
-                                <button onClick={handleDeleteSelected} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Enviar a la paperera">
+                                <button onClick={() => setShowPermanentDeleteConfirm(true)} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Esborrar permanentment">
                                     <Icons.Trash /><span>{`Esborrar (${selectedIds.size})`}</span>
                                 </button>
                             )}

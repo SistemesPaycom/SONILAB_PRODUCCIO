@@ -160,11 +160,95 @@ const NotificationModal: React.FC<{
 };
 const MainAppContent: React.FC = () => {
   const { state, dispatch, useBackend } = useLibrary();
-  
+  const { me: authMe } = useAuth();
+
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [openMode, setOpenMode] = useState<OpenMode | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [activeLang, setActiveLang] = useState<string>('');
+
+  // ── Edit lock: tracks if the current document is locked by another user ──
+  const [docLockInfo, setDocLockInfo] = useState<{ lockedByUserName: string; lockedByUserId: string } | null>(null);
+  const prevOpenDocIdRef = useRef<string | null>(null);
+  // Which docId WE currently hold a lock on (null = we don't hold any lock)
+  const heldLockRef = useRef<string | null>(null);
+
+  // Check/acquire lock when opening a document for editing. Release on change.
+  useEffect(() => {
+    if (!useBackend) return;
+
+    const prevDocId = prevOpenDocIdRef.current;
+    prevOpenDocIdRef.current = openDocId;
+
+    // Release lock on the previous document when navigating away
+    if (prevDocId && prevDocId !== openDocId && heldLockRef.current === prevDocId) {
+      api.releaseLock(prevDocId).catch(() => {});
+      heldLockRef.current = null;
+    }
+
+    if (!openDocId || !isEditing) {
+      // Also release if we still hold the lock on this same doc (e.g. isEditing→false)
+      if (openDocId && heldLockRef.current === openDocId) {
+        api.releaseLock(openDocId).catch(() => {});
+        heldLockRef.current = null;
+      }
+      setDocLockInfo(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const lockStatus = await api.getLockStatus(openDocId);
+        if (cancelled) return;
+
+        const myId = authMe?.id;
+        if (
+          lockStatus.lockedByUserId &&
+          lockStatus.lockedByUserId !== myId &&
+          !lockStatus.isExpired
+        ) {
+          // Another user has this document open for editing → read-only
+          setDocLockInfo({
+            lockedByUserName: lockStatus.lockedByUserName || lockStatus.lockedByUserId,
+            lockedByUserId: lockStatus.lockedByUserId,
+          });
+          setIsEditing(false);
+          return;
+        }
+
+        // Acquire/refresh the lock
+        await api.acquireLock(openDocId, authMe?.name || authMe?.email || '');
+        heldLockRef.current = openDocId;
+        setDocLockInfo(null);
+      } catch {
+        // Lock check failed — open normally, don't block
+        setDocLockInfo(null);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [openDocId, isEditing, useBackend, authMe]);
+
+  // Heartbeat: refresh lock every 2 minutes to prevent TTL expiry while editing
+  useEffect(() => {
+    if (!useBackend || !openDocId || !isEditing) return;
+    const id = setInterval(() => {
+      api.acquireLock(openDocId, authMe?.name || authMe?.email || '').catch(() => {});
+    }, 2 * 60 * 1000); // every 2 min
+    return () => clearInterval(id);
+  }, [useBackend, openDocId, isEditing, authMe]);
+
+  // Release lock when tab/window is closed (keepalive survives page unload)
+  useEffect(() => {
+    if (!useBackend) return;
+    const handleUnload = () => {
+      if (heldLockRef.current) api.releaseLockBeacon(heldLockRef.current);
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [useBackend]);
+
 const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
   const [isLibraryCollapsed, setIsLibraryCollapsed] = useState(false);
   const [libraryWidth, setLibraryWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_WIDTH, 420);
@@ -513,6 +597,17 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
         </button>
       </aside>
       <section className="flex-1 flex flex-col min-w-0 bg-[#020617]">
+        {/* ── Lock banner: document obert en mode lectura per un altre usuari ── */}
+        {docLockInfo && (
+          <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-amber-900/60 border-b border-amber-600/40 text-amber-200 text-xs font-bold backdrop-blur-sm z-10">
+            <span className="text-amber-400 text-base">🔒</span>
+            <span>
+              Document obert en <strong>mode lectura</strong> — en ús per{' '}
+              <span className="text-amber-300">{docLockInfo.lockedByUserName}</span>
+            </span>
+            <span className="ml-auto text-amber-500/70 text-[10px] uppercase tracking-wider">Només lectura</span>
+          </div>
+        )}
         {renderMainContent()}
       </section>
 
@@ -570,8 +665,12 @@ const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 // ─── Editor en nova pestanya (sense sidebar) ─────────────────────────────────
 const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, docId }) => {
   const { state, dispatch, useBackend } = useLibrary();
+  const { me: authMe } = useAuth();
   const currentDoc = useMemo(() => state.documents.find(d => d.id === docId), [docId, state.documents]);
   const [isEditing, setIsEditing] = useState(true);
+  const [docLockInfo, setDocLockInfo] = useState<{ lockedByUserName: string; lockedByUserId: string } | null>(null);
+  // Tracks whether THIS tab currently holds the lock (to release cleanly)
+  const lockHeldRef = useRef(false);
   const [activeLang, setActiveLang] = useState('');
   const [layout, setLayout] = useState<Layout>('cols');
   const [editorView, setEditorView] = useState<'script' | 'csv'>('script');
@@ -613,6 +712,66 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
     })();
     return () => { cancelled = true; };
   }, [useBackend, mode, docId, state.documents, dispatch]);
+
+  // ── Edit lock ──────────────────────────────────────────────────────────────
+  // Check/acquire lock when tab opens. Release on HOME navigation or tab close.
+  useEffect(() => {
+    if (!useBackend || !docId) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const lockStatus = await api.getLockStatus(docId);
+        if (cancelled) return;
+
+        const myId = authMe?.id;
+        if (
+          lockStatus.lockedByUserId &&
+          lockStatus.lockedByUserId !== myId &&
+          !lockStatus.isExpired
+        ) {
+          // Another user has this document — force read-only
+          setDocLockInfo({
+            lockedByUserName: lockStatus.lockedByUserName || lockStatus.lockedByUserId,
+            lockedByUserId: lockStatus.lockedByUserId,
+          });
+          setIsEditing(false);
+          lockHeldRef.current = false;
+          return;
+        }
+
+        // Acquire/refresh the lock
+        await api.acquireLock(docId, authMe?.name || authMe?.email || '');
+        lockHeldRef.current = true;
+        setDocLockInfo(null);
+      } catch {
+        // Lock check failed — open normally, don't block
+        lockHeldRef.current = false;
+        setDocLockInfo(null);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [docId, useBackend, authMe]);
+
+  // Heartbeat: refresh lock every 2 minutes to prevent TTL expiry
+  useEffect(() => {
+    if (!useBackend || !docId || !isEditing) return;
+    const id = setInterval(() => {
+      api.acquireLock(docId, authMe?.name || authMe?.email || '').catch(() => {});
+    }, 2 * 60 * 1000); // every 2 min
+    return () => clearInterval(id);
+  }, [useBackend, docId, isEditing, authMe]);
+
+  // Release lock on tab/window close (keepalive survives page unload)
+  useEffect(() => {
+    if (!useBackend || !docId) return;
+    const handleUnload = () => {
+      if (lockHeldRef.current) api.releaseLockBeacon(docId);
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [useBackend, docId]);
 
   const docContent = useMemo(() => currentDoc?.contentByLang[effectiveLang] || '', [currentDoc, effectiveLang]);
   const history = useDocumentHistory(docId || 'temp', docContent);
@@ -685,7 +844,14 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
     onTranslate: handleTranslate, col1Width: 200, editorStyles
   };
 
-  const handleGoHome = () => { window.location.hash = '#/home'; };
+  const handleGoHome = () => {
+    // Release lock before navigating — hash change does NOT trigger beforeunload
+    if (useBackend && lockHeldRef.current) {
+      api.releaseLock(docId).catch(() => {});
+      lockHeldRef.current = false;
+    }
+    window.location.hash = '#/home';
+  };
 
   const renderEditor = () => {
     if (!currentDoc) {
@@ -744,6 +910,20 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
           </span>
         )}
       </header>
+
+      {/* Lock banner: read-only mode when document is in use by another user */}
+      {docLockInfo && (
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-amber-900/60 border-b border-amber-600/40 text-amber-200 text-xs font-semibold">
+          <span>🔒</span>
+          <span>
+            Document obert en <strong>mode lectura</strong> — en ús per{' '}
+            <span className="text-amber-100 font-bold">{docLockInfo.lockedByUserName}</span>
+          </span>
+          <span className="ml-auto px-2 py-0.5 bg-amber-700/60 rounded text-amber-300 font-black uppercase text-[10px] tracking-wider">
+            Només lectura
+          </span>
+        </div>
+      )}
 
       {/* Contingut de l'editor */}
       <div className="flex-1 min-h-0 flex flex-col">

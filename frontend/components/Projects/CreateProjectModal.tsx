@@ -55,6 +55,7 @@ export const CreateProjectModal: React.FC<{
   const [device, setDevice] = useState<'cpu' | 'cuda'>('cpu');
   const [batchSize, setBatchSize] = useState(8);
   const [diarization, setDiarization] = useState(false);
+  const [numSpeakers, setNumSpeakers] = useState<number | 'auto'>('auto');
   const [offline, setOffline] = useState(false);
   const [timingFix, setTimingFix] = useState(true);
 
@@ -78,8 +79,17 @@ export const CreateProjectModal: React.FC<{
   const [jobProgress, setJobProgress] = useState<number>(0);
   const [err, setErr] = useState<string | null>(null);
 
+  // Quan el perfil canvia, ajusta l'idioma per defecte automàticament
+  useEffect(() => {
+    const p = profile.toLowerCase();
+    if (p === 've') setLanguage('es');
+    else if (p === 'vcat') setLanguage('ca');
+  }, [profile]);
+
   useEffect(() => {
     if (!open) return;
+    // Reset busy + progress cada cop que s'obre el modal (permet crear nous projectes)
+    setBusy(false);
     setErr(null);
     setJobProgress(0);
 
@@ -91,13 +101,18 @@ export const CreateProjectModal: React.FC<{
         const d = opt?.defaults || {};
         setModel(d.model || 'large-v3');
         setEngine(d.engine || 'faster-whisper');
-        setProfile(d.profile || 'VE');
-        setLanguage(d.language || 'ca');
+        const defaultProfile = d.profile || 'VE';
+        setProfile(defaultProfile);
+        // Idioma per defecte segons perfil del backend
+        const defaultLang = defaultProfile.toLowerCase() === 've' ? 'es'
+          : defaultProfile.toLowerCase() === 'vcat' ? 'ca'
+          : (d.language || 'ca');
+        setLanguage(defaultLang);
         setDevice((d.device || 'cpu') as any);
         setBatchSize(Number(d.batchSize || 8));
         setDiarization(!!d.diarization);
-        setOffline(!!d.offline);
         setTimingFix(d.timingFix !== false);
+        // offline sempre desactivat (deshabilitada temporalment)
       } catch (e: any) {
         // no bloquea el modal si falla options
         console.warn(e);
@@ -118,6 +133,7 @@ export const CreateProjectModal: React.FC<{
     offline,
     timingFix,
     ...(engine === 'script-align' && scriptText.trim() ? { scriptText: scriptText.trim() } : {}),
+    ...(diarization && numSpeakers !== 'auto' ? { minSpeakers: numSpeakers, maxSpeakers: numSpeakers } : {}),
   };
 
   const triggerAutoSyncMedia = (mediaDocId: string) => {
@@ -182,12 +198,13 @@ export const CreateProjectModal: React.FC<{
           mediaDocumentId: mediaId,
           settings,
         });
-        await reloadTree();
-        onClose()
+
         const jobId = res?.job?.id;
         const srtDocId = res?.srtDocument?.id;
         const mediaDocId = res?.project?.mediaDocumentId || mediaId;
         if (!jobId || !srtDocId) throw new Error('Respuesta inválida al crear proyecto');
+
+        // Enregistra el job a la cua (el polling el gestiona TasksIAPanel + poller de App.tsx)
         dispatch({
           type: 'ADD_TRANSCRIPTION_TASK',
           payload: {
@@ -203,49 +220,24 @@ export const CreateProjectModal: React.FC<{
           },
         });
 
-        // polling
-        for (let i = 0; i < 600; i++) { // hasta ~10 min
-          const j = await api.getJob(jobId);
-          const progress = Number(j.progress || 0);
-          setJobProgress(progress);
-          dispatch({
-            type: 'UPDATE_TRANSCRIPTION_TASK',
-            payload: {
-              id: jobId,
-              patch: {
-                status: j.status,
-                progress,
-                error: j.error || null,
-              },
-            },
-          });
-
-          if (j.status === 'done') break;
-          if (j.status === 'error') throw new Error(j.error || 'Job error');
-          await sleep(1000);
-        }
-
-        // Si hi ha guió, l'associem al projecte i obrim en editor complet
+        // Si hi ha guió, l'associem al projecte en background (no bloqueja)
         if (guionFile) {
-          await uploadGuionToProject(res.project.id).catch((e) => {
+          uploadGuionToProject(res.project.id).catch((e) => {
             console.warn('Guion upload failed (non-fatal):', e);
           });
         }
 
         await reloadTree();
 
+        // Tancar el modal immediatament — l'usuari pot crear el projecte següent sense esperar
         onClose();
-
-        // Navegar a l'editor complet si hi ha guió associat
-        if (guionFile && srtDocId) {
-          onOpenDocument(srtDocId, 'editor-video-subs' as any, true);
-        }
 
       } catch (e: any) {
         setErr(e?.message || 'Error creando proyecto');
-      } finally {
         setBusy(false);
       }
+      // Nota: setBusy(false) NO es crida aquí en cas d'èxit — el modal es tanca i es reseteja
+      // automàticament quan es torni a obrir gràcies al useEffect([open]).
     })();
   };
 
@@ -517,7 +509,7 @@ export const CreateProjectModal: React.FC<{
                   <div className="text-xs text-gray-400 mb-1">Modelo</div>
                   <select className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
                     value={model} onChange={(e) => setModel(e.target.value)}>
-                    {(options?.models || ['tiny','base','small','medium','large-v2','large-v3','large-v3-turbo']).map((m: string) => (
+                    {[...new Set<string>(options?.models || ['tiny','base','small','medium','large-v2','large-v3','large-v3-turbo'])].map((m: string) => (
                       <option key={m} value={m}>{MODEL_LABELS[m] ?? m}</option>
                     ))}
                   </select>
@@ -569,13 +561,37 @@ export const CreateProjectModal: React.FC<{
             {engine !== 'script-align' && (
               <>
                 <label className="flex items-center gap-2 text-sm text-gray-200">
-                  <input type="checkbox" checked={diarization} onChange={(e) => setDiarization(e.target.checked)} />
-                  Diarización
+                  <input type="checkbox" checked={diarization} onChange={(e) => {
+                    setDiarization(e.target.checked);
+                    if (!e.target.checked) setNumSpeakers('auto');
+                  }} />
+                  Diarización (identificar interlocutors)
                 </label>
 
-                <label className="flex items-center gap-2 text-sm text-gray-200">
-                  <input type="checkbox" checked={offline} onChange={(e) => setOffline(e.target.checked)} />
-                  Offline
+                {diarization && (
+                  <div className="flex items-center gap-3 ml-5 text-sm text-gray-300">
+                    <span className="text-gray-400">Nº interlocutors:</span>
+                    <select
+                      value={numSpeakers}
+                      onChange={(e) => setNumSpeakers(e.target.value === 'auto' ? 'auto' : Number(e.target.value))}
+                      className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-gray-200 text-sm"
+                    >
+                      <option value="auto">Auto (detecció automàtica)</option>
+                      {[2, 3, 4, 5, 6, 7, 8].map(n => (
+                        <option key={n} value={n}>{n} interlocutors</option>
+                      ))}
+                    </select>
+                    {numSpeakers !== 'auto' && (
+                      <span className="text-xs text-amber-400">
+                        Recomanat si saps quants personatges parlen
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <label className="flex items-center gap-2 text-sm text-gray-500 cursor-not-allowed opacity-50" title="Opció desactivada temporalment">
+                  <input type="checkbox" checked={false} disabled />
+                  Offline (desactivat)
                 </label>
               </>
             )}

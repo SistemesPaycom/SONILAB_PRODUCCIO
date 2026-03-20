@@ -1,0 +1,211 @@
+==============================================================================
+CLAUDE LOG — PREVIEW SRT / CREATE PROJECT / LOCK READ-ONLY
+Data: 2026-03-19
+==============================================================================
+
+OBJECTIU DEL CANVI
+------------------
+1. Corregir la preview de fitxers SRT (mostrava "fitxer buit" incorrectament)
+2. Permetre crear diversos projectes en cua sense bloqueig artificial
+3. Netejar CreateProjectModal: deduplicar models, idioma per perfil, deshabilitar offline
+4. Implementar sistema de bloqueig (lock) per evitar edicions simultànies entre usuaris
+5. Workspace compartit: tots els usuaris veuen el mateix contingut
+
+==============================================================================
+FASE 1 — FIX PREVIEW SRT
+==============================================================================
+
+CAUSA DEL BUG
+  SrtPreviewView.tsx llegia `currentDoc.content` però el tipus Document
+  no té el camp `content`. El backend emmagatzema el text SRT a:
+    contentByLang._unassigned  (camp real de MongoDB)
+  El frontend tenia `contentByLang: Record<string,string>` al tipus Document,
+  però SrtPreviewView buscava `content` (camp inexistent → sempre '') → "fitxer buit".
+
+FITXER MODIFICAT
+  frontend/components/VideoSubtitlesEditor/SrtPreviewView.tsx
+
+CANVI
+  const raw = currentDoc.content || '';
+  →
+  const raw =
+    currentDoc.contentByLang?._unassigned ||
+    currentDoc.contentByLang?.raw ||
+    (currentDoc as any).content ||
+    '';
+
+  La dependència del useMemo també s'ha actualitzat per llegir contentByLang.
+
+==============================================================================
+FASE 2 — CREATEPROJECTMODAL
+==============================================================================
+
+FITXER MODIFICAT
+  frontend/components/Projects/CreateProjectModal.tsx
+
+A) ELIMINACIÓ DEL BLOQUEIG ARTIFICIAL (COLA DE PROJECTES)
+  El problema: `createByTranscribe` feia `setBusy(true)` i llavors entrava
+  en un bucle de polling (fins 10 min). El modal retornava null si `!open`,
+  però l'estat `busy` es mantenia al component. En reobrir el modal, el
+  botó quedava deshabilitat per `disabled={busy}`.
+
+  Solució:
+  - Afegit `setBusy(false)` al useEffect([open]) → es reseteja cada cop que
+    el modal s'obre de nou.
+  - Eliminat el polling del modal (loop `for (let i = 0; i < 600...)`).
+    El polling el gestionen TasksIAPanel (cada 3s) i el poller de App.tsx (cada 10s).
+  - El modal es tanca immediatament després de crear el projecte → l'usuari
+    pot crear el projecte següent de seguida.
+  - En cas d'error, `setBusy(false)` s'executa al catch.
+
+B) MODELS DUPLICATS
+  [...new Set<string>(options?.models || [...])]
+  El Set elimina duplicats que pugui retornar el backend.
+
+C) IDIOMA PER DEFECTE SEGONS PERFIL
+  Afegit useEffect([profile]):
+    - perfil 've'   → idioma 'es'
+    - perfil 'vcat' → idioma 'ca'
+  També s'aplica als defaults carregats del backend en obrir el modal.
+
+D) OFFLINE DESHABILITAT
+  El checkbox offline s'ha convertit en:
+  <input type="checkbox" checked={false} disabled />
+  Visible però no operatiu. Etiqueta: "Offline (desactivat)".
+  La variable `offline` sempre és false i no es pot canviar des de la UI.
+
+==============================================================================
+FASE 3 — WORKSPACE COMPARTIT + LOCK SISTEMA
+==============================================================================
+
+FITXERS MODIFICATS
+  Backend:
+    backend_nest_mvp/src/modules/library/schemas/document.schema.ts
+    backend_nest_mvp/src/modules/library/library.service.ts
+    backend_nest_mvp/src/modules/library/library.controller.ts
+  Frontend:
+    frontend/services/api.ts
+    frontend/App.tsx
+
+A) WORKSPACE COMPARTIT (eliminació de filtres ownerId en lectures)
+
+  Abans: getTree, getDocument, updateDocument, listMedia filtraven per ownerId
+  → cada usuari veia NOMÉS els seus propis documents.
+
+  Ara: les operacions de lectura i update NO filtren per ownerId:
+    - getTree: troba tots els documents i carpetes (isDeleted: false)
+    - getDocument: cerca per _id sense ownerId
+    - updateDocument: actualitza per _id sense ownerId
+    - listMedia: llista tota la media compartida
+  El camp ownerId es conserva als documents per auditoria/referència.
+  Les operacions de CREATE segueixen associant el document al creador.
+
+B) SCHEMA DEL LOCK
+
+  Afegits tres camps a Document:
+    lockedByUserId:   string | null  (qui té el document obert)
+    lockedByUserName: string | null  (nom/email per a la UI)
+    lockedAt:         Date | null    (quan s'ha fet el lock)
+
+  TTL del lock: 30 minuts. Si han passat 30 min des de lockedAt sense
+  heartbeat, el lock es considera expirat i qualsevol pot reemplaçar-lo.
+
+C) ENDPOINTS DE LOCK
+
+  POST   /documents/:id/lock   → acquireLock(docId, userId, userName)
+  DELETE /documents/:id/lock   → releaseLock(docId, userId)
+  GET    /documents/:id/lock   → getLockStatus(docId)
+
+  Lògica de acquireLock:
+  - Si hi ha lock d'un ALTRE usuari i NO ha expirat → ForbiddenException 403
+  - Si no hi ha lock, o el lock és meu, o el lock ha expirat → adquireix/refresca
+
+  Lògica de releaseLock:
+  - Només el propietari del lock pot alliberar-lo
+
+D) INTEGRACIÓ FRONTEND
+
+  api.ts: afegits acquireLock(), releaseLock(), getLockStatus()
+
+  App.tsx (MainAppContent):
+  - useEffect([openDocId, isEditing]):
+    * Si canvia el document → allibera el lock del document anterior
+    * Si obre per editar → comprova lock status:
+      - Si bloquejat per un altre usuari (lock vàlid) → isEditing=false + docLockInfo
+      - Si lliure → acquireLock() i obre en mode edició
+  - Heartbeat: refresca el lock cada 10 min mentre s'edita (evita expiració TTL)
+  - beforeunload: allibera lock en tancar la finestra/pestanya
+
+E) UI DEL LOCK
+
+  Banner ambre a la part superior de la secció principal quan docLockInfo != null:
+  "Document obert en mode lectura — en ús per [nom_usuari]"
+  "Només lectura" (tag a la dreta)
+
+==============================================================================
+LIMITACIONS ACTUALS
+==============================================================================
+
+1. El lock no és perfecte (best-effort): si un usuari tanca el navegador
+   bruscament sense unload, el lock pot persistir fins a 30 minuts.
+   → Solució futura: heartbeat més freqüent, o endpoint d'admin per alliberar.
+
+2. El workspace compartit ara és total: tots els usuaris veuen i poden
+   modificar tots els documents. No hi ha permisos per carpeta/projecte.
+   → Per a una solució més granular caldria un sistema de permisos.
+
+3. Els locks no generen WebSocket events: l'altre usuari veu el lock
+   quan intenta obrir el document (no en temps real).
+   → Per a lock en temps real caldria WebSocket o SSE.
+
+4. El lock del guió (script editor / lector) no s'aplica automaticament
+   per als modes 'editor', 'editor-video', 'editor-ssrtlsf' (s'aplica igualment
+   via el mateix useEffect, però la UI d'aquests editors no té un banner visible).
+
+5. La deduplicació de models depèn dels models que retorni el backend;
+   si el backend retorna models duplicats, el Set() ho corregeix al frontend,
+   però el problema real és al backend (transcriptionOptions endpoint).
+
+==============================================================================
+PROVES MANUALS RECOMANADES
+==============================================================================
+
+PREVIEW SRT
+  1. Obre la libreria i fes click en un fitxer .srt que tingui contingut.
+  2. Hauria d'obrir-se SrtPreviewView amb la llista de subtítols (no "fitxer buit").
+  3. Verifica que el nombre de subtítols és correcte.
+  4. Prova el filtre de text.
+
+CREATE PROJECT MODAL — COLA
+  1. Obre CreateProjectModal, crea el projecte 1 (tria vídeo i nom).
+  2. El modal s'ha de tancar immediatament després de crear.
+  3. Obre de nou el modal → el botó "Transcribir" ha d'estar actiu (no disabled).
+  4. Crea el projecte 2 sense esperar que acabi el projecte 1.
+  5. A TasksIAPanel ("Tasques IA") hauries de veure els dos projectes en cua.
+
+CREATE PROJECT MODAL — IDIOMA PER PERFIL
+  1. Selecciona perfil "VE" → l'idioma ha de canviar a "es".
+  2. Selecciona perfil "VCAT" → l'idioma ha de canviar a "ca".
+
+CREATE PROJECT MODAL — OFFLINE
+  1. El checkbox "Offline (desactivat)" hauria d'estar visible però inhabilitat.
+  2. No es pot marcar.
+
+CREATE PROJECT MODAL — MODELS
+  1. El desplegable de models no hauria de tenir cap opció repetida.
+
+LOCK / WORKSPACE COMPARTIT
+  1. Amb 2 comptes d'usuari, login amb l'usuari A.
+  2. Obre un document .srt en mode editor (isEditing=true).
+  3. Login amb l'usuari B en una altra finestra/navegador.
+  4. Intenta obrir el mateix document en mode editor.
+  5. L'usuari B hauria de veure el banner ambre "en ús per [usuari A]"
+     i el document en mode lectura.
+  6. Tanca el document a l'usuari A.
+  7. A l'usuari B, tanca i reobre el document → ara hauria de poder editar.
+
+WORKSPACE COMPARTIT
+  1. Crea un projecte amb l'usuari A.
+  2. Login amb l'usuari B → hauria de veure el projecte de l'usuari A a la libreria.
+
+==============================================================================

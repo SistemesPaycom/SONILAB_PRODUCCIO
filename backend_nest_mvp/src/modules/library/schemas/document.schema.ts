@@ -46,6 +46,17 @@ sourceLang: string | null;
   @Prop({ default: false })
   isLocked: boolean;
 
+  // ── Edit lock: prevents concurrent editing by multiple users ──────────
+  // Set when a user opens the document for editing. Expires after 30 min.
+  @Prop({ type: String, default: null })
+  lockedByUserId: string | null;
+
+  @Prop({ type: String, default: null })
+  lockedByUserName: string | null;
+
+  @Prop({ type: Date, default: null })
+  lockedAt: Date | null;
+
   @Prop({ default: false, index: true })
   isDeleted: boolean;
 

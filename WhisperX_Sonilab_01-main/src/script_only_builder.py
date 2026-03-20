@@ -91,15 +91,22 @@ class _TmpSeg:
 # Helpers de text
 # ---------------------------------------------------------------------------
 def _sanitize_text(text: str) -> str:
-    """Neteja: treu time-markers, parèntesis amb lletres i parèntesis solts."""
+    """Neteja: treu time-markers, parèntesis amb lletres i parèntesis solts.
+    NOTE: El "/" NO s'elimina aquí — es gestiona com a punt de divisió
+    a _split_into_blocks ABANS de cridar a _sanitize_text.
+    """
     if not text:
         return ""
 
     text = text.replace("…", "...")
-    text = SLASH_RE.sub(" ", text)
+    # SLASH_RE: NO substituïm "/" per espai. El "/" és un indicador de tall
+    # gestionat a _split_into_blocks. Aquí el deixem passar.
     text = TIME_MARK_RE.sub(" ", text)
     text = PAREN_ALPHA_RE.sub(" ", text)
     text = STRAY_PAREN_CHARS_RE.sub(" ", text)
+    # Eliminar qualsevol "/" residual que no s'hagi processat com a punt de tall
+    # (e.g., si arriba directament a _sanitize_text sense passar per _split_into_blocks)
+    text = SLASH_RE.sub(" ", text)
     text = WS_RE.sub(" ", text).strip()
     text = re.sub(r"\.{2,}", "...", text).strip()
 
@@ -186,6 +193,18 @@ def _split_into_blocks(text: str, cfg: ScriptOnlyConfig) -> List[str]:
     text = text.strip()
     if not text:
         return []
+
+    # "/" en el guió significa "talla aquí" (diàleg llarg que necessita divisió).
+    # Es tracta PRIMER, abans del particionat per frases.
+    # Cada part del "/" es processa de forma independent i recursiva.
+    if SLASH_RE.search(text):
+        slash_parts = [p.strip() for p in SLASH_RE.split(text) if p.strip()]
+        if len(slash_parts) > 1:
+            result: List[str] = []
+            for sp in slash_parts:
+                # Cridem recursivament per gestionar frases dins de cada part
+                result.extend(_split_into_blocks(sp, cfg))
+            return result
 
     sent = re.split(r"(?<=[\.\?\!])\s+", text)
     sent = [s.strip() for s in sent if s.strip()]

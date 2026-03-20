@@ -194,6 +194,9 @@ def pipeline_generate(
     postprocess_add_periods: bool = True,
     postprocess_merge_lines: bool = True,
     postprocess_balance_lines: bool = True,
+    # Diarización: número de speakers (None = auto-detección pyannote)
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
 ):
     offline_mode = bool(offline_mode)
 
@@ -415,7 +418,9 @@ def pipeline_generate(
                 hf_token=(hf_token or "").strip(),
                 offline_mode=offline_mode,
                 status_cb=_status,
-                log_path=diar_log_path
+                log_path=diar_log_path,
+                min_speakers=min_speakers,
+                max_speakers=max_speakers,
             )
 
         if diar_segs:
@@ -438,7 +443,8 @@ def pipeline_generate(
             word_segments_raw = assign_speakers_to_words(word_segments_raw, diar_segs)
 
             # opcional (si lo tienes implementado)
-            word_segments_raw = smooth_word_speakers(word_segments_raw, min_run_words=2, min_run_dur=0.25)
+            # min_run_words=1: preserva interjecciones de 1 palabra (Sí/No/Vale/Entès)
+            word_segments_raw = smooth_word_speakers(word_segments_raw, min_run_words=1, min_run_dur=0.12)
 
         else:
             if rules.enable_diarization:

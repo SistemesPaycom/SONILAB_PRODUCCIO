@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Folder, FolderDocument } from './schemas/folder.schema';
@@ -11,10 +11,12 @@ export class LibraryService {
     @InjectModel(Document.name) private readonly docModel: Model<DocumentDocument>,
   ) {}
 
-  async getTree(ownerId: string) {
+  async getTree(_ownerId: string) {
+  // Workspace compartit: tots els usuaris autenticats veuen el mateix contingut.
+  // El _ownerId es rep per compatibilitat però no s'usa com a filtre.
   const [folders, documents] = await Promise.all([
-    this.folderModel.find({ ownerId }).lean(),
-    this.docModel.find({ ownerId }).lean(),
+    this.folderModel.find({ isDeleted: { $ne: true } }).lean(),
+    this.docModel.find({ isDeleted: { $ne: true } }).lean(),
   ]);
 
   return {
@@ -189,22 +191,101 @@ async folderNameExists(ownerId: string, name: string, parentId: string | null) {
     return { ...doc.toObject(), id: doc._id.toString() };
   }
 
-  async getDocument(ownerId: string, id: string) {
-    const doc = await this.docModel.findOne({ _id: id, ownerId }).lean();
+  async getDocument(_ownerId: string, id: string) {
+    // Workspace compartit: qualsevol usuari pot llegir qualsevol document.
+    const doc = await this.docModel.findOne({ _id: id }).lean();
     if (!doc) throw new NotFoundException('Document not found');
     return { ...doc, id: doc._id.toString() };
   }
 
-  async updateDocument(ownerId: string, id: string, patch: Partial<Document>) {
+  // ── Lock management ───────────────────────────────────────────────────────
+  private static readonly LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes (heartbeat cada 2 min)
+
+  async acquireLock(docId: string, userId: string, userName: string): Promise<any> {
+    const doc = await this.docModel.findOne({ _id: docId }).lean();
+    if (!doc) throw new NotFoundException('Document not found');
+
+    const now = new Date();
+    const lockedAt: Date | null = (doc as any).lockedAt;
+    const lockedByUserId: string | null = (doc as any).lockedByUserId;
+
+    // If locked by another user and lock is still valid → 423 Locked
+    if (
+      lockedByUserId &&
+      lockedByUserId !== userId &&
+      lockedAt &&
+      now.getTime() - lockedAt.getTime() < LibraryService.LOCK_TTL_MS
+    ) {
+      throw new ForbiddenException({
+        message: 'Document locked',
+        lockedByUserId,
+        lockedByUserName: (doc as any).lockedByUserName,
+        lockedAt,
+      });
+    }
+
+    // Acquire / refresh lock
+    const updated = await this.docModel
+      .findByIdAndUpdate(
+        docId,
+        { $set: { lockedByUserId: userId, lockedByUserName: userName, lockedAt: now } },
+        { new: true },
+      )
+      .lean();
+
+    return { ...updated, id: (updated as any)._id.toString() };
+  }
+
+  async releaseLock(docId: string, userId: string): Promise<any> {
+    const doc = await this.docModel.findOne({ _id: docId }).lean();
+    if (!doc) throw new NotFoundException('Document not found');
+
+    const lockedByUserId: string | null = (doc as any).lockedByUserId;
+    // Only the lock owner can release (or if already unlocked)
+    if (lockedByUserId && lockedByUserId !== userId) {
+      throw new ForbiddenException('Only the lock owner can release this lock');
+    }
+
+    const updated = await this.docModel
+      .findByIdAndUpdate(
+        docId,
+        { $set: { lockedByUserId: null, lockedByUserName: null, lockedAt: null } },
+        { new: true },
+      )
+      .lean();
+
+    return { ...updated, id: (updated as any)._id.toString() };
+  }
+
+  async getLockStatus(docId: string): Promise<{ lockedByUserId: string | null; lockedByUserName: string | null; lockedAt: Date | null; isExpired: boolean }> {
+    const doc = await this.docModel.findOne({ _id: docId }, { lockedByUserId: 1, lockedByUserName: 1, lockedAt: 1 }).lean();
+    if (!doc) throw new NotFoundException('Document not found');
+
+    const lockedAt: Date | null = (doc as any).lockedAt;
+    const lockedByUserId: string | null = (doc as any).lockedByUserId;
+    const now = new Date();
+    const isExpired = !!(lockedAt && now.getTime() - lockedAt.getTime() >= LibraryService.LOCK_TTL_MS);
+
+    return {
+      lockedByUserId: isExpired ? null : lockedByUserId,
+      lockedByUserName: isExpired ? null : (doc as any).lockedByUserName,
+      lockedAt: isExpired ? null : lockedAt,
+      isExpired,
+    };
+  }
+
+  async updateDocument(_ownerId: string, id: string, patch: Partial<Document>) {
+    // Workspace compartit: qualsevol usuari autenticat pot modificar documents.
     const doc = await this.docModel
-      .findOneAndUpdate({ _id: id, ownerId }, patch, { new: true })
+      .findOneAndUpdate({ _id: id }, patch, { new: true })
       .lean();
     if (!doc) throw new NotFoundException('Document not found');
     return { ...doc, id: doc._id.toString() };
   }
 
-  async listMedia(ownerId: string, sourceTypes?: string[]) {
-    const filter: any = { ownerId, isDeleted: false, media: { $ne: null } };
+  async listMedia(_ownerId: string, sourceTypes?: string[]) {
+    // Workspace compartit: mostra media de tots els usuaris
+    const filter: any = { isDeleted: false, media: { $ne: null } };
     if (sourceTypes?.length) filter.sourceType = { $in: sourceTypes };
     const docs = await this.docModel.find(filter).sort({ createdAt: -1 }).lean();
     return docs.map((d) => ({ ...d, id: d._id.toString() }));
