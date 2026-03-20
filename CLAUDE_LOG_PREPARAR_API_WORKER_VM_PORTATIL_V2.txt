@@ -1,0 +1,238 @@
+================================================================================
+CLAUDE LOG — PREPARAR CODI PER DESPLEGAMENT DISTRIBUÏT VM + WORKER
+Versió: V2 (inclou mode local all-in-one conservat)
+Data: 2026-03-20
+================================================================================
+
+1. OBJECTIU
+-----------
+Preparar el codi de SONILAB_PRODUCCIO per suportar dues formes d'execució:
+
+  MODO A — DESENVOLUPAMENT LOCAL ALL-IN-ONE (conservat, sense canvis per al dev)
+    - frontend + backend + worker + Whisper/Purfview + Ollama tot a la mateixa màquina
+    - comportament per defecte si no es defineix WORKER_ENABLED ni API_ENABLED
+
+  MODO B — DESPLEGAMENT DISTRIBUÏT (nou, afegit)
+    - VM Ubuntu: API + frontend + MongoDB + Redis (WORKER_ENABLED=false)
+    - Portàtil worker: processa jobs IA (API_ENABLED=false, WORKER_ENABLED=true)
+    - Ambdós comparteixen storage NAS via STORAGE_ROOT
+
+================================================================================
+2. FITXERS TOCATS
+-----------------
+
+  MODIFICATS:
+  - backend_nest_mvp/src/modules/projects/projects.module.ts
+  - backend_nest_mvp/src/main.ts
+  - backend_nest_mvp/src/modules/projects/transcription.processor.ts
+  - backend_nest_mvp/src/modules/projects/projects.service.ts
+  - backend_nest_mvp/src/modules/media/media.controller.ts
+  - WhisperX_Sonilab_01-main/src/transcript_corrector.py
+  - backend_nest_mvp/.env.example
+
+  CREATS:
+  - backend_nest_mvp/.env.vm.example
+  - backend_nest_mvp/.env.worker.example
+  - CLAUDE_LOG_PREPARAR_API_WORKER_VM_PORTATIL_V2.txt (aquest fitxer)
+
+================================================================================
+3. COM S'HA SEPARAT ROL API i ROL WORKER
+-----------------------------------------
+
+Mecanisme: dues variables d'entorn llegides a l'arrencada de NestJS.
+
+  WORKER_ENABLED (default: true)
+    - Llegit a projects.module.ts FORA de la classe, abans del decorador @Module
+    - Si WORKER_ENABLED !== 'false' → TranscriptionProcessor s'inclou als providers
+    - Si WORKER_ENABLED === 'false' → TranscriptionProcessor NO es registra
+    - Efecte: la cua Bull segueix existint (la VM pot afegir jobs), però sense cap
+      consumer local. Els jobs queden a Redis fins que un worker extern els agafi.
+
+  API_ENABLED (default: true)
+    - Llegit a main.ts just abans de cridar app.listen()
+    - Si API_ENABLED !== 'false' → app.listen(port) → serveix HTTP normalment
+    - Si API_ENABLED === 'false' → app.init() → NestJS arranca (Bull s'inicialitza)
+      però sense servidor HTTP. El portàtil processa jobs però no serveix web.
+
+  Per què funciona Bull sense HTTP:
+    @Processor(TRANSCRIPTION_QUEUE) és un Bull consumer que s'activa quan NestJS
+    inicialitza el mòdul, independentment de si hi ha HTTP server o no.
+    Quan el portàtil fa app.init(), Bull connecta a Redis i comença a consumir.
+
+================================================================================
+4. COM ES CONTROLA WORKER_ENABLED
+----------------------------------
+
+  Fitxer: backend_nest_mvp/src/modules/projects/projects.module.ts
+
+  Codi afegit al principi del fitxer:
+    const workerEnabled = process.env.WORKER_ENABLED !== 'false'; // default: true
+
+  Ús al @Module:
+    providers: [
+      ProjectsService,
+      ...(workerEnabled ? [TranscriptionProcessor] : []),
+    ],
+
+  Regles:
+    WORKER_ENABLED no definit → true (mode local, backwards compatible)
+    WORKER_ENABLED=true       → true
+    WORKER_ENABLED=false      → false (VM mode)
+
+================================================================================
+5. COM ES MANTÉ EL MODE LOCAL ALL-IN-ONE
+------------------------------------------
+
+  El mode local NO requereix cap canvi al .env existent.
+  Per defecte (sense WORKER_ENABLED ni API_ENABLED):
+    - workerEnabled = true  → TranscriptionProcessor actiu
+    - apiEnabled = true     → app.listen() → serveix HTTP
+
+  El programador no ha de tocar res. El comportament és idèntic a l'anterior.
+
+================================================================================
+6. COM ES CONTROLA STORAGE_ROOT
+---------------------------------
+
+  Fitxers afectats:
+    - transcription.processor.ts: resolveMediaRoot() ara accepta (storageRoot, mediaRoot)
+    - projects.service.ts: getMediaPath() usa STORAGE_ROOT || MEDIA_ROOT
+    - media.controller.ts: 4 llocs on es llegeix MEDIA_ROOT ara llegeixen
+      process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media'
+
+  Prioritat:
+    1. STORAGE_ROOT (si definit)  → ruta NAS compartida
+    2. MEDIA_ROOT   (si definit)  → ruta local clàssica
+    3. './media'    (default)      → carpeta relativa al procés
+
+  Exemples de configuració:
+    Local dev:         MEDIA_ROOT=C:\SonilabData\media (o ./media)
+    VM Ubuntu:         STORAGE_ROOT=/mnt/sonilab_media
+    Portàtil worker:   STORAGE_ROOT=/mnt/sonilab_media
+
+  Waveform cache (CACHE_ROOT): NO s'ha afegit l'alias STORAGE_ROOT aquí
+  perquè la cache és local per màquina (no s'ha de compartir entre VM i worker).
+
+================================================================================
+7. COM S'HA PREPARAT CPU/GPU PER VARIABLES D'ENTORN
+------------------------------------------------------
+
+  Nova variable: TRANSCRIBE_DEVICE (alias més clar de WHISPERX_DEVICE)
+  Fitxer: transcription.processor.ts, línia on es llegeix el device:
+
+    device: this.config.get<string>('TRANSCRIBE_DEVICE')
+         || this.config.get<string>('WHISPERX_DEVICE', 'cpu'),
+
+  Prioritat:
+    1. TRANSCRIBE_DEVICE (si definit) — recomanat per a configuració distribuïda
+    2. WHISPERX_DEVICE   (si definit) — compatibilitat existent
+    3. 'cpu'             (default)
+
+  Per canviar a GPU en el futur:
+    Només cal posar TRANSCRIBE_DEVICE=cuda (o WHISPERX_DEVICE=cuda) al .env
+    del portàtil worker. No cal cap canvi de codi.
+
+  LLM_DEVICE: documentat al .env.example però NO implementat (Ollama gestiona
+  el device internament; no es passa com a paràmetre a l'API d'Ollama).
+
+================================================================================
+8. COM QUEDA PREPARAT OLLAMA LOCAL AL WORKER I EN DESENVOLPAMENT LOCAL
+-----------------------------------------------------------------------
+
+  Problema anterior:
+    transcript_corrector.py tenia hardcoded http://127.0.0.1:11434
+    i el backend no passava cap env var al subprocess Python.
+
+  Solució en dues parts:
+
+  PART A — transcript_corrector.py (Python):
+    Línies 52-53 canviades de:
+      _OLLAMA_BASE = "http://127.0.0.1:11434/api/generate"
+      _OLLAMA_HEALTH = "http://127.0.0.1:11434/api/tags"
+    a:
+      _OLLAMA_HOST = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+      _OLLAMA_BASE = f"{_OLLAMA_HOST}/api/generate"
+      _OLLAMA_HEALTH = f"{_OLLAMA_HOST}/api/tags"
+
+    Default conservat: si OLLAMA_BASE_URL no es defineix, segueix usant 127.0.0.1:11434.
+
+  PART B — projects.service.ts (NestJS):
+    L'execFileAsync que crida transcript_corrector.py ara passa:
+      env: {
+        ...process.env,
+        OLLAMA_BASE_URL: this.config.get('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
+      }
+
+    Això permet que el valor del .env del backend es propagui al subprocess Python.
+
+  Comportament per escenari:
+    Local dev:        OLLAMA_BASE_URL=http://127.0.0.1:11434 (Ollama al mateix PC)
+    Portàtil worker:  OLLAMA_BASE_URL=http://127.0.0.1:11434 (Ollama al portàtil)
+    VM:               No usa Ollama. La VM no executa correcció LLM directament.
+                      La correcció LLM la gestiona el worker del portàtil.
+
+================================================================================
+9. LIMITACIONS QUE QUEDEN
+--------------------------
+
+  1. PURFVIEW EXE (Windows only):
+     El portàtil worker Linux no pot usar faster-whisper-xxl.exe.
+     Fallback automàtic al pipeline Python (purfview-xxl → faster-whisper Python).
+     Comportament ja existent, no és nou.
+
+  2. LLM_DEVICE:
+     Documentat a .env.example com a futura variable, però Ollama gestiona el
+     device internament. No s'implementa de moment.
+
+  3. NAS MOUNT:
+     El muntatge de /mnt/sonilab_media és responsabilitat de la infraestructura
+     (fstab, autofs, etc.), no del codi. Cal configurar-lo manualment a cada màquina.
+
+  4. WAVEFORM CACHE:
+     CACHE_ROOT segueix sent local per màquina. Si la VM genera la cache i el
+     worker la necessita (o viceversa), caldrà compartir-la o regenerar-la.
+     De moment, cada màquina la genera localment (comportament existent).
+
+  5. SEGURETAT REDIS/MONGO:
+     Si la VM exposa Redis al portàtil (port 6379 obert), cal configurar
+     autenticació Redis i restriccions de firewall. No és responsabilitat del codi.
+
+================================================================================
+10. PROVES MANUALS RECOMANADES
+--------------------------------
+
+  PROVA 1 — Mode local (hauria de funcionar IGUAL que abans):
+    - Arrencar backend sense canvis al .env: cd backend_nest_mvp && npm run start:dev
+    - Verificar: API accessible a http://localhost:8000
+    - Crear un projecte i transcriure → ha de funcionar com sempre
+    - Si passes WORKER_ENABLED=true o no el poses, hauria d'anar igual
+
+  PROVA 2 — Mode VM (WORKER_ENABLED=false):
+    - Afegir al .env: WORKER_ENABLED=false
+    - Arrencar backend: npm run start:dev
+    - Verificar: API accessible (port 8000 OK)
+    - Crear un job de transcripció
+    - Verificar a Redis (redis-cli LLEN bull:transcription:wait) que el job queda encuat
+    - Verificar que el job NO passa a 'processing' (perquè no hi ha consumer)
+
+  PROVA 3 — Mode Worker (API_ENABLED=false):
+    - Afegir al .env: API_ENABLED=false, WORKER_ENABLED=true
+    - Arrencar backend: npm run start:dev
+    - Verificar: NO hi ha HTTP server (curl localhost:8000 → connection refused)
+    - Si hi ha un job encuat a Redis des de la prova 2 → ha de processar-lo
+    - Verificar que el job passa a 'done' a MongoDB
+
+  PROVA 4 — STORAGE_ROOT:
+    - Afegir al .env: STORAGE_ROOT=/tmp/sonilab_test (o ruta local equivalent)
+    - Pujar un vídeo → verificar que es guarda a /tmp/sonilab_test/ (no a ./media/)
+    - Transcriure → output a /tmp/sonilab_test/projects/{id}/whisperx/
+
+  PROVA 5 — OLLAMA_BASE_URL:
+    - Afegir al .env: OLLAMA_BASE_URL=http://127.0.0.1:11434
+    - Fer una correcció de transcripció amb mode LLM activat
+    - Verificar logs d'Ollama que rep la petició
+    - Verificar que no apareix error "Ollama no és accessible"
+
+================================================================================
+FI DEL LOG
+================================================================================

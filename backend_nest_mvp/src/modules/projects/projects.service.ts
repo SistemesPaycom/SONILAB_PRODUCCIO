@@ -85,7 +85,8 @@ async getMediaPath(ownerId: string, mediaDocumentId: string) {
   throw new NotFoundException('Media not found');
 }
 
-  const mediaRoot = this.config.get<string>('MEDIA_ROOT', './media');
+  // STORAGE_ROOT takes priority over MEDIA_ROOT (for NAS/distributed deployments)
+  const mediaRoot = this.config.get<string>('STORAGE_ROOT') || this.config.get<string>('MEDIA_ROOT', './media');
   const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
 
   const root = path.resolve(mediaRootAbs);
@@ -518,7 +519,17 @@ except ImportError:
           '--method', method,
           ...(allowSplit ? ['--allow-split'] : []),
         ],
-        { encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 },
+        {
+        encoding: 'utf-8',
+        timeout: timeoutMs,
+        maxBuffer: 10 * 1024 * 1024,
+        // Pass OLLAMA_BASE_URL so the worker can reach Ollama on a different host if needed.
+        // In local dev this is just http://127.0.0.1:11434 (same as default in Python).
+        env: {
+          ...process.env,
+          OLLAMA_BASE_URL: this.config.get<string>('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
+        },
+      },
       );
 
       const summary = JSON.parse(rawOutput.trim());

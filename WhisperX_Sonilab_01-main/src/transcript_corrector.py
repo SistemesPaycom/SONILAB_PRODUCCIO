@@ -49,8 +49,11 @@ except ImportError:
 import urllib.request
 import urllib.error
 
-_OLLAMA_BASE = "http://127.0.0.1:11434/api/generate"
-_OLLAMA_HEALTH = "http://127.0.0.1:11434/api/tags"
+# OLLAMA_BASE_URL env var allows pointing to a remote Ollama instance.
+# Default: http://127.0.0.1:11434 (local, same as before).
+_OLLAMA_HOST = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+_OLLAMA_BASE = f"{_OLLAMA_HOST}/api/generate"
+_OLLAMA_HEALTH = f"{_OLLAMA_HOST}/api/tags"
 
 # Models LLM suportats (Ollama)
 LLM_MODELS = {

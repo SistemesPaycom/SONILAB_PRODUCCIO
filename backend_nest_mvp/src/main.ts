@@ -40,8 +40,16 @@ app.useGlobalFilters(new AllExceptionsFilter());
     }),
   );
 
-  await app.listen(port);
-  console.log(`API running on http://localhost:${port}`);
+  // API_ENABLED=false → worker-only mode (laptop): NestJS boots (Bull starts)
+  // but no HTTP server is created. Default: true (local dev + VM both serve HTTP).
+  const apiEnabled = process.env.API_ENABLED !== 'false';
+  if (apiEnabled) {
+    await app.listen(port);
+    console.log(`API running on http://localhost:${port}`);
+  } else {
+    await app.init();
+    console.log(`Worker mode active (API_ENABLED=false) — consuming jobs from Redis, no HTTP server`);
+  }
 }
 
 bootstrap();

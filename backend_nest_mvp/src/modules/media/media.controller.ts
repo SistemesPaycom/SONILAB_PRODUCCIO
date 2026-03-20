@@ -91,7 +91,7 @@ export class MediaController {
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (_req, _file, cb) => {
-          const mediaRoot = process.env.MEDIA_ROOT || './media';
+          const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
           const dest = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
           ensureDirSync(dest);
           cb(null, dest);
@@ -110,7 +110,7 @@ export class MediaController {
     const ext = extFromOriginalname(file.originalname);
     const sourceType = sourceTypeFromExt(ext);
     const mimeType = (mime.lookup(file.path) || file.mimetype || 'application/octet-stream') as string;
-    const mediaRoot = process.env.MEDIA_ROOT || './media';
+    const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
 const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
 
 const absPath = path.resolve(file.path);
@@ -212,7 +212,7 @@ if (existing) {
   throw new NotFoundException('Media not found');
 }
 
-   const mediaRoot = process.env.MEDIA_ROOT || './media';
+   const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
 const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
 
 // doc.media.path está guardado en posix (con '/')
@@ -288,7 +288,7 @@ if (!fs.existsSync(filePath)) {
     // 2. Cache miss → generate via FFmpeg
     this.logger.log(`Waveform cache MISS for ${docId} (${sha256.substring(0, 12)}...) — generating...`);
 
-    const mediaRoot = process.env.MEDIA_ROOT || './media';
+    const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
     const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
     const filePath = resolveSafeMediaPath(mediaRootAbs, doc.media.path);
 

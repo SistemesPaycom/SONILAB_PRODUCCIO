@@ -18,9 +18,11 @@ function ensureDirSync(p: string) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
 
-function resolveMediaRoot(mediaRootEnv?: string) {
-  const mediaRoot = mediaRootEnv || './media';
-  return path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
+// STORAGE_ROOT takes priority over MEDIA_ROOT (for NAS/distributed deployments).
+// In local dev just set MEDIA_ROOT as before — no change needed.
+function resolveMediaRoot(storageRoot?: string, mediaRoot?: string) {
+  const root = storageRoot || mediaRoot || './media';
+  return path.isAbsolute(root) ? root : path.join(process.cwd(), root);
 }
 
 function envBool(v: string | undefined, def: boolean) {
@@ -47,8 +49,11 @@ export class TranscriptionProcessor {
       const project = await this.projects.getProject(projectId);
       const mediaPath = await this.projects.getMediaPath(ownerId, project.mediaDocumentId);
 
-      // 2) Preparar salida dentro del backend: MEDIA_ROOT/projects/<projectId>/whisperx
-      const mediaRootAbs = resolveMediaRoot(this.config.get<string>('MEDIA_ROOT'));
+      // 2) Preparar salida dentro del backend: STORAGE_ROOT (o MEDIA_ROOT) /projects/<projectId>/whisperx
+      const mediaRootAbs = resolveMediaRoot(
+        this.config.get<string>('STORAGE_ROOT'),
+        this.config.get<string>('MEDIA_ROOT'),
+      );
       const outDir = path.join(mediaRootAbs, 'projects', projectId, 'whisperx');
       ensureDirSync(outDir);
 
@@ -59,7 +64,8 @@ export class TranscriptionProcessor {
         profile: this.config.get<string>('WHISPERX_PROFILE', 'VE'),
         language: this.config.get<string>('WHISPERX_LANGUAGE', ''),
         batchSize: Number(this.config.get<string>('WHISPERX_BATCH_SIZE', '8')),
-        device: this.config.get<string>('WHISPERX_DEVICE', 'cpu'),
+        // TRANSCRIBE_DEVICE overrides WHISPERX_DEVICE (cleaner name for distributed config)
+        device: this.config.get<string>('TRANSCRIBE_DEVICE') || this.config.get<string>('WHISPERX_DEVICE', 'cpu'),
         diarization: envBool(this.config.get<string>('WHISPERX_DIARIZATION'), true),
         offline: envBool(this.config.get<string>('WHISPERX_OFFLINE'), false),
         timingFix: envBool(this.config.get<string>('WHISPERX_TIMING_FIX'), true),
