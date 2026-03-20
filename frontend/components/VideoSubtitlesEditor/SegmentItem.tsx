@@ -422,7 +422,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex flex-col p-2 border-b border-gray-800 transition-colors duration-150 ${
+      className={`relative flex flex-col p-2 border-b border-gray-800 transition-colors duration-150 min-w-full ${
         isActive
           ? 'bg-blue-600/10 ring-1 ring-inset ring-blue-500/30'
           : proposedText
@@ -460,7 +460,9 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         className="grid items-stretch"
         style={{
           // REAJUSTAMENT: Amplades optimitzades per evitar solapaments (10ch per a TK, 12ch per a ID/CPS)
-          gridTemplateColumns: '10ch 12ch 21ch 5ch minmax(0, 1fr)',
+          // La columna de text usa max-content per no comprimir-se mai — el scroll
+          // horitzontal global del panel s'encarrega del desbordament.
+          gridTemplateColumns: '10ch 12ch 21ch 5ch max-content',
           gridTemplateRows: `repeat(${maxLines}, ${ROW_HEIGHT})`,
         }}
       >
@@ -550,7 +552,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
                 }}
                 data-segment-id={segment.id}
-                className={`outline-none whitespace-pre-wrap break-words text-[14.5px] transition-colors ${
+                className={`outline-none whitespace-nowrap text-[14.5px] transition-colors ${
                   isActive ? 'text-white' : 'text-gray-300'
                 }`}
                 style={{

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { OverlayConfig } from '../../types';
 import SegmentItem from './SegmentItem';
@@ -152,6 +152,29 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
     overscan: 5,
   });
 
+  const virtualContainerRef = useRef<HTMLDivElement>(null);
+
+  // Sync the virtual container's width to the scroll container's scrollWidth.
+  // Absolute-positioned virtual items don't contribute to the parent's width
+  // calculation, so the container stays viewport-width while content overflows.
+  // By reading scrollWidth (which includes overflow) and applying it as minWidth,
+  // all items (width: 100%) and their borders extend to the full scrollable width.
+  const virtualItems = virtualizer.getVirtualItems();
+  useLayoutEffect(() => {
+    const scrollEl = scrollContainerRef.current;
+    const vcEl = virtualContainerRef.current;
+    if (!scrollEl || !vcEl) return;
+    // Reset to auto first so scrollWidth reflects true content width
+    vcEl.style.minWidth = '100%';
+    // Read the true scrollable width (includes grid overflow)
+    requestAnimationFrame(() => {
+      const sw = scrollEl.scrollWidth;
+      if (sw > 0) {
+        vcEl.style.minWidth = sw + 'px';
+      }
+    });
+  }, [virtualItems.length, segments]);
+
   // Auto-scroll to active segment via virtualizer
   useEffect(() => {
     if (activeId == null || !autoScroll) return;
@@ -282,13 +305,30 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
 
                 <div className="w-px h-5 bg-gray-700 mx-1" />
 
-                <button 
+                <button
                     title="Mostrar subtítols sobre el vídeo"
                     onClick={() => onOverlayConfigChange({ ...overlayConfig, show: !overlayConfig.show })}
                     className={`p-1.5 rounded transition-colors ${overlayConfig.show ? 'text-blue-400 bg-blue-600/10' : 'text-gray-500 hover:bg-gray-700'}`}
                 >
                     {overlayConfig.show ? <EyeIcon className="w-4 h-4" /> : <EyeOffIcon className="w-4 h-4" />}
                 </button>
+
+                {/* Font scale control for subtitle overlay */}
+                {overlayConfig.show && (
+                  <div className="flex items-center gap-0.5 ml-0.5" title="Mida màxima subtítols sobre vídeo">
+                    <button
+                      onClick={() => onOverlayConfigChange({ ...overlayConfig, fontScale: Math.max(0.5, (overlayConfig.fontScale || 1) - 0.1) })}
+                      className="p-1 rounded text-gray-400 hover:bg-gray-700 text-[10px] font-bold leading-none"
+                    >A↓</button>
+                    <span className="text-[10px] font-mono text-gray-400 w-7 text-center select-none">
+                      {((overlayConfig.fontScale || 1) * 100).toFixed(0)}%
+                    </span>
+                    <button
+                      onClick={() => onOverlayConfigChange({ ...overlayConfig, fontScale: Math.min(2.0, (overlayConfig.fontScale || 1) + 0.1) })}
+                      className="p-1 rounded text-gray-400 hover:bg-gray-700 text-[10px] font-bold leading-none"
+                    >A↑</button>
+                  </div>
+                )}
               
                 <button 
                     title={syncEnabled ? "Desactivar sincronització" : "Activar sincronització"}
@@ -321,12 +361,13 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
         </div>
       </header>
 
-      <div ref={scrollContainerRef} className="flex-grow overflow-y-auto custom-scrollbar">
+      <div ref={scrollContainerRef} className="flex-grow overflow-auto custom-scrollbar">
         {segments.length > 0 ? (
           <div
+            ref={virtualContainerRef}
             style={{
               height: virtualizer.getTotalSize(),
-              width: '100%',
+              minWidth: '100%',
               position: 'relative',
             }}
           >

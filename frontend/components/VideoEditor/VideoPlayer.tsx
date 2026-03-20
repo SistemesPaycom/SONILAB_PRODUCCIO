@@ -19,13 +19,18 @@ import {
  * Component per renderitzar línies de subtítols interpretant tags de format (b, i, u).
  */
 const SubtitleLines: React.FC<{ text: string }> = ({ text }) => {
-    // Utilitzem la utilitat que converteix els tags SRT a HTML real per al navegador
-    const htmlContent = plainToRich(text);
+    // Split by original line breaks; each line rendered as a separate block
+    // to preserve the exact number of lines. Parent handles nowrap + auto-scaling.
+    const lines = text.split('\n');
     return (
-        <div 
-            className="inline-block"
-            dangerouslySetInnerHTML={{ __html: htmlContent }} 
-        />
+        <>
+          {lines.map((line, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <br />}
+              <span dangerouslySetInnerHTML={{ __html: plainToRich(line) }} />
+            </React.Fragment>
+          ))}
+        </>
     );
 };
 
@@ -56,9 +61,50 @@ const SubtitleOverlay: React.FC<{
   text: string;
   position: 'top' | 'bottom';
   offsetPx: number;
+  fontScale: number;
   side: 'vo' | 'tr';
-}> = ({ text, position, offsetPx, side }) => {
-  const style = {
+}> = ({ text, position, offsetPx, fontScale, side }) => {
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+  const textRef = React.useRef<HTMLDivElement>(null);
+  const [finalFontPx, setFinalFontPx] = React.useState(24);
+
+  // Base font size: fontScale acts as multiplier (1 = 24px base)
+  const baseFontPx = Math.round(24 * (fontScale || 1));
+
+  // Auto-fit: measure the text at baseFontPx, then shrink fontSize if the
+  // text block exceeds ~90% of the container width. By adjusting fontSize
+  // directly (instead of CSS transform), the inline-block naturally reflows
+  // to a narrower width and text-center keeps it perfectly centred — no
+  // transform-origin / pivot issues.
+  React.useEffect(() => {
+    const wrapper = wrapperRef.current;
+    const textEl = textRef.current;
+    if (!wrapper || !textEl) return;
+
+    const fit = () => {
+      // First measure at full base size
+      textEl.style.fontSize = `${baseFontPx}px`;
+
+      const availW = wrapper.clientWidth * 0.90; // 90% — leave margin on sides
+      const contentW = textEl.scrollWidth;
+
+      if (contentW > availW && availW > 0) {
+        const ratio = Math.max(0.4, availW / contentW);
+        const reduced = Math.max(10, Math.round(baseFontPx * ratio));
+        setFinalFontPx(reduced);
+        textEl.style.fontSize = `${reduced}px`;
+      } else {
+        setFinalFontPx(baseFontPx);
+      }
+    };
+
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(wrapper);
+    return () => ro.disconnect();
+  }, [text, baseFontPx]);
+
+  const posStyle = {
     '--offset-px': `${offsetPx}px`,
     transform:
       position === 'top'
@@ -67,8 +113,16 @@ const SubtitleOverlay: React.FC<{
   } as React.CSSProperties;
 
   return (
-    <div className={`subtitle-overlay absolute left-0 right-0 p-4 text-center pointer-events-none ${position === 'top' ? 'top-0' : 'bottom-0'} ${side}`} style={style}>
-      <div className="subtitle-overlay-text inline-block px-4 py-1.5 bg-black/70 text-white rounded-lg text-2xl font-medium shadow-2xl backdrop-blur-sm">
+    <div
+      ref={wrapperRef}
+      className={`subtitle-overlay absolute left-0 right-0 p-2 text-center pointer-events-none ${position === 'top' ? 'top-0' : 'bottom-0'} ${side}`}
+      style={posStyle}
+    >
+      <div
+        ref={textRef}
+        className="subtitle-overlay-text inline-block px-4 py-1.5 bg-black/70 text-white rounded-lg font-medium shadow-2xl backdrop-blur-sm"
+        style={{ fontSize: `${finalFontPx}px`, lineHeight: 1.35, whiteSpace: 'nowrap' }}
+      >
         <SubtitleLines text={text} />
       </div>
     </div>
@@ -162,6 +216,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               text={activeSegment.originalText}
               position={overlayConfig.original.position}
               offsetPx={overlayConfig.original.offsetPx}
+              fontScale={overlayConfig.original.fontScale}
               side="vo"
             />
           )}
@@ -173,6 +228,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               text={activeSegment.translatedText || ''}
               position={overlayConfig.translated.position}
               offsetPx={overlayConfig.translated.offsetPx}
+              fontScale={overlayConfig.translated.fontScale}
               side="tr"
             />
           )}
