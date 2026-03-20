@@ -58,6 +58,7 @@ export const AuthModal: React.FC<{
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !busy && email && password && submit()}
           />
           <input
             className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
@@ -65,6 +66,7 @@ export const AuthModal: React.FC<{
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !busy && email && password && submit()}
           />
 
           {err && <div className="text-sm text-red-300">{err}</div>}
