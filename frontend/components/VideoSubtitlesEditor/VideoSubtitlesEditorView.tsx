@@ -103,7 +103,15 @@ const VideoSubtitlesEditorViewInner: React.FC<VideoSubtitlesEditorViewProps> = (
       }
     }
     const segChanged = newActiveId !== prevActiveId;
-    if (segChanged) activeSegIdByTimeRef.current = newActiveId;
+    if (segChanged) {
+      activeSegIdByTimeRef.current = newActiveId;
+      // Propagar el segment actiu per temps al state NOMÉS si la sincronització
+      // subs↔timeline està activada. Quan està desactivada, el cursor del
+      // timeline NO ha de seleccionar automàticament subtítols.
+      if (newActiveId !== null && syncSubsEnabledRef.current) {
+        setActiveSegmentId(newActiveId);
+      }
+    }
 
     // Actualitzar state si: canvi de segment, o cada 250ms per al toolbar/timecodes
     if (segChanged || now - lastTimeUpdateRef.current > 250) {
@@ -128,13 +136,56 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const [scrollModeWave, setScrollModeWave] = useState<'stationary' | 'page'>('stationary');
 
   const [isScriptLinked, setIsScriptLinked] = useState(true);
+  /** Panell del guió: l'usuari pot col·lapsar-lo manualment per guanyar espai */
+  const [scriptPanelCollapsed, setScriptPanelCollapsed] = useState(false);
   const scriptScrollRef = useRef<HTMLElement>(null);
   const takeLayoutRef = useRef<Map<number, number>>(new Map());
   const activeTakeByTimeRef = useRef<number | null>(null);
 
+  // ── Exclusió mútua: guió embebut ↔ finestra externa ──────────────────────
+  const externalScriptWinRef = useRef<Window | null>(null);
+
+  /** Obre (o reutilitza) la finestra externa del guió i col·lapsa el panell embebut */
+  const handleOpenExternalScript = useCallback(() => {
+    const docId = currentDoc?.id;
+    if (!docId) return;
+    // Reutilitza si ja és oberta
+    if (externalScriptWinRef.current && !externalScriptWinRef.current.closed) {
+      externalScriptWinRef.current.focus();
+      // Assegura que el panell embebut estigui col·lapsat
+      setScriptPanelCollapsed(true);
+      return;
+    }
+    const url = `${window.location.origin}${window.location.pathname}#/script-view/${encodeURIComponent(docId)}`;
+    externalScriptWinRef.current = window.open(
+      url,
+      `script-view-${docId}`,
+      'width=560,height=820,resizable=yes,scrollbars=yes',
+    );
+    // Col·lapsar el panell embebut
+    setScriptPanelCollapsed(true);
+  }, [currentDoc?.id]);
+
+  /** Toggle col·lapsar/expandir amb exclusió mútua */
+  const handleToggleScriptCollapse = useCallback(() => {
+    setScriptPanelCollapsed(prev => {
+      if (prev) {
+        // Expandint → tancar finestra externa
+        if (externalScriptWinRef.current && !externalScriptWinRef.current.closed) {
+          externalScriptWinRef.current.close();
+        }
+        externalScriptWinRef.current = null;
+      }
+      return !prev;
+    });
+  }, []);
+
   // ── Guió vinculat al projecte ─────────────────────────────────────────────
   const [guionContent, setGuionContent] = useState<string>('');
   const [guionProjectId, setGuionProjectId] = useState<string | null>(null);
+  // Ref mirall per accedir a guionProjectId dins callbacks estables (deps=[])
+  const guionProjectIdRef = useRef(guionProjectId);
+  guionProjectIdRef.current = guionProjectId;
 
   // ── Correcció de transcripció amb guió — revisió inline ──────────────────
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
@@ -163,7 +214,16 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
         localStorage.removeItem(_localGuionKey);
       }
     }
+    // Notificar la finestra externa perquè refresqui el guió
+    scriptSyncChannelRef.current?.postMessage({
+      type: 'guion-updated',
+      content: text,
+      source: 'main',
+    });
   }, [guionProjectId, currentDoc?.id, _localGuionKey]);
+  // Ref mirall per accedir a handleGuionLoaded dins el handler del BC (deps=[])
+  const handleGuionLoadedRef = useRef(handleGuionLoaded);
+  handleGuionLoadedRef.current = handleGuionLoaded;
 
   const [subsOverlayConfig, setSubsOverlayConfig] = useState<OverlayConfig>({
     show: true,
@@ -178,6 +238,9 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   }), [maxLinesSubs]);
 
   const [syncSubsEnabled, setSyncSubsEnabled] = useState(true);
+  // Ref mirall per accedir a syncSubsEnabled dins callbacks estables (deps=[])
+  const syncSubsEnabledRef = useRef(syncSubsEnabled);
+  syncSubsEnabledRef.current = syncSubsEnabled;
 
   const initialSegments = useMemo(() => {
     const srtText = currentDoc.contentByLang['_unassigned'] || Object.values(currentDoc.contentByLang)[0] || '';
@@ -492,6 +555,87 @@ useEffect(() => {
     }
   }, [currentTime, isScriptLinked, takeRanges]);
 
+  // ── BroadcastChannel: emissor/receptor cap a la finestra externa del guió ───
+  const scriptSyncChannelRef = useRef<BroadcastChannel | null>(null);
+  const lastBroadcastRef = useRef(0);
+  /** Timestamp de l'últim seek rebut de la finestra externa — per suprimir eco */
+  const lastExternalSeekRef = useRef(0);
+  const EXTERNAL_SEEK_SUPPRESS_MS = 600;
+
+  // Obre el canal, escolta 'ready' i 'seek' de la finestra externa
+  useEffect(() => {
+    const docId = currentDoc?.id;
+    if (!docId) return;
+
+    const bc = new BroadcastChannel(`sonilab-script-sync:${docId}`);
+    scriptSyncChannelRef.current = bc;
+
+    bc.onmessage = (ev) => {
+      const msg = ev.data;
+      if (!msg || typeof msg !== 'object') return;
+
+      // Handshake: la finestra externa diu que està llesta → enviem snapshot
+      if (msg.type === 'ready') {
+        bc.postMessage({
+          type: 'snapshot',
+          currentTime: currentTimeRef.current,
+          isPlaying,
+          docId,
+        });
+      }
+
+      // Seek des de la finestra externa → naveguem al temps sol·licitat
+      if (msg.type === 'seek' && msg.source === 'script-external' && typeof msg.currentTime === 'number') {
+        lastExternalSeekRef.current = performance.now();
+        if (videoRef.current) videoRef.current.currentTime = msg.currentTime;
+        currentTimeRef.current = msg.currentTime;
+        setCurrentTime(msg.currentTime);
+      }
+
+      // Toggle play/pause des de la finestra externa (Ctrl+Espai)
+      if (msg.type === 'toggle-play' && msg.source === 'script-external') {
+        setIsPlaying((p) => !p);
+      }
+
+      // El guió s'ha actualitzat des de la finestra externa (upload/canvi/esborrat)
+      if (msg.type === 'guion-updated' && msg.source === 'script-external' && typeof msg.content === 'string') {
+        handleGuionLoadedRef.current(msg.content);
+      }
+
+      // Sol·licitud d'obrir el modal de correcció des de la finestra externa
+      if (msg.type === 'open-correction' && msg.source === 'script-external') {
+        if (guionProjectIdRef.current) {
+          setIsCorrectionModalOpen(true);
+        }
+      }
+    };
+
+    return () => {
+      bc.close();
+      scriptSyncChannelRef.current = null;
+    };
+  }, [currentDoc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Envia time-sync throttlejat (~5fps) quan canvia currentTime
+  useEffect(() => {
+    const bc = scriptSyncChannelRef.current;
+    if (!bc) return;
+
+    // Anti-bucle: no reenviar si el canvi de temps ve d'un seek extern recent
+    const now = performance.now();
+    if (now - lastExternalSeekRef.current < EXTERNAL_SEEK_SUPPRESS_MS) return;
+
+    // Throttle: màxim cada 200ms (5fps) per no saturar el canal
+    if (now - lastBroadcastRef.current < 200) return;
+    lastBroadcastRef.current = now;
+
+    bc.postMessage({
+      type: 'time-sync',
+      currentTime,
+      isPlaying,
+    });
+  }, [currentTime, isPlaying]);
+
   const onTogglePlay = useCallback(() => setIsPlaying((p) => !p), []);
   const onPlay = useCallback(() => setIsPlaying(true), []);
   const onPause = useCallback(() => setIsPlaying(false), []);
@@ -499,6 +643,9 @@ useEffect(() => {
     if (videoRef.current) videoRef.current.currentTime = time;
     currentTimeRef.current = time;
     setCurrentTime(time);
+    // Seek és immediat — envia al canal sense throttle
+    scriptSyncChannelRef.current?.postMessage({ type: 'time-sync', currentTime: time, isPlaying: true });
+    lastBroadcastRef.current = performance.now();
   }, []);
   const onJumpTime = useCallback((seconds: number) => onSeek(Math.max(0, Math.min(duration, currentTimeRef.current + seconds))), [duration, onSeek]);
   const onChangeRate = useCallback((delta: number) => setPlaybackRate((rate) => {
@@ -720,8 +867,9 @@ const handleSave = useCallback(() => {
     useHorizontalPanelResize(mainContainerRef as React.RefObject<HTMLElement>, 60, 25, 80);
 
   // ── Split intern del panell esquerre: guió | subtítols ───────────────────
+  const scriptPanelDomRef = useRef<HTMLDivElement>(null);
   const { widthPercent: scriptSplitPercent, handleMouseDown: handleScriptSplitMouseDown } =
-    useHorizontalPanelResize(leftPanelRef as React.RefObject<HTMLElement>, 35, 10, 65);
+    useHorizontalPanelResize(leftPanelRef as React.RefObject<HTMLElement>, 35, 10, 65, scriptPanelDomRef as React.RefObject<HTMLElement>);
 
   // Primer: trobar quin segment és actiu (canvia poques vegades)
   const activeSegIdForPlayer = useMemo(() => {
@@ -756,29 +904,40 @@ const handleSave = useCallback(() => {
           className="flex min-h-0 overflow-hidden flex-shrink-0"
           style={{ width: `${mainSplitPercent}%` }}
         >
-          {/* Guió */}
-          <ScriptViewPanel
-            width={scriptSplitPercent}
-            content={effectiveGuionContent}
-            csvContent={currentCsvContent}
-            editorView={editorView}
-            layout={layout}
-            tabSize={tabSize}
-            col1Width={col1Width}
-            editorStyles={editorStyles}
-            pageWidth={pageWidth}
-            onTakeLayout={handleTakeLayout}
-            scrollRef={scriptScrollRef}
-            projectId={guionProjectId}
-            docId={currentDoc?.id}
-            onGuionLoaded={handleGuionLoaded}
-            onOpenCorrection={guionProjectId ? () => setIsCorrectionModalOpen(true) : undefined}
-          />
-          {/* Divisor guió | subtítols */}
+          {/* Guió — wrapper amb ref per al resize hook */}
           <div
-            className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
-            onMouseDown={handleScriptSplitMouseDown}
-          />
+            ref={scriptPanelDomRef}
+            className={`h-full ${scriptPanelCollapsed ? 'flex-shrink-0' : 'min-w-0 flex-shrink-0'}`}
+            style={{ width: scriptPanelCollapsed ? '42px' : `${scriptSplitPercent}%` }}
+          >
+            <ScriptViewPanel
+              width={100}
+              content={effectiveGuionContent}
+              csvContent={currentCsvContent}
+              editorView={editorView}
+              layout={layout}
+              tabSize={tabSize}
+              col1Width={col1Width}
+              editorStyles={editorStyles}
+              pageWidth={pageWidth}
+              onTakeLayout={handleTakeLayout}
+              scrollRef={scriptScrollRef}
+              projectId={guionProjectId}
+              docId={currentDoc?.id}
+              onGuionLoaded={handleGuionLoaded}
+              onOpenCorrection={guionProjectId ? () => setIsCorrectionModalOpen(true) : undefined}
+              collapsed={scriptPanelCollapsed}
+              onToggleCollapse={handleToggleScriptCollapse}
+              onOpenExternal={currentDoc?.id ? handleOpenExternalScript : undefined}
+            />
+          </div>
+          {/* Divisor guió | subtítols */}
+          {!scriptPanelCollapsed && (
+            <div
+              className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
+              onMouseDown={handleScriptSplitMouseDown}
+            />
+          )}
           {/* Subtítols */}
           <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">
             <SubtitlesEditor

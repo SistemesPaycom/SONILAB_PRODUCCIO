@@ -9,6 +9,7 @@ import { SsrtlsfEditorView } from './components/SsrtlsfEditor/SsrtlsfEditorView'
 import { VideoSrtStandaloneEditorView } from './components/VideoSubtitlesEditor/VideoSrtStandaloneEditorView';
 import SrtPreviewView from './components/VideoSubtitlesEditor/SrtPreviewView';
 import { MediaPreviewView } from './components/VideoEditor/MediaPreviewView';
+import ScriptExternalView from './components/ScriptExternalView';
 import Toolbar from './components/EditorDeGuions/Toolbar';
 import Editor from './components/EditorDeGuions/Editor';
 import { ColumnView } from './components/EditorDeGuions/ColumnView';
@@ -950,7 +951,9 @@ const AuthedGate: React.FC = () => {
       />
       {(!USE_BACKEND || authed) && (
         <LibraryProvider>
-          {route.view === 'editor' && route.mode && route.docId ? (
+          {route.view === 'script-view' && route.docId ? (
+            <ScriptExternalView docId={route.docId} />
+          ) : route.view === 'editor' && route.mode && route.docId ? (
             <EditorTabContent mode={route.mode} docId={route.docId} />
           ) : (
             <MainAppContent />

@@ -52,6 +52,8 @@ export function useHorizontalPanelResize(
   initial = 50,
   min = 20,
   max = 80,
+  /** Ref opcional a l'element que es redimensiona. Si no es passa, usa children[0] del container. */
+  targetRef?: React.RefObject<HTMLElement>,
 ) {
   const [widthPercent, setWidthPercent] = useState(initial);
   const isResizingRef = useRef(false);
@@ -85,11 +87,13 @@ export function useHorizontalPanelResize(
     if (!containerRef.current) return;
     isResizingRef.current = true;
     startXRef.current = e.clientX;
-    startWidthRef.current = (containerRef.current.children[0] as HTMLElement).clientWidth;
+    // Mesurar l'amplada real de l'element objectiu (targetRef o children[0])
+    const target = targetRef?.current ?? (containerRef.current.children[0] as HTMLElement | null);
+    startWidthRef.current = target?.clientWidth ?? 0;
     document.body.style.cursor = 'col-resize';
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [containerRef, handleMouseMove, handleMouseUp]);
+  }, [containerRef, targetRef, handleMouseMove, handleMouseUp]);
 
   return { widthPercent, setWidthPercent, handleMouseDown };
 }

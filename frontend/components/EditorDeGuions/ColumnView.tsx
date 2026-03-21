@@ -26,6 +26,8 @@ interface ColumnViewProps {
   secondaryMatches?: Match[];
   tertiaryMatches?: Match[];
   onTakeLayout?: (num: number, y: number) => void;
+  /** Callback opcional cridat quan l'usuari clica la capçalera d'un TAKE (per seek extern) */
+  onTakeClick?: (takeNum: number) => void;
 }
 
 /* ====== PARÀMETRES D’ESPAIAT EDITABLES ====== */
@@ -164,6 +166,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
   secondaryMatches,
   tertiaryMatches,
   onTakeLayout,
+  onTakeClick,
 }) => {
   // Normalitzem: mai passem undefined a parseScript ni a indexOf
   const safeContent = content ?? '';
@@ -520,8 +523,9 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
             }}
           >
             <div
-              className="flex items-baseline justify-between"
+              className={`flex items-baseline justify-between${onTakeClick && takeNum > -1 ? ' cursor-pointer hover:bg-blue-50/60 rounded transition-colors' : ''}`}
               style={{ marginBottom: `${TAKE_HEADER_MARGIN_BOTTOM_PX}px` }}
+              onClick={onTakeClick && takeNum > -1 ? () => onTakeClick(takeNum) : undefined}
             >
               <h2
                 className={`uppercase tracking-wide ${editableClasses}`}

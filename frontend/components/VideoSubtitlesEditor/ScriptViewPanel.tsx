@@ -26,6 +26,12 @@ interface ScriptViewPanelProps {
   onGuionLoaded?: (text: string) => void;
   /** Callback per obrir el modal de correcció de transcripció (requereix projectId) */
   onOpenCorrection?: () => void;
+  /** Mode col·lapsat: mostra només una barra vertical amb els controls essencials */
+  collapsed?: boolean;
+  /** Callback per canviar l'estat col·lapsat */
+  onToggleCollapse?: () => void;
+  /** Callback per obrir/reutilitzar la finestra externa del guió (gestionat pel pare) */
+  onOpenExternal?: () => void;
 }
 
 /** Clau localStorage per guardar el guió d'un document concret (sense projecte de backend) */
@@ -57,6 +63,9 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
   docId,
   onGuionLoaded,
   onOpenCorrection,
+  collapsed,
+  onToggleCollapse,
+  onOpenExternal,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -101,12 +110,128 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
     onGuionLoaded?.('');
   };
 
+  // ── Mode col·lapsat: barra vertical estreta amb controls essencials ────────
+  if (collapsed) {
+    return (
+      <div className="flex flex-col h-full border-r border-gray-950 bg-gray-800/80 flex-shrink-0" style={{ width: '42px' }}>
+        {/* Input ocult per a upload (necessari encara que estigui col·lapsat) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".docx,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void handleUploadGuion(f);
+            e.currentTarget.value = '';
+          }}
+        />
+
+        {/* Botó per expandir */}
+        {onToggleCollapse && (
+          <button
+            className="w-full h-9 flex items-center justify-center text-gray-500 hover:text-blue-300 hover:bg-gray-700/50 transition-colors border-b border-gray-700/50"
+            onClick={onToggleCollapse}
+            title="Expandir panell del guió"
+          >
+            <span className="text-sm">▶</span>
+          </button>
+        )}
+
+        {/* Títol vertical */}
+        <div className="flex-1 flex items-center justify-center overflow-hidden">
+          <span
+            className="font-black text-[9px] uppercase tracking-[0.2em] text-gray-600 whitespace-nowrap"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          >
+            Guió
+          </span>
+        </div>
+
+        {/* Botons d'acció apilats verticalment */}
+        <div className="flex flex-col items-center gap-1 pb-2">
+          {/* Finestra externa */}
+          {onOpenExternal && (
+            <button
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-blue-300 hover:bg-blue-900/30 rounded transition-colors"
+              onClick={onOpenExternal}
+              title="Obrir guió en finestra separada"
+            >
+              <span className="text-sm">⧉</span>
+            </button>
+          )}
+
+          {/* Vincular/canviar guió */}
+          {canLink && (
+            <button
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-blue-300 hover:bg-blue-900/30 rounded transition-colors disabled:opacity-40"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title={hasContent ? 'Canviar guió (DOCX o PDF)' : 'Vincular guió (DOCX o PDF)'}
+            >
+              <span className="text-sm">{uploading ? '⏳' : '↑'}</span>
+            </button>
+          )}
+
+          {/* Corregir */}
+          {projectId && hasContent && onOpenCorrection && (
+            <button
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-rose-300 hover:bg-rose-900/30 rounded transition-colors"
+              onClick={onOpenCorrection}
+              title="Corregir transcripció amb el guió"
+            >
+              <span className="text-sm">✦</span>
+            </button>
+          )}
+
+          {/* Indicador local */}
+          {isLocalOnly && (
+            <span
+              className="text-[8px] text-amber-400/70 px-1"
+              title="Guió local (no sincronitzat amb el servidor)"
+            >
+              loc
+            </span>
+          )}
+        </div>
+
+        {uploadErr && (
+          <div className="px-1 py-1 text-[8px] text-red-400 text-center border-t border-red-800/30">
+            Error
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ width: `${width}%` }} className="flex flex-col min-w-0 h-full border-r border-gray-950">
       <header className="flex-shrink-0 h-11 border-b border-gray-700 bg-gray-800/80 flex items-center px-4 gap-3">
+        {/* Botó per col·lapsar */}
+        {onToggleCollapse && (
+          <button
+            className="text-gray-500 hover:text-blue-300 transition-colors mr-1"
+            onClick={onToggleCollapse}
+            title="Minimitzar panell del guió"
+          >
+            <span className="text-xs">◀</span>
+          </button>
+        )}
+
         <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-500 flex-1">
           Guió Original
         </h3>
+
+        {/* Botó per obrir el guió en una finestra externa */}
+        {onOpenExternal && (
+          <button
+            className="text-[9px] text-gray-500 hover:text-blue-300 bg-gray-700/50 hover:bg-blue-900/30 border border-gray-600/50 px-2 py-0.5 rounded transition-colors"
+            onClick={onOpenExternal}
+            title="Obrir guió en finestra separada"
+          >
+            ⧉ Finestra
+          </button>
+        )}
 
         {/* Indicador de guió local (sense sincronització al backend) */}
         {isLocalOnly && (
