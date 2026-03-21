@@ -354,9 +354,9 @@ useEffect(() => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0f172a] text-gray-200">
+    <div className="flex flex-col h-full w-full text-gray-200" style={{ backgroundColor: 'var(--th-bg-app)' }}>
       {/* Header */}
-      <header className="bg-gray-800 h-14 border-b border-gray-700 flex items-center px-4 justify-between flex-shrink-0">
+      <header className="h-14 flex items-center px-4 justify-between flex-shrink-0" style={{ backgroundColor: 'var(--th-bg-secondary)', borderBottom: '1px solid var(--th-border)' }}>
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400">
             <Icons.ArrowLeft className="w-5 h-5" />
@@ -368,7 +368,8 @@ useEffect(() => {
         </div>
         <button
           onClick={() => setIsSyncModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black rounded-lg transition-all shadow-md uppercase tracking-wider"
+          className="px-4 py-2 text-xs font-black rounded-lg transition-all shadow-md uppercase tracking-wider"
+          style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
         >
           Vincular Vídeo
         </button>
@@ -379,8 +380,8 @@ useEffect(() => {
 
         {/* ── PANELL ESQUERRE: Subtítols ─────────────────────────────────────── */}
         <div
-          className="flex-shrink-0 overflow-hidden bg-[#111827]"
-          style={{ width: `${mainSplitPercent}%` }}
+          className="flex-shrink-0 overflow-hidden"
+          style={{ width: `${mainSplitPercent}%`, backgroundColor: 'var(--th-editor-bg)' }}
         >
           <SubtitlesEditor
             title="Llista de Subtítols"
@@ -407,7 +408,7 @@ useEffect(() => {
 
         {/* Divisor esquerra | dreta */}
         <div
-          className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
+          className="w-1.5 hover:bg-gray-500/50 cursor-col-resize flex-shrink-0 transition-colors" style={{ backgroundColor: 'var(--th-divider)' }}
           onMouseDown={handleMainSplitMouseDown}
         />
 
@@ -416,7 +417,7 @@ useEffect(() => {
           <div className="flex-grow min-h-0 bg-black overflow-hidden">
             <VideoPlaybackArea {...playerProps} />
           </div>
-          <div className="flex-shrink-0 bg-[#1e293b] border-t border-gray-700/50">
+          <div className="flex-shrink-0 border-t border-gray-700/50" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
             <VideoSubtitlesToolbar
               onOpenSync={() => setIsSyncModalOpen(true)}
               onExportSrt={() => {}}

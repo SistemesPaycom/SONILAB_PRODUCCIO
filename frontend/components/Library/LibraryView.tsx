@@ -44,14 +44,14 @@ const ConfirmationModal: React.FC<{
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[500] backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="rounded-2xl p-6 w-full max-w-sm shadow-2xl" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }} onClick={e => e.stopPropagation()}>
         <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-4 mx-auto">
           <Icons.Trash className="w-6 h-6 text-red-500" />
         </div>
         <h3 className="text-lg font-bold text-white text-center mb-2">{title}</h3>
-        <p className="text-gray-400 text-center text-sm mb-6">{message}</p>
+        <p className="text-center text-sm mb-6" style={{ color: 'var(--th-text-secondary)' }}>{message}</p>
         <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold rounded-xl text-xs uppercase tracking-widest transition-all">Cancel·lar</button>
+          <button onClick={onClose} className="flex-1 py-2.5 text-gray-200 font-bold rounded-xl text-xs uppercase tracking-widest transition-all hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)' }}>Cancel·lar</button>
           <button onClick={() => { onConfirm(); onClose(); }} className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg">{confirmLabel}</button>
         </div>
       </div>
@@ -428,14 +428,19 @@ const itemsToRender = currentItems.filter((item) => {
   return true;
 });
   return (
-    <div className={`bg-[#111827] rounded-none shadow-sm h-full flex flex-col overflow-hidden relative ${isCollapsed ? 'p-1.5' : 'p-4 sm:p-6'}`}>
+    <div className={`rounded-none shadow-sm h-full flex flex-col overflow-hidden relative ${isCollapsed ? 'p-1.5' : 'p-4 sm:p-6'}`} style={{ backgroundColor: 'var(--th-bg-primary)' }}>
+      <style>{`
+        .lib-nav-active { background-color: var(--th-accent) !important; }
+        .lib-nav-inactive { background-color: var(--th-bg-tertiary); }
+        .lib-nav-inactive:hover { background-color: var(--th-bg-hover); }
+      `}</style>
       <div className="flex-1 flex flex-col min-h-0">
         <div className={`flex items-start mb-4 ${isCollapsed ? 'flex-col items-center gap-3' : 'sm:flex-row justify-between items-start sm:items-center gap-4'}`}>
         <div className={`flex items-center ${isCollapsed ? 'flex-col gap-3' : 'gap-2'}`}>
   <button
     onClick={goLibrary}
     className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
-      ${(view === 'library' && page === 'library') ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${(view === 'library' && page === 'library') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
     title="Llibreria"
   >
@@ -446,7 +451,7 @@ const itemsToRender = currentItems.filter((item) => {
   <button
     onClick={goMedia}
     className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
-      ${(view === 'library' && page === 'media') ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${(view === 'library' && page === 'media') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
     title="Media"
   >
@@ -457,7 +462,7 @@ const itemsToRender = currentItems.filter((item) => {
   <button
     onClick={goProjects}
     className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
-      ${(view === 'library' && page === 'projects') ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${(view === 'library' && page === 'projects') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
     title="Proyectos"
   >
@@ -468,7 +473,7 @@ const itemsToRender = currentItems.filter((item) => {
   <button
     onClick={goTrash}
     className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
-      ${view === 'trash' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}
+      ${view === 'trash' ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
     title="Paperera"
   >
@@ -487,7 +492,8 @@ const itemsToRender = currentItems.filter((item) => {
       setRenameValue(selectedItem.name);
       setRenameModalOpen(true);
     }}
-    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2"
+    className="px-3 py-1.5 hover:brightness-125 text-white rounded-lg text-sm font-semibold flex items-center gap-2"
+    style={{ backgroundColor: 'var(--th-bg-tertiary)' }}
     title="Renombrar"
   >
     <Icons.Pencil />
@@ -514,11 +520,11 @@ const itemsToRender = currentItems.filter((item) => {
                         <>
                             {view === 'library' && (
                                  <>
-                                    <button onClick={() => setCreateFolderModalOpen(true)} className="px-3 py-2 bg-gray-700 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-gray-600" title="Crear carpeta"><Icons.FolderPlus /></button>
-                                    <button onClick={() => setImportModalOpen(true)} className="px-3 py-2 bg-gray-700 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-gray-600" title="Importar fitxer"><Icons.Upload /></button>
+                                    <button onClick={() => setCreateFolderModalOpen(true)} className="px-3 py-2 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} title="Crear carpeta"><Icons.FolderPlus /></button>
+                                    <button onClick={() => setImportModalOpen(true)} className="px-3 py-2 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} title="Importar fitxer"><Icons.Upload /></button>
                                     <button
     onClick={() => setIsCreateProjectOpen(true)}
-    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold"
+    className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
     title="Crear proyecto"
   >
     Crear proyecto
@@ -533,8 +539,8 @@ const itemsToRender = currentItems.filter((item) => {
         </div>
         
         {!isCollapsed && (
-            <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-400 border-b border-gray-800/50 mb-2 mx-2 h-10">
-                <button onClick={handleGoBack} disabled={view === 'library' && !currentFolder} className="p-1 rounded-full hover:bg-gray-700 disabled:opacity-0 transition-opacity" title="Enrere"><Icons.ArrowLeft className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2 px-4 py-2 text-sm mb-2 mx-2 h-10" style={{ color: 'var(--th-text-secondary)', borderBottom: '1px solid var(--th-border)' }}>
+                <button onClick={handleGoBack} disabled={view === 'library' && !currentFolder} className="p-1 rounded-full hover:bg-white/10 disabled:opacity-0 transition-opacity" title="Enrere"><Icons.ArrowLeft className="w-4 h-4" /></button>
                 <div className="flex items-center gap-1 truncate">
                     {breadcrumbs.map((crumb, index) => (
                         <React.Fragment key={crumb.id ?? crumb.name}>
@@ -546,7 +552,7 @@ const itemsToRender = currentItems.filter((item) => {
                                     dispatch({ type: 'SET_CURRENT_FOLDER', payload: crumb.id });
                                 }} 
                                 disabled={index === breadcrumbs.length - 1} 
-                                className={`px-2 py-1 rounded transition-colors ${index === breadcrumbs.length - 1 ? 'font-black text-gray-200 bg-transparent cursor-default' : 'hover:bg-gray-700 text-gray-400'}`}
+                                className={`px-2 py-1 rounded transition-colors ${index === breadcrumbs.length - 1 ? 'font-black text-gray-200 bg-transparent cursor-default' : 'hover:bg-white/10 text-gray-400'}`}
                             >
                                 {crumb.name}
                             </button>
@@ -560,37 +566,38 @@ const itemsToRender = currentItems.filter((item) => {
           <div className="flex-1 overflow-auto custom-scrollbar">
             <div className="min-w-max inline-block align-middle pb-8 w-full">
               <header 
-                className="grid gap-0 items-center text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-gray-800/50 sticky top-0 bg-[#111827] z-30 py-2.5 mx-2"
+                className="grid gap-0 items-center text-[10px] font-black uppercase tracking-widest sticky top-0 z-30 py-2.5 mx-2"
+                style={{ color: 'var(--th-text-muted)', backgroundColor: 'var(--th-bg-secondary)', borderBottom: '1px solid var(--th-border)' }}
                 style={{ gridTemplateColumns: gridColumns }}
               >
-                <div onClick={handleSelectAll} className="cursor-pointer h-full flex items-center justify-center border-r border-gray-800/30" aria-label="Seleccionar tot">
-                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isAllSelected ? 'bg-blue-600 border-blue-500' : 'border-gray-600 hover:border-gray-500'}`}>
+                <div onClick={handleSelectAll} className="cursor-pointer h-full flex items-center justify-center border-r border-[var(--th-border)]" aria-label="Seleccionar tot">
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isAllSelected ? '' : 'border-gray-600 hover:border-gray-500'}`} style={isAllSelected ? { backgroundColor: 'var(--th-accent)', borderColor: 'var(--th-accent)' } : undefined}>
                     {isAllSelected && <Icons.Check className="w-3 h-3 text-white" />}
                   </div>
                 </div>
-                <div className="relative group/header flex items-center h-full border-r border-gray-800/30">
-                  <div onClick={() => handleSortChange(SortByKey.Name)} className="flex-1 cursor-pointer px-4 h-full flex items-center hover:bg-gray-800/50 transition-colors">
+                <div className="relative group/header flex items-center h-full border-r border-[var(--th-border)]">
+                  <div onClick={() => handleSortChange(SortByKey.Name)} className="flex-1 cursor-pointer px-4 h-full flex items-center hover:bg-white/5 transition-colors">
                     <span>Nom</span>
                   </div>
-                  <div onMouseDown={handleResizeNameMouseDown} onClick={(e) => e.stopPropagation()} className="absolute -right-0.5 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 group-hover/header:bg-gray-600 transition-colors z-40" title="Canviar amplada">
-                    <div className="h-full w-[1px] bg-gray-700/50 group-hover/header:bg-blue-400 mx-auto" />
+                  <div onMouseDown={handleResizeNameMouseDown} onClick={(e) => e.stopPropagation()} className="absolute -right-0.5 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 group-hover/header:bg-white/10 transition-colors z-40" title="Canviar amplada">
+                    <div className="h-full w-[1px] bg-white/10 group-hover/header:bg-white/20 mx-auto" />
                   </div>
                 </div>
-                <div className="relative group/header flex items-center h-full border-r border-gray-800/30">
-                  <div onClick={() => handleSortChange(SortByKey.Format)} className="flex-1 cursor-pointer px-4 h-full flex items-center hover:bg-gray-800/50 transition-colors">
+                <div className="relative group/header flex items-center h-full border-r border-[var(--th-border)]">
+                  <div onClick={() => handleSortChange(SortByKey.Format)} className="flex-1 cursor-pointer px-4 h-full flex items-center hover:bg-white/5 transition-colors">
                     <span>Format</span>
                   </div>
-                  <div onMouseDown={handleResizeFormatMouseDown} onClick={(e) => e.stopPropagation()} className="absolute -right-0.5 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500 group-hover/header:bg-gray-600 transition-colors z-40" title="Canviar amplada">
-                    <div className="h-full w-[1px] bg-gray-700/50 group-hover/header:bg-blue-400 mx-auto" />
+                  <div onMouseDown={handleResizeFormatMouseDown} onClick={(e) => e.stopPropagation()} className="absolute -right-0.5 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 group-hover/header:bg-white/10 transition-colors z-40" title="Canviar amplada">
+                    <div className="h-full w-[1px] bg-white/10 group-hover/header:bg-white/20 mx-auto" />
                   </div>
                 </div>
-                <div onClick={() => handleSortChange(SortByKey.Date)} className="cursor-pointer whitespace-nowrap px-4 h-full flex items-center hover:bg-gray-800/50 transition-colors border-r border-gray-800/30">
+                <div onClick={() => handleSortChange(SortByKey.Date)} className="cursor-pointer whitespace-nowrap px-4 h-full flex items-center hover:bg-white/5 transition-colors border-r border-[var(--th-border)]">
                   <span>Data i hora</span>
                 </div>
                 <div className="h-full" />
               </header>
 
-              <div className="divide-y divide-gray-800/30 mx-2">
+              <div className="divide-y divide-[var(--th-border)] mx-2">
                 {itemsToRender.length > 0 ? (
                   itemsToRender.map((item) => (
                     <FileItem key={item.id} item={item} isSelected={selectedIds.has(item.id)} isDragging={isDragging} setIsDragging={setIsDragging} dropTargetId={dropTargetId} setDropTargetId={setDropTargetId} onPreviewDocument={handlePreviewDocument} onDoubleClickOpen={(docId) => {
@@ -624,19 +631,19 @@ const itemsToRender = currentItems.filter((item) => {
         )}
       </div>
 
-      <div className={`flex-shrink-0 mt-4 pt-4 space-y-3 ${!isCollapsed ? 'border-t border-gray-800/50 mx-2' : 'flex flex-col items-center'}`}>
-        <button onClick={onOpenNotifications} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} bg-gray-700 text-gray-200 hover:bg-gray-600 relative`} title="Notificacions">
+      <div className={`flex-shrink-0 mt-4 pt-4 space-y-3 ${!isCollapsed ? 'mx-2' : 'flex flex-col items-center'}`} style={!isCollapsed ? { borderTop: '1px solid var(--th-border)' } : undefined}>
+        <button onClick={onOpenNotifications} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} text-gray-200 hover:brightness-125 relative`} style={{ backgroundColor: 'var(--th-bg-tertiary)' }} title="Notificacions">
           <Icons.Bell className={isCollapsed ? 'w-5 h-5' : 'w-5 h-5'} />
           <span className={isCollapsed ? 'hidden' : 'inline'}>Tasques IA</span>
-          {activeTasksCount > 0 && <span className={`absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-gray-900 ${isCollapsed ? 'scale-75' : ''}`}>{activeTasksCount}</span>}
+          {activeTasksCount > 0 && <span className={`absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-gray-900 ${isCollapsed ? 'scale-75' : ''}`} style={{ backgroundColor: 'var(--th-accent)' }}>{activeTasksCount}</span>}
         </button>
         {isAdmin && (
-          <button onClick={() => setIsAdminPanelOpen(true)} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} bg-amber-700/40 text-amber-300 hover:bg-amber-700/60`} title="Administració d'usuaris">
+          <button onClick={() => setIsAdminPanelOpen(true)} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} bg-amber-700/40 hover:bg-amber-700/60`} style={{ color: 'var(--th-text-primary)' }} title="Administració d'usuaris">
             <span className="text-base">👥</span>
             <span className={isCollapsed ? 'hidden' : 'inline'}>Administrador</span>
           </button>
         )}
-        <button onClick={onOpenSettings} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} bg-gray-700 text-gray-200 hover:bg-gray-600`} title="Configuració">
+        <button onClick={onOpenSettings} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} text-gray-200 hover:brightness-125`} style={{ backgroundColor: 'var(--th-bg-tertiary)' }} title="Configuració">
           <Icons.Settings className={isCollapsed ? 'w-5 h-5' : 'w-5 h-5'} />
           <span className={isCollapsed ? 'hidden' : 'inline'}>Configuració</span>
         </button>
@@ -655,41 +662,42 @@ const itemsToRender = currentItems.filter((item) => {
 
       {isCreateFolderModalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[500]">
-          <div className="bg-gray-800 rounded-xl p-4 w-full max-w-sm border border-gray-700 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="rounded-xl p-4 w-full max-w-sm shadow-2xl" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }} onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-white mb-2">Nova carpeta</h2>
-            <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()} className="w-full px-3 py-2 rounded bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-blue-500 outline-none" placeholder="Nom de la carpeta" autoFocus />
+            <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()} className="w-full px-3 py-2 rounded text-gray-100 text-sm outline-none" style={{ backgroundColor: 'var(--th-bg-primary)', border: '1px solid var(--th-border)' }} placeholder="Nom de la carpeta" autoFocus />
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setCreateFolderModalOpen(false)} className="px-4 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-200 font-medium">Cancel·lar</button>
-              <button onClick={handleCreateFolder} className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded text-white font-medium">Crear</button>
+              <button onClick={() => setCreateFolderModalOpen(false)} className="px-4 py-1.5 text-sm rounded text-gray-200 font-medium hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)' }}>Cancel·lar</button>
+              <button onClick={handleCreateFolder} className="px-4 py-1.5 text-sm rounded font-medium lib-nav-active text-white">Crear</button>
             </div>
           </div>
         </div>
       )}
       {isRenameModalOpen && (
   <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[500]">
-    <div className="bg-gray-800 rounded-xl p-4 w-full max-w-sm border border-gray-700 shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="rounded-xl p-4 w-full max-w-sm shadow-2xl" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }} onClick={e => e.stopPropagation()}>
       <h2 className="text-lg font-semibold text-white mb-2">Renombrar</h2>
       <input
         value={renameValue}
         onChange={(e) => setRenameValue(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && handleRenameConfirm()}
-        className="w-full px-3 py-2 rounded bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-blue-500 outline-none"
+        className="w-full px-3 py-2 rounded text-gray-100 text-sm outline-none"
+        style={{ backgroundColor: 'var(--th-bg-primary)', border: '1px solid var(--th-border)' }}
         placeholder="Nou nom"
         autoFocus
       />
       <div className="flex justify-end gap-2 mt-4">
-        <button onClick={() => setRenameModalOpen(false)} className="px-4 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-200 font-medium">Cancel·lar</button>
-        <button onClick={handleRenameConfirm} className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded text-white font-medium">Guardar</button>
+        <button onClick={() => setRenameModalOpen(false)} className="px-4 py-1.5 text-sm rounded text-gray-200 font-medium hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)' }}>Cancel·lar</button>
+        <button onClick={handleRenameConfirm} className="px-4 py-1.5 text-sm rounded font-medium lib-nav-active text-white">Guardar</button>
       </div>
     </div>
   </div>
 )}
 {uploadProgress && (
-  <div className="fixed bottom-4 left-4 z-[600] bg-gray-900/90 border border-gray-700 text-gray-100 px-4 py-3 rounded-xl shadow-xl">
-    <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-1">Upload</div>
+  <div className="fixed bottom-4 left-4 z-[600] text-gray-100 px-4 py-3 rounded-xl shadow-xl" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}>
+    <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--th-text-muted)' }}>Upload</div>
     <div className="text-sm font-semibold truncate max-w-[320px]">{uploadProgress.name}</div>
-    <div className="mt-2 h-2 w-80 bg-gray-700 rounded overflow-hidden">
-      <div className="h-2 bg-blue-500" style={{ width: `${uploadProgress.pct}%` }} />
+    <div className="mt-2 h-2 w-80 rounded overflow-hidden" style={{ backgroundColor: 'var(--th-bg-tertiary)' }}>
+      <div className="h-2" style={{ width: `${uploadProgress.pct}%`, backgroundColor: 'var(--th-accent)' }} />
     </div>
     <div className="mt-1 text-xs text-gray-300">{uploadProgress.pct}%</div>
   </div>

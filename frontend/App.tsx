@@ -28,6 +28,7 @@ import * as Icons from './components/icons';
 import { AuthModal } from './components/Auth/AuthModal';
 
 import { AuthProvider, useAuth } from './context/Auth/AuthContext';
+import { ThemeProvider } from './context/Theme/ThemeContext';
 import { api } from './services/api';
 import TasksIAPanel, { JobRecord } from './components/TasksIA/TasksIAPanel';
 
@@ -54,10 +55,10 @@ const NotificationModal: React.FC<{
 }> = ({ translationTasks, transcriptionTasks, onClearTranslations, onClearTranscriptions, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[500] p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="p-5 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
+      <div className="rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh] overflow-hidden" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }} onClick={e => e.stopPropagation()}>
+        <div className="p-5 flex justify-between items-center" style={{ borderBottom: '1px solid var(--th-border)', backgroundColor: 'var(--th-bg-secondary)' }}>
           <h4 className="font-bold text-xl text-white flex items-center gap-3">
-            <Icons.Bell className="w-6 h-6 text-blue-400" />
+            <Icons.Bell className="w-6 h-6" style={{ color: 'var(--th-accent-text)' }} />
             Notificacions
           </h4>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none transition-colors">&times;</button>
@@ -73,16 +74,16 @@ const NotificationModal: React.FC<{
             ) : (
               <div className="space-y-4">
                 {translationTasks.map(task => (
-                  <div key={task.id} className="p-4 bg-gray-900/60 rounded-xl border border-gray-700/50 hover:border-600 transition-colors">
+                  <div key={task.id} className="p-4 rounded-xl transition-colors" style={{ backgroundColor: 'var(--th-bg-primary)', border: '1px solid var(--th-border)' }}>
                     <div className="flex justify-between items-center mb-3">
-                      <span className="text-[10px] font-mono font-bold text-gray-500 bg-gray-800 px-2 py-0.5 rounded">
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded" style={{ color: 'var(--th-text-muted)', backgroundColor: 'var(--th-bg-tertiary)' }}>
                         {new Date(task.timestamp).toLocaleTimeString()}
                       </span>
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm ${
                         task.status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
                         task.status === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                        'bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse'
-                      }`}>
+                        'animate-pulse'
+                      }`} style={task.status === 'processing' ? { backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)', border: '1px solid var(--th-focus-ring)' } : undefined}>
                         {task.status === 'processing' ? 'Processant...' : task.status === 'completed' ? 'Finalitzada' : 'Error'}
                       </span>
                     </div>
@@ -91,8 +92,8 @@ const NotificationModal: React.FC<{
                       <p className="text-sm font-bold text-gray-100 flex-1 truncate" title={task.documentName}>
                         {task.documentName}
                       </p>
-                      <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400 bg-gray-800/80 px-3 py-1 rounded-lg border border-gray-700/50">
-                        <span className="uppercase text-blue-400">{task.fromLang}</span>
+                      <div className="flex items-center gap-2 text-[11px] font-bold px-3 py-1 rounded-lg" style={{ color: 'var(--th-text-secondary)', backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border-subtle)' }}>
+                        <span className="uppercase" style={{ color: 'var(--th-accent-text)' }}>{task.fromLang}</span>
                         <span className="text-gray-600">→</span>
                         <span className="uppercase text-emerald-400">{task.toLang}</span>
                       </div>
@@ -112,14 +113,14 @@ const NotificationModal: React.FC<{
             ) : (
               <div className="space-y-4">
                 {transcriptionTasks.map(t => (
-                  <div key={t.id} className="p-4 bg-gray-900/60 rounded-xl border border-gray-700/50">
+                  <div key={t.id} className="p-4 rounded-xl" style={{ backgroundColor: 'var(--th-bg-primary)', border: '1px solid var(--th-border)' }}>
                     <div className="flex justify-between">
                       <div className="font-bold text-gray-100 truncate pr-4" title={t.projectName}>{t.projectName}</div>
                       <div className="text-xs text-gray-300">{t.status}</div>
                     </div>
 
-                    <div className="h-2 bg-gray-700 rounded overflow-hidden mt-2">
-                      <div className="h-2 bg-blue-500" style={{ width: `${t.progress}%` }} />
+                    <div className="h-2 rounded overflow-hidden mt-2" style={{ backgroundColor: 'var(--th-bg-tertiary)' }}>
+                      <div className="h-2" style={{ width: `${t.progress}%`, backgroundColor: 'var(--th-accent)' }} />
                     </div>
                     <div className="text-xs text-gray-300 mt-1">{t.progress}%</div>
 
@@ -131,11 +132,12 @@ const NotificationModal: React.FC<{
           </div>
         </div>
 
-        <div className="p-5 border-t border-gray-700 bg-gray-900/30 flex gap-4">
+        <div className="p-5 flex gap-4" style={{ borderTop: '1px solid var(--th-border)', backgroundColor: 'var(--th-bg-secondary)' }}>
           <button
             onClick={onClearTranslations}
             disabled={!translationTasks.some(t => t.status !== 'processing')}
-            className="flex-1 py-3 text-xs font-black text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all uppercase tracking-widest disabled:opacity-30 border border-gray-600"
+            className="flex-1 py-3 text-xs font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-30"
+            style={{ color: 'var(--th-text-secondary)', backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)' }}
           >
             Netejar traduccions
           </button>
@@ -143,14 +145,16 @@ const NotificationModal: React.FC<{
           <button
             onClick={onClearTranscriptions}
             disabled={!transcriptionTasks.some(t => t.status !== 'queued' && t.status !== 'processing')}
-            className="flex-1 py-3 text-xs font-black text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all uppercase tracking-widest disabled:opacity-30 border border-gray-600"
+            className="flex-1 py-3 text-xs font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-30"
+            style={{ color: 'var(--th-text-secondary)', backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)' }}
           >
             Netejar transcripcions
           </button>
 
           <button
             onClick={onClose}
-            className="flex-1 py-3 text-xs font-black text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all uppercase tracking-widest border border-blue-500 shadow-lg active:scale-95"
+            className="flex-1 py-3 text-xs font-black rounded-xl transition-all uppercase tracking-widest shadow-lg active:scale-95"
+            style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)', border: '1px solid var(--th-accent)' }}
           >
             Tancar
           </button>
@@ -491,8 +495,8 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
     if (!currentDoc || !openMode) {
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-12 text-center opacity-40">
-           <div className="w-32 h-32 bg-gray-800 rounded-full flex items-center justify-center mb-8 border border-gray-700">
-              <svg className="w-16 h-16 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+           <div className="w-32 h-32 rounded-full flex items-center justify-center mb-8" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}>
+              <svg className="w-16 h-16" style={{ color: 'var(--th-accent)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
            </div>
            <h2 className="text-3xl font-black uppercase tracking-tighter text-white">Script Editor Pro</h2>
            <p className="text-gray-500 mt-2 max-w-sm">Selecciona un document de la llibreria per començar a treballar o importar un nou guió.</p>
@@ -518,7 +522,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
       }
 
       return (
-        <main className="flex-grow overflow-y-auto bg-[#0f172a] p-8 flex flex-col items-center custom-scrollbar">
+        <main className="flex-grow overflow-y-auto p-8 flex flex-col items-center custom-scrollbar" style={{ backgroundColor: 'var(--th-bg-app)' }}>
            <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
               <ColumnView
                 content={history.present}
@@ -535,7 +539,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
     return (
       <div className="flex-1 flex flex-col min-h-0">
         <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
-        <main className="flex-grow overflow-y-auto bg-[#0f172a] p-8 flex flex-col items-center custom-scrollbar">
+        <main className="flex-grow overflow-y-auto p-8 flex flex-col items-center custom-scrollbar" style={{ backgroundColor: 'var(--th-bg-app)' }}>
            <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
               {editorView === 'csv' ? (
                 <CsvView content={csvContentToShow} setContent={handleTextChange} isEditable={isEditing} pageWidth={pageWidth} />
@@ -561,16 +565,16 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
   };
 
   return (
-    <div className="h-screen flex bg-[#020617] text-white font-sans overflow-hidden">
+    <div className="h-screen flex text-white font-sans overflow-hidden" style={{ backgroundColor: 'var(--th-bg-app)' }}>
       <DirtyGuardModal 
         isOpen={showDirtyModal}
         onSave={() => { history.save((data) => handleTextChange(data, 'script')); confirmNavigation(); }}
         onDiscard={confirmNavigation}
         onCancel={() => { setShowDirtyModal(false); setPendingNav(null); }}
       />
-      <aside 
-        style={{ width: isLibraryCollapsed ? COLLAPSED_WIDTH : libraryWidth }}
-        className={`flex-shrink-0 transition-[width] duration-200 ease-out bg-[#020617] relative z-10 will-change-[width]`}
+      <aside
+        style={{ width: isLibraryCollapsed ? COLLAPSED_WIDTH : libraryWidth, backgroundColor: 'var(--th-bg-app)' }}
+        className={`flex-shrink-0 transition-[width] duration-200 ease-out relative z-10 will-change-[width]`}
       >
         <LibraryView 
             onOpenDocument={handleOpenDocument} 
@@ -591,13 +595,13 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
         <button
           onClick={() => setIsLibraryCollapsed(!isLibraryCollapsed)}
           title={isLibraryCollapsed ? 'Expandir librería' : 'Colapsar librería'}
-          className="absolute top-1/2 -right-3 -translate-y-1/2 z-[60] w-6 h-10 flex items-center justify-center rounded-r-md bg-gray-700 hover:bg-blue-600 text-gray-300 hover:text-white transition-colors shadow-lg border border-gray-600 hover:border-blue-500"
+          className="absolute top-1/2 -right-3 -translate-y-1/2 z-[60] w-6 h-10 flex items-center justify-center rounded-r-md bg-gray-700 text-gray-300 hover:text-white transition-colors shadow-lg border border-gray-600"
           style={{ fontSize: '10px' }}
         >
           {isLibraryCollapsed ? '›' : '‹'}
         </button>
       </aside>
-      <section className="flex-1 flex flex-col min-w-0 bg-[#020617]">
+      <section className="flex-1 flex flex-col min-w-0" style={{ backgroundColor: 'var(--th-bg-app)' }}>
         {/* ── Lock banner: document obert en mode lectura per un altre usuari ── */}
         {docLockInfo && (
           <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-amber-900/60 border-b border-amber-600/40 text-amber-200 text-xs font-bold backdrop-blur-sm z-10">
@@ -859,7 +863,7 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
       return (
         <div className="flex-1 flex items-center justify-center text-gray-500">
           <div className="text-center">
-            <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
+            <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto mb-4" style={{ borderColor: 'var(--th-accent)', borderTopColor: 'transparent' }} />
             <p className="text-sm">Carregant document…</p>
           </div>
         </div>
@@ -875,7 +879,7 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
     return (
       <div className="flex-1 flex flex-col min-h-0">
         <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
-        <main className="flex-grow overflow-y-auto bg-[#0f172a] p-8 flex flex-col items-center custom-scrollbar">
+        <main className="flex-grow overflow-y-auto p-8 flex flex-col items-center custom-scrollbar" style={{ backgroundColor: 'var(--th-bg-app)' }}>
           <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
             {editorView === 'csv' ? (
               <CsvView content={csvContentToShow} setContent={handleTextChange} isEditable={isEditing} pageWidth={pageWidth} />
@@ -891,17 +895,18 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
   };
 
   return (
-    <div className="h-screen flex flex-col bg-[#020617] text-white font-sans overflow-hidden">
+    <div className="h-screen flex flex-col text-white font-sans overflow-hidden" style={{ backgroundColor: 'var(--th-bg-app)' }}>
       {/* Header amb botó HOME */}
-      <header className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-gray-900/80 border-b border-gray-800">
+      <header className="flex-shrink-0 flex items-center gap-3 px-4 py-2" style={{ backgroundColor: 'var(--th-bg-secondary)', borderBottom: '1px solid var(--th-border)' }}>
         <button
           onClick={handleGoHome}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:text-white transition-colors"
+          style={{ color: 'var(--th-text-secondary)' }}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
           HOME
         </button>
-        <div className="w-px h-5 bg-gray-700" />
+        <div className="w-px h-5" style={{ backgroundColor: 'var(--th-border)' }} />
         <span className="text-xs text-gray-500 truncate" title={currentDoc?.name || ''}>
           {currentDoc?.name || 'Carregant…'}
         </span>
@@ -966,9 +971,11 @@ const AuthedGate: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <AuthedGate />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AuthedGate />
+      </AuthProvider>
+    </ThemeProvider>
   );
 };
 

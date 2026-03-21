@@ -58,6 +58,7 @@ const DEFAULT_ZOOM = 100;
 const HOLD_MS = 500;           // ms threshold for long-press to arm drag
 const EDGE_HIT_PX = 8;        // pixels from segment edge for resize hit zone
 const MIN_SEG_DURATION = 0.1;  // minimum segment duration in seconds
+const RULER_H = 22;            // height of the timecode ruler strip at top of canvas
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,29 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   // ── Derived ──
   const totalWidth = Math.max(duration * zoom, viewportWidth);
 
+  // ── Read theme tokens from CSS custom properties ──
+  const getThemeColors = useCallback(() => {
+    const s = getComputedStyle(document.documentElement);
+    const v = (token: string, fallback: string) => s.getPropertyValue(`--th-${token}`).trim() || fallback;
+    return {
+      bg:             v('waveform-bg', '#111827'),
+      rulerBg:        v('waveform-ruler-bg', 'rgba(0,0,0,0.25)'),
+      line:           v('waveform-line', '#374151'),
+      grid:           v('waveform-grid', 'rgba(55,65,81,0.3)'),
+      gridText:       v('waveform-grid-text', 'rgba(107,114,128,0.6)'),
+      bar:            v('waveform-bar', 'rgba(113,113,122,0.5)'),
+      barPlay:        v('waveform-bar-play', 'rgba(16,185,129,0.6)'),
+      seg:            v('waveform-seg', 'rgba(79,70,229,0.2)'),
+      segIdle:        v('waveform-seg-idle', 'rgba(148,163,184,0.08)'),
+      segBorder:      v('waveform-seg-border', '#6366f1'),
+      segBorderIdle:  v('waveform-seg-border-idle', '#64748b'),
+      segHandle:      v('waveform-seg-handle', '#818cf8'),
+      segHandleIdle:  v('waveform-seg-handle-idle', '#94a3b8'),
+      segText:        v('waveform-seg-text', 'rgba(199,210,254,0.9)'),
+      segTextIdle:    v('waveform-seg-text-idle', 'rgba(156,163,175,0.7)'),
+    };
+  }, []);
+
   // ── Draw visible portion of the canvas ──
   const drawVisible = useCallback(
     (scrollLeft: number) => {
@@ -166,6 +190,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+
+      const tc = getThemeColors();
 
       const dpr = window.devicePixelRatio || 1;
       const w = viewportWidth;
@@ -184,16 +210,34 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       const timeStart = scrollLeft / zoom;
       const timeEnd = (scrollLeft + w) / zoom;
 
+      // ── Zone geometry ──
+      const rulerH = RULER_H;              // top ruler strip for timecodes
+      const contentY = rulerH;             // where waveform + segments start
+      const contentH = h - rulerH;         // height of the content zone
+
       // ── Background ──
-      ctx.fillStyle = '#111827';
+      ctx.fillStyle = tc.bg;
       ctx.fillRect(0, 0, w, h);
 
-      // ── Center line ──
-      ctx.strokeStyle = '#374151';
+      // ── Ruler background (slightly differentiated) ──
+      ctx.fillStyle = tc.rulerBg || 'rgba(0,0,0,0.25)';
+      ctx.fillRect(0, 0, w, rulerH);
+
+      // ── Ruler separator line ──
+      ctx.strokeStyle = tc.grid;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, h / 2);
-      ctx.lineTo(w, h / 2);
+      ctx.moveTo(0, rulerH);
+      ctx.lineTo(w, rulerH);
+      ctx.stroke();
+
+      // ── Center line (content zone) ──
+      ctx.strokeStyle = tc.line;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const centerY = contentY + contentH / 2;
+      ctx.moveTo(0, centerY);
+      ctx.lineTo(w, centerY);
       ctx.stroke();
 
       // ── Timecode grid ──
@@ -203,31 +247,32 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       else if (zoom < 80) step = 5;
       else if (zoom < 200) step = 2;
 
-      ctx.strokeStyle = 'rgba(55, 65, 81, 0.3)';
-      ctx.lineWidth = 1;
-      ctx.fillStyle = 'rgba(107, 114, 128, 0.6)';
-      ctx.font = '9px sans-serif';
-
       const firstMark = Math.floor(timeStart / step) * step;
       for (let t = firstMark; t <= timeEnd; t += step) {
         if (t < 0) continue;
         const x = (t - timeStart) * zoom;
+
+        // Grid lines span full height (ruler + content)
+        ctx.strokeStyle = tc.grid;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, h);
         ctx.stroke();
+
+        // Timecode labels ONLY in the ruler zone
+        ctx.fillStyle = tc.gridText;
+        ctx.font = '10px sans-serif';
         const mm = Math.floor(t / 60);
         const ss = Math.floor(t % 60);
-        ctx.fillText(`${mm}:${String(ss).padStart(2, '0')}`, x + 3, 12);
+        ctx.fillText(`${mm}:${String(ss).padStart(2, '0')}`, x + 3, rulerH - 5);
       }
 
-      // ── Waveform ──
+      // ── Waveform (drawn inside content zone only) ──
       if (peaks && peaks.length > 0) {
         const data = peaks.data;
-        const amp = h / 2;
-        ctx.fillStyle = isPlaying
-          ? 'rgba(16, 185, 129, 0.6)'
-          : 'rgba(113, 113, 122, 0.5)';
+        const amp = contentH / 2;
+        ctx.fillStyle = isPlaying ? tc.barPlay : tc.bar;
 
         // peaks has ~100 peaks/sec
         const peaksPerSec = data.length / (peaks.duration || duration || 1);
@@ -247,14 +292,14 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           }
 
           const barH = Math.max(1, max * amp);
-          ctx.fillRect(px, amp - barH, 1, barH * 2);
+          ctx.fillRect(px, centerY - barH, 1, barH * 2);
         }
       }
 
-      // ── Segments (read from refs — no callback dep on segments/activeId) ──
+      // ── Segments (drawn inside content zone only) ──
       const margin = 4;
-      const boxY = margin;
-      const boxH = h - margin * 2;
+      const boxY = contentY + margin;
+      const boxH = contentH - margin * 2;
       const curSegments = segmentsRef.current;
       const curActiveId = activeIdRef.current;
 
@@ -266,18 +311,16 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         const isActive = seg.id === curActiveId;
 
         // Background
-        ctx.fillStyle = isActive
-          ? 'rgba(79, 70, 229, 0.2)'
-          : 'rgba(148, 163, 184, 0.08)';
+        ctx.fillStyle = isActive ? tc.seg : tc.segIdle;
         ctx.fillRect(x1, boxY, x2 - x1, boxH);
 
         // Border
-        ctx.strokeStyle = isActive ? '#6366f1' : '#64748b';
+        ctx.strokeStyle = isActive ? tc.segBorder : tc.segBorderIdle;
         ctx.lineWidth = isActive ? 1.5 : 0.5;
         ctx.strokeRect(x1, boxY, x2 - x1, boxH);
 
         // Edge handles
-        ctx.fillStyle = isActive ? '#818cf8' : '#94a3b8';
+        ctx.fillStyle = isActive ? tc.segHandle : tc.segHandleIdle;
         ctx.fillRect(x1, boxY, 2, boxH);
         ctx.fillRect(x2 - 2, boxY, 2, boxH);
 
@@ -288,9 +331,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           if (text) {
             const fontSize = 10;
             ctx.font = `${fontSize}px sans-serif`;
-            ctx.fillStyle = isActive
-              ? 'rgba(199, 210, 254, 0.9)'
-              : 'rgba(156, 163, 175, 0.7)';
+            ctx.fillStyle = isActive ? tc.segText : tc.segTextIdle;
             ctx.save();
             ctx.beginPath();
             ctx.rect(x1 + 3, boxY + 2, segW - 6, boxH - 4);
@@ -301,7 +342,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         }
       });
     },
-    [viewportWidth, viewportHeight, zoom, duration, peaks, isPlaying]
+    [viewportWidth, viewportHeight, zoom, duration, peaks, isPlaying, getThemeColors]
   );
 
   // ── Redraw on scroll ──
@@ -707,12 +748,13 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
 
   return (
     <div
-      className="w-full h-full flex flex-col bg-gray-900 border-t border-gray-800 select-none overflow-hidden"
+      className="w-full h-full flex flex-col border-t border-[var(--th-border)] select-none overflow-hidden"
+      style={{ backgroundColor: 'var(--th-waveform-bg)' }}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
     >
       {/* ── Header ── */}
-      <div className="flex-shrink-0 flex items-center justify-between px-3 py-1 text-xs bg-gray-800 border-b border-gray-700 z-10 gap-2">
+      <div className="flex-shrink-0 flex items-center justify-between px-3 py-1 text-xs border-b border-[var(--th-border)] z-10 gap-2" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
         {/* LEFT: Title + status + undo/redo */}
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-gray-300 font-semibold whitespace-nowrap">Timeline</span>
@@ -731,12 +773,12 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           {/* Undo / Redo */}
           {(onUndo || onRedo) && (
             <>
-              <div className="w-px h-5 bg-gray-700 mx-0.5" />
+              <div className="w-px h-5 mx-0.5" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />
               <div className="flex items-center gap-0.5">
                 <button
                   disabled={!canUndo}
                   onClick={onUndo}
-                  className="p-1 rounded text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-20 transition-all"
+                  className="p-1 rounded text-gray-400 hover:bg-white/10 hover:text-white disabled:opacity-20 transition-all"
                   title="Desfer (Ctrl+Z)"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -746,7 +788,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
                 <button
                   disabled={!canRedo}
                   onClick={onRedo}
-                  className="p-1 rounded text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-20 transition-all"
+                  className="p-1 rounded text-gray-400 hover:bg-white/10 hover:text-white disabled:opacity-20 transition-all"
                   title="Refer (Ctrl+Shift+Z)"
                 >
                   <svg className="w-3.5 h-3.5 scale-x-[-1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -764,7 +806,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
             <div className="flex items-center gap-1 bg-black/30 rounded-full p-0.5 border border-white/5">
               <button
                 onClick={onToggleAutoScrollWave}
-                className={`p-1 rounded-full transition-all ${autoScrollWave ? 'bg-blue-600 text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
+                className={`p-1 rounded-full transition-all ${autoScrollWave ? 'text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
+                style={autoScrollWave ? { backgroundColor: 'var(--th-accent)' } : undefined}
                 title={autoScrollWave ? 'Seguiment actiu' : 'Seguiment inactiu'}
               >
                 <Icons.ArrowDown className={`w-3 h-3 ${autoScrollWave && isPlaying ? 'animate-bounce' : ''}`} />
@@ -772,7 +815,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
               {onScrollModeChangeWave && (
                 <button
                   onClick={() => onScrollModeChangeWave(scrollModeWave === 'stationary' ? 'page' : 'stationary')}
-                  className="p-1 rounded-full bg-gray-700 text-gray-400 hover:text-white transition-all"
+                  className="p-1 rounded-full text-gray-400 hover:text-white transition-all"
+                  style={{ backgroundColor: 'var(--th-bg-tertiary)' }}
                   title={scrollModeWave === 'stationary' ? 'Mode estacionari' : 'Mode pàgina'}
                 >
                   {scrollModeWave === 'stationary' ? <CursorStationaryIcon className="w-3 h-3" /> : <CursorPageIcon className="w-3 h-3" />}
@@ -785,7 +829,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           <div className="flex items-center gap-1">
             <button
               onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.5))}
-              className="px-1 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+              className="px-1 py-0.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
             >
               −
             </button>
@@ -795,11 +839,11 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
               max={MAX_ZOOM}
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
-              className="w-20 accent-blue-500"
+              className="w-20" style={{ accentColor: 'var(--th-accent)' }}
             />
             <button
               onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.5))}
-              className="px-1 py-0.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+              className="px-1 py-0.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
             >
               +
             </button>
@@ -815,8 +859,9 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
             <button
               onClick={onToggleAutosave}
               className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border whitespace-nowrap ${
-                autosaveEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-gray-800 text-gray-500 border-gray-700'
+                autosaveEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'text-gray-500 border-[var(--th-border)]'
               }`}
+              style={!autosaveEnabled ? { backgroundColor: 'var(--th-bg-surface)' } : undefined}
               title="Autosave"
             >
               AUTO
@@ -825,7 +870,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           {onSave && (
             <button
               onClick={onSave}
-              className="p-1 text-blue-300 hover:text-blue-200 transition-colors"
+              className="p-1 transition-colors" style={{ color: 'var(--th-accent-text)' }}
               title="Guardar (Ctrl+S)"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -855,7 +900,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         <div
           ref={scrollRef}
           className="absolute inset-0 overflow-x-auto overflow-y-hidden"
-          style={{ scrollbarWidth: 'thin', scrollbarColor: '#4b5563 #111827' }}
+          style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--th-waveform-scrollbar)' }}
           onScroll={handleScroll}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}

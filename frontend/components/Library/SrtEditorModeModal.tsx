@@ -40,17 +40,19 @@ const SrtEditorModeModal: React.FC<SrtEditorModeModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        className="rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Capçalera */}
         <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-          <h2 className="text-sm font-black text-white uppercase tracking-tighter">
+          <h2 className="text-sm font-black uppercase tracking-tighter" style={{ color: 'var(--th-text-primary)' }}>
             Obrir SRT amb…
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-white transition-colors text-xl leading-none"
+            className="transition-colors text-xl leading-none"
+            style={{ color: 'var(--th-text-muted)' }}
           >
             &times;
           </button>
@@ -61,30 +63,33 @@ const SrtEditorModeModal: React.FC<SrtEditorModeModalProps> = ({
           {/* Opció A: Editor complet */}
           <button
             onClick={() => setSelected('editor-video-subs')}
-            className={`w-full text-left rounded-xl border p-3.5 transition-colors ${
-              selected === 'editor-video-subs'
-                ? 'border-blue-500/70 bg-blue-900/20'
-                : 'border-gray-700 bg-gray-700/30 hover:bg-gray-700/50'
-            }`}
+            className="w-full text-left rounded-xl border p-3.5 transition-colors"
+            style={selected === 'editor-video-subs'
+              ? { borderColor: 'var(--th-accent)', backgroundColor: 'var(--th-accent-muted)' }
+              : { borderColor: 'var(--th-border)', backgroundColor: 'var(--th-bg-hover)' }
+            }
           >
             <div className="flex items-center gap-2.5">
-              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                selected === 'editor-video-subs' ? 'border-blue-400' : 'border-gray-500'
-              }`}>
+              <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                style={selected === 'editor-video-subs'
+                  ? { borderColor: 'var(--th-accent)' }
+                  : { borderColor: 'var(--th-text-disabled)' }
+                }
+              >
                 {selected === 'editor-video-subs' && (
-                  <div className="w-2 h-2 rounded-full bg-blue-400" />
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--th-accent)' }} />
                 )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold text-white">✦ Editor complet</span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--th-text-primary)' }}>✦ Editor complet</span>
                   {(hasGuion) && (
-                    <span className="text-[9px] font-bold bg-blue-700/50 text-blue-200 border border-blue-600/40 px-1.5 py-0.5 rounded">
+                    <span className="text-[9px] font-bold border px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)', borderColor: 'var(--th-accent)' }}>
                       Recomanat
                     </span>
                   )}
                 </div>
-                <p className="text-[10px] text-gray-500 mt-0.5">
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--th-text-muted)' }}>
                   Panell de guió, corrector automàtic i sincronització
                 </p>
               </div>
@@ -94,23 +99,26 @@ const SrtEditorModeModal: React.FC<SrtEditorModeModalProps> = ({
           {/* Opció B: Editor bàsic */}
           <button
             onClick={() => setSelected('editor-srt-standalone')}
-            className={`w-full text-left rounded-xl border p-3.5 transition-colors ${
-              selected === 'editor-srt-standalone'
-                ? 'border-gray-400/70 bg-gray-700/40'
-                : 'border-gray-700 bg-gray-700/30 hover:bg-gray-700/50'
-            }`}
+            className="w-full text-left rounded-xl border p-3.5 transition-colors"
+            style={selected === 'editor-srt-standalone'
+              ? { borderColor: 'var(--th-accent)', backgroundColor: 'var(--th-accent-muted)' }
+              : { borderColor: 'var(--th-border)', backgroundColor: 'var(--th-bg-hover)' }
+            }
           >
             <div className="flex items-center gap-2.5">
-              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                selected === 'editor-srt-standalone' ? 'border-gray-300' : 'border-gray-500'
-              }`}>
+              <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                style={selected === 'editor-srt-standalone'
+                  ? { borderColor: 'var(--th-accent)' }
+                  : { borderColor: 'var(--th-text-disabled)' }
+                }
+              >
                 {selected === 'editor-srt-standalone' && (
-                  <div className="w-2 h-2 rounded-full bg-gray-300" />
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--th-accent)' }} />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-white">Editor bàsic</div>
-                <p className="text-[10px] text-gray-500 mt-0.5">
+                <div className="text-sm font-bold" style={{ color: 'var(--th-text-primary)' }}>Editor bàsic</div>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--th-text-muted)' }}>
                   Edició ràpida de subtítols sense panell de guió
                 </p>
               </div>
@@ -123,9 +131,10 @@ const SrtEditorModeModal: React.FC<SrtEditorModeModalProps> = ({
               type="checkbox"
               checked={remember}
               onChange={(e) => setRemember(e.target.checked)}
-              className="w-3.5 h-3.5 accent-blue-500"
+              className="w-3.5 h-3.5"
+              style={{ accentColor: 'var(--th-accent)' }}
             />
-            <span className="text-[10px] text-gray-400">
+            <span className="text-[10px]" style={{ color: 'var(--th-text-muted)' }}>
               Recordar la meva elecció (es pot canviar des de Configuració)
             </span>
           </label>
@@ -135,13 +144,15 @@ const SrtEditorModeModal: React.FC<SrtEditorModeModalProps> = ({
         <div className="px-4 pb-4 flex gap-2 justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-gray-400 hover:text-white bg-gray-700/50 hover:bg-gray-700 rounded-xl transition-colors"
+            className="px-4 py-2 text-xs font-bold rounded-xl transition-colors"
+            style={{ color: 'var(--th-text-muted)', backgroundColor: 'var(--th-bg-hover)' }}
           >
             Cancel·lar
           </button>
           <button
             onClick={handleOpen}
-            className="px-5 py-2 text-xs font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors"
+            className="px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-colors"
+            style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
           >
             Obrir
           </button>

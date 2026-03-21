@@ -114,7 +114,7 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
         {/* Capçalera */}
         <div className="flex-shrink-0 p-5 bg-gray-900/50 border-b border-gray-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400">
+            <div className="p-2.5 rounded-xl" style={{ backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)' }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
               </svg>
@@ -151,9 +151,10 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                     onClick={() => setMethod('fuzzy')}
                     className={`p-3 rounded-xl border text-left transition-all ${
                       method === 'fuzzy'
-                        ? 'bg-blue-900/30 border-blue-500/60 text-white'
+                        ? 'text-white'
                         : 'bg-gray-900/40 border-gray-700/50 text-gray-400 hover:border-gray-500/60 hover:text-gray-200'
                     }`}
+                    style={method === 'fuzzy' ? { backgroundColor: 'var(--th-accent-muted)', borderColor: 'var(--th-accent)' } : undefined}
                   >
                     <div className="text-lg mb-1">⚡</div>
                     <div className="text-[11px] font-black uppercase tracking-tight">Fuzzy</div>
@@ -236,14 +237,14 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
                       <div className="space-y-1">
                         <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">Sensibilitat — {Math.round(threshold * 100)}%</label>
                         <div className="flex items-center gap-3">
-                          <input type="range" min={0.2} max={0.9} step={0.05} value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value))} className="flex-1 accent-blue-500" />
+                          <input type="range" min={0.2} max={0.9} step={0.05} value={threshold} onChange={(e) => setThreshold(parseFloat(e.target.value))} className="flex-1 accent-current" />
                           <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">{threshold <= 0.35 ? 'agressiu' : threshold <= 0.55 ? 'equilibrat' : 'conservador'}</span>
                         </div>
                       </div>
                       <div className="space-y-1">
                         <label className="text-[9px] font-black uppercase tracking-widest text-gray-500">Finestra de cerca — ±{windowSize}</label>
                         <div className="flex items-center gap-3">
-                          <input type="range" min={3} max={20} step={1} value={windowSize} onChange={(e) => setWindowSize(parseInt(e.target.value, 10))} className="flex-1 accent-blue-500" />
+                          <input type="range" min={3} max={20} step={1} value={windowSize} onChange={(e) => setWindowSize(parseInt(e.target.value, 10))} className="flex-1 accent-current" />
                           <span className="text-[10px] font-mono text-gray-500 w-16 text-right whitespace-nowrap">{windowSize <= 5 ? 'precís' : windowSize <= 10 ? 'normal' : 'ampli'}</span>
                         </div>
                       </div>
@@ -253,8 +254,8 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
               )}
 
               {/* Info inline review */}
-              <div className="p-3 bg-blue-950/30 rounded-xl border border-blue-800/30 text-[9px] text-blue-300/70 space-y-1">
-                <div className="font-bold text-blue-300/90 uppercase tracking-widest mb-1">📋 Revisió inline</div>
+              <div className="p-3 bg-gray-800/50 rounded-xl border border-gray-700/30 text-[9px] text-gray-400 space-y-1">
+                <div className="font-bold text-gray-300 uppercase tracking-widest mb-1">📋 Revisió inline</div>
                 <div>• Les correccions <span className="text-amber-300">s'aplicaran directament</span> a l'editor</div>
                 <div>• Cada canvi mostrarà el text proposat en <span className="text-amber-300">groc/amber</span></div>
                 <div>• Podràs <span className="text-emerald-400">acceptar ✓</span> o <span className="text-red-400">rebutjar ✗</span> cada subtítol individualment</div>
@@ -284,7 +285,8 @@ const TranscriptCorrectionModal: React.FC<TranscriptCorrectionModalProps> = ({
             <button
               onClick={handleRun}
               disabled={isRunning}
-              className="px-5 py-2 text-xs font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+              className="px-5 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+              style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
             >
               {isRunning ? (
                 <>

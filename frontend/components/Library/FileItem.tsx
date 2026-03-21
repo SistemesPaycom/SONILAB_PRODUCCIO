@@ -135,7 +135,8 @@ export const FileItem: React.FC<FileItemProps> = ({
           draggedElement.style.top = `0px`;
           draggedElement.style.pointerEvents = 'none';
           draggedElement.style.zIndex = '2000';
-          draggedElement.className = 'px-3 py-2 bg-blue-600 text-white rounded-xl shadow-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border-2 border-white/20 backdrop-blur-md';
+          draggedElement.className = 'px-3 py-2 text-white rounded-xl shadow-2xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border-2 border-white/20 backdrop-blur-md';
+          draggedElement.style.backgroundColor = 'var(--th-accent)';
           draggedElement.innerHTML = `<span>📂</span> <span>${selectedItems.length} element(s)</span>`;
           document.body.appendChild(draggedElement);
 
@@ -253,12 +254,12 @@ export const FileItem: React.FC<FileItemProps> = ({
       ref={itemRef}
       data-id={item.id}
       data-droptarget={item.type === 'folder' && view === 'library'}
-      className={`group grid gap-0 px-0 py-2 text-sm border-b border-gray-800 transition-all duration-150
-        ${isSelected ? 'bg-blue-900/40' : 'hover:bg-gray-800/60'}
-        ${isDropTarget ? 'bg-blue-800 ring-2 ring-blue-500 rounded-md' : ''}
+      className={`group grid gap-0 px-0 py-2 text-sm border-b border-[var(--th-border)] transition-all duration-150
+        ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'}
+        ${isDropTarget ? 'ring-2 rounded-md' : ''}
         ${isLocked ? 'opacity-70' : ''}
       `}
-      style={{ gridTemplateColumns: gridColumns }}
+      style={{ gridTemplateColumns: gridColumns, ...(isDropTarget ? { backgroundColor: 'var(--th-bg-tertiary)' } : {}) }}
     >
       <div
         onClick={handleToggleSelection}
@@ -268,9 +269,10 @@ export const FileItem: React.FC<FileItemProps> = ({
         <div
           className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
             isSelected
-              ? 'bg-blue-600 border-blue-500'
+              ? ''
               : 'border-gray-500 group-hover:border-gray-400'
           }`}
+          style={isSelected ? { backgroundColor: 'var(--th-accent)', borderColor: 'var(--th-accent)' } : undefined}
         >
           {isSelected && <Icons.Check className="w-3 h-3 text-white" />}
         </div>
@@ -283,7 +285,7 @@ export const FileItem: React.FC<FileItemProps> = ({
       >
         <span className="flex-shrink-0">{item.type === 'folder' ? '📁' : getFileIcon(sourceType || '', isLocked)}</span>
         <span className={`truncate text-gray-100 ${isLocked ? 'italic text-gray-400' : ''}`}>{item.name}</span>
-        {isLocked && <Icons.LockIcon size={12} className="text-blue-400 animate-pulse flex-shrink-0" />}
+        {isLocked && <Icons.LockIcon size={12} className="animate-pulse flex-shrink-0" style={{ color: 'var(--th-accent-text)' }} />}
       </div>
 
       <div className="flex items-center px-4 text-[10px] font-black uppercase text-gray-500 select-none truncate">

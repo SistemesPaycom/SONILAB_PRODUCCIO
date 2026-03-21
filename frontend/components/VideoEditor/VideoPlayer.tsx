@@ -120,8 +120,15 @@ const SubtitleOverlay: React.FC<{
     >
       <div
         ref={textRef}
-        className="subtitle-overlay-text inline-block px-4 py-1.5 bg-black/70 text-white rounded-lg font-medium shadow-2xl backdrop-blur-sm"
-        style={{ fontSize: `${finalFontPx}px`, lineHeight: 1.35, whiteSpace: 'nowrap' }}
+        className="subtitle-overlay-text inline-block px-4 py-1.5 rounded-lg font-medium shadow-2xl backdrop-blur-sm"
+        style={{
+          fontSize: `${finalFontPx}px`,
+          lineHeight: 1.35,
+          whiteSpace: 'nowrap',
+          color: '#FFFFFF',
+          backgroundColor: 'rgba(0, 0, 0, 0.70)',
+          textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+        }}
       >
         <SubtitleLines text={text} />
       </div>

@@ -82,7 +82,7 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
   const statusColor = (s: string) => {
     switch (s) {
       case 'queued': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-      case 'processing': return 'bg-blue-500/20 text-blue-400 border-blue-500/30 animate-pulse';
+      case 'processing': return 'animate-pulse tasks-ia-processing';
       case 'done': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
       case 'error': return 'bg-red-500/20 text-red-400 border-red-500/30';
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
@@ -104,6 +104,7 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[500] p-4 backdrop-blur-sm" onClick={onClose}>
+      <style>{`.tasks-ia-processing { background-color: var(--th-accent-muted); color: var(--th-accent-text); border-color: var(--th-focus-ring); }`}</style>
       <div
         className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh] overflow-hidden"
         onClick={e => e.stopPropagation()}
@@ -111,7 +112,7 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
         {/* Header */}
         <div className="p-5 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h4 className="font-bold text-xl text-white flex items-center gap-3">
-            <Icons.Bell className="w-6 h-6 text-blue-400" />
+            <Icons.Bell className="w-6 h-6" style={{ color: 'var(--th-accent-text)' }} />
             Tasques IA
           </h4>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl leading-none transition-colors">&times;</button>
@@ -123,17 +124,18 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
             onClick={() => setTab('active')}
             className={`flex-1 py-3 text-sm font-black uppercase tracking-widest transition-colors relative ${
               tab === 'active'
-                ? 'text-blue-400'
+                ? ''
                 : 'text-gray-500 hover:text-gray-300'
             }`}
+            style={tab === 'active' ? { color: 'var(--th-accent-text)' } : undefined}
           >
             En cua / Processant
             {activeJobs.length > 0 && (
-              <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold border" style={{ backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)', borderColor: 'var(--th-accent)' }}>
                 {activeJobs.length}
               </span>
             )}
-            {tab === 'active' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400" />}
+            {tab === 'active' && <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: 'var(--th-accent)' }} />}
           </button>
           <button
             onClick={() => setTab('history')}
@@ -152,7 +154,7 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
         <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
           {loading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--th-accent)', borderTopColor: 'transparent' }} />
             </div>
           ) : displayJobs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
@@ -198,8 +200,9 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
                       <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${
-                            job.status === 'queued' ? 'bg-amber-500' : 'bg-blue-500'
+                            job.status === 'queued' ? 'bg-amber-500' : ''
                           }`}
+                          style={job.status !== 'queued' ? { backgroundColor: 'var(--th-accent)' } : undefined}
                           style={{ width: `${Math.max(job.progress, 2)}%` }}
                         />
                       </div>

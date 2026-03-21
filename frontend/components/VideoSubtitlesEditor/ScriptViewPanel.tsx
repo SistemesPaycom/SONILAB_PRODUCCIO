@@ -113,7 +113,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
   // ── Mode col·lapsat: barra vertical estreta amb controls essencials ────────
   if (collapsed) {
     return (
-      <div className="flex flex-col h-full border-r border-gray-950 bg-gray-800/80 flex-shrink-0" style={{ width: '42px' }}>
+      <div className="flex flex-col h-full border-r border-gray-950 flex-shrink-0" style={{ width: '42px', backgroundColor: 'var(--th-header-bg)' }}>
         {/* Input ocult per a upload (necessari encara que estigui col·lapsat) */}
         <input
           ref={fileInputRef}
@@ -130,7 +130,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
         {/* Botó per expandir */}
         {onToggleCollapse && (
           <button
-            className="w-full h-9 flex items-center justify-center text-gray-500 hover:text-blue-300 hover:bg-gray-700/50 transition-colors border-b border-gray-700/50"
+            className="w-full h-9 flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-gray-700/50 transition-colors border-b border-gray-700/50"
             onClick={onToggleCollapse}
             title="Expandir panell del guió"
           >
@@ -153,7 +153,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
           {/* Finestra externa */}
           {onOpenExternal && (
             <button
-              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-blue-300 hover:bg-blue-900/30 rounded transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-white/5 rounded transition-colors"
               onClick={onOpenExternal}
               title="Obrir guió en finestra separada"
             >
@@ -164,7 +164,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
           {/* Vincular/canviar guió */}
           {canLink && (
             <button
-              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-blue-300 hover:bg-blue-900/30 rounded transition-colors disabled:opacity-40"
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-white/5 rounded transition-colors disabled:opacity-40"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               title={hasContent ? 'Canviar guió (DOCX o PDF)' : 'Vincular guió (DOCX o PDF)'}
@@ -206,11 +206,11 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
 
   return (
     <div style={{ width: `${width}%` }} className="flex flex-col min-w-0 h-full border-r border-gray-950">
-      <header className="flex-shrink-0 h-11 border-b border-gray-700 bg-gray-800/80 flex items-center px-4 gap-3">
+      <header className="flex-shrink-0 h-11 border-b border-gray-700 flex items-center px-4 gap-3" style={{ backgroundColor: 'var(--th-header-bg)' }}>
         {/* Botó per col·lapsar */}
         {onToggleCollapse && (
           <button
-            className="text-gray-500 hover:text-blue-300 transition-colors mr-1"
+            className="text-gray-500 hover:text-gray-200 transition-colors mr-1"
             onClick={onToggleCollapse}
             title="Minimitzar panell del guió"
           >
@@ -225,7 +225,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
         {/* Botó per obrir el guió en una finestra externa */}
         {onOpenExternal && (
           <button
-            className="text-[9px] text-gray-500 hover:text-blue-300 bg-gray-700/50 hover:bg-blue-900/30 border border-gray-600/50 px-2 py-0.5 rounded transition-colors"
+            className="text-[9px] text-gray-500 hover:text-gray-200 bg-gray-700/50 hover:bg-white/5 border border-gray-600/50 px-2 py-0.5 rounded transition-colors"
             onClick={onOpenExternal}
             title="Obrir guió en finestra separada"
           >
@@ -280,7 +280,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
               }}
             />
             <button
-              className="text-[9px] text-gray-500 hover:text-blue-300 bg-gray-700/50 hover:bg-blue-900/30 border border-gray-600/50 px-2 py-0.5 rounded transition-colors disabled:opacity-40"
+              className="text-[9px] text-gray-500 hover:text-gray-200 bg-gray-700/50 hover:bg-white/5 border border-gray-600/50 px-2 py-0.5 rounded transition-colors disabled:opacity-40"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               title="Pujar o canviar el guió (DOCX o PDF)"
@@ -300,7 +300,8 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
       <main
         ref={scrollRef as React.RefObject<HTMLElement>}
         data-script-scroll-container="true"
-        className="flex-grow overflow-y-auto flex flex-col items-center min-h-0 bg-[#111827] px-4 pb-12 pt-0 custom-scrollbar"
+        className="flex-grow overflow-y-auto flex flex-col items-center min-h-0 px-4 pb-12 pt-0 custom-scrollbar"
+        style={{ backgroundColor: 'var(--th-bg-primary)' }}
       >
         {!hasContent ? (
           // Estat buit — mostra instruccions per vincular el guió
@@ -312,7 +313,7 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
             </div>
             {canLink && (
               <button
-                className="px-4 py-2 rounded-lg bg-blue-700/50 hover:bg-blue-600/60 border border-blue-600/50 text-blue-200 text-xs font-bold transition-colors"
+                className="px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)', border: '1px solid var(--th-focus-ring)' }}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
               >

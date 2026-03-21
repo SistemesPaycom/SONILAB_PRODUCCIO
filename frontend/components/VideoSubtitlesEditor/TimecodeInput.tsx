@@ -55,7 +55,7 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({ value, label, isEd
   };
 
   const labelEl = (
-    <span className="bg-gray-800/50 px-1 rounded text-[9px] text-gray-400 flex-shrink-0 select-none">{label}</span>
+    <span className="px-1 rounded text-[9px] flex-shrink-0 select-none" style={{ backgroundColor: 'var(--th-editor-label-bg)', color: 'var(--th-editor-meta)' }}>{label}</span>
   );
 
   if (editing) {
@@ -69,8 +69,8 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({ value, label, isEd
           onBlur={commit}
           onKeyDown={handleKeyDown}
           onClick={(e) => e.stopPropagation()}
-          className="font-mono text-[10px] text-yellow-300 bg-gray-900 border border-yellow-500/50 rounded px-0.5 w-[7.5ch] outline-none"
-          style={{ fontFamily: "'Courier Prime', monospace" }}
+          className="font-mono text-[10px] text-yellow-300 border border-yellow-500/50 rounded px-0.5 w-[7.5ch] outline-none"
+          style={{ backgroundColor: 'var(--th-editor-label-bg)', caretColor: 'var(--th-editor-caret)', fontFamily: "'Courier Prime', monospace" }}
           autoFocus
         />
       </div>
@@ -83,27 +83,30 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({ value, label, isEd
       {isEditable ? (
         <>
           <button
-            className="opacity-0 group-hover/tc:opacity-100 text-[8px] text-gray-500 hover:text-blue-400 transition-opacity leading-none px-px select-none"
+            className="opacity-0 group-hover/tc:opacity-100 text-[8px] transition-opacity leading-none px-px select-none"
+            style={{ color: 'var(--th-editor-meta)' }}
             onMouseDown={handleAdjust(-1)}
             tabIndex={-1}
             title="-100ms  |  Shift -10ms  |  Ctrl -1s"
           >◀</button>
           <span
-            className="font-mono text-[10px] text-gray-300 hover:text-yellow-300 hover:bg-yellow-500/10 rounded px-0.5 cursor-text transition-colors"
+            className="font-mono text-[10px] hover:text-yellow-600 hover:bg-yellow-500/10 rounded px-0.5 cursor-text transition-colors"
+            style={{ color: 'var(--th-editor-timecode)' }}
             onClick={startEdit}
             title="Clic per editar el timecode"
           >
             {secondsToSrtTime(value)}
           </span>
           <button
-            className="opacity-0 group-hover/tc:opacity-100 text-[8px] text-gray-500 hover:text-blue-400 transition-opacity leading-none px-px select-none"
+            className="opacity-0 group-hover/tc:opacity-100 text-[8px] transition-opacity leading-none px-px select-none"
+            style={{ color: 'var(--th-editor-meta)' }}
             onMouseDown={handleAdjust(1)}
             tabIndex={-1}
             title="+100ms  |  Shift +10ms  |  Ctrl +1s"
           >▶</button>
         </>
       ) : (
-        <span className="font-mono text-[10px] text-gray-300">{secondsToSrtTime(value)}</span>
+        <span className="font-mono text-[10px]" style={{ color: 'var(--th-editor-timecode)' }}>{secondsToSrtTime(value)}</span>
       )}
     </div>
   );

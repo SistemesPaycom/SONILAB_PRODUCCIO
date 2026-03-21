@@ -186,18 +186,19 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
 
   return (
     <div 
-        className="h-full flex flex-col bg-gray-900 text-gray-300 relative group/droparea"
+        className="h-full flex flex-col text-gray-300 relative group/droparea"
+        style={{ backgroundColor: 'var(--th-bg-primary)' }}
         data-droptarget="true"
         data-drop-action="link-subs"
     >
-      <div className="absolute inset-0 z-50 pointer-events-none border-4 border-dashed border-cyan-500/50 bg-cyan-600/10 flex items-center justify-center opacity-0 group-[.drop-hover]/droparea:opacity-100 transition-opacity duration-200">
-        <div className="bg-cyan-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex flex-col items-center gap-2 scale-110">
+      <div className="absolute inset-0 z-50 pointer-events-none border-4 border-dashed border-emerald-500/50 bg-emerald-600/10 flex items-center justify-center opacity-0 group-[.drop-hover]/droparea:opacity-100 transition-opacity duration-200">
+        <div className="bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex flex-col items-center gap-2 scale-110">
             <span className="text-3xl">🗒️</span>
             <span className="text-sm font-black uppercase tracking-widest">Vincular Subtítols (SRT)</span>
         </div>
       </div>
 
-      <header className="flex-shrink-0 flex flex-col border-b border-gray-700 bg-gray-800/80 backdrop-blur-md">
+      <header className="flex-shrink-0 flex flex-col border-b border-[var(--th-border)] backdrop-blur-md" style={{ backgroundColor: 'var(--th-header-bg)' }}>
         {/* Barra de propostes d'inserció (propose_new_cue) */}
         {pendingInsertions && pendingInsertions.length > 0 && (
           <div className="flex flex-col px-3 py-1.5 bg-violet-950/50 border-b border-violet-700/40 gap-1">
@@ -276,7 +277,7 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
           </div>
         )}
         <div className="flex items-center justify-between p-2">
-            <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-500 ml-2">{title}</h3>
+            <h3 className="font-black text-[10px] uppercase tracking-widest ml-2" style={{ color: 'var(--th-editor-meta)' }}>{title}</h3>
             
             <div className="flex items-center gap-1.5 px-2">
                 <button 
@@ -303,12 +304,13 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
                     R
                 </button>
 
-                <div className="w-px h-5 bg-gray-700 mx-1" />
+                <div className="w-px h-5 mx-1" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />
 
                 <button
                     title="Mostrar subtítols sobre el vídeo"
                     onClick={() => onOverlayConfigChange({ ...overlayConfig, show: !overlayConfig.show })}
-                    className={`p-1.5 rounded transition-colors ${overlayConfig.show ? 'text-blue-400 bg-blue-600/10' : 'text-gray-500 hover:bg-gray-700'}`}
+                    className={`p-1.5 rounded transition-colors ${overlayConfig.show ? '' : 'text-gray-500 hover:bg-white/10'}`}
+                    style={overlayConfig.show ? { color: 'var(--th-accent-text)', backgroundColor: 'var(--th-accent-muted)' } : undefined}
                 >
                     {overlayConfig.show ? <EyeIcon className="w-4 h-4" /> : <EyeOffIcon className="w-4 h-4" />}
                 </button>
@@ -318,14 +320,14 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
                   <div className="flex items-center gap-0.5 ml-0.5" title="Mida màxima subtítols sobre vídeo">
                     <button
                       onClick={() => onOverlayConfigChange({ ...overlayConfig, fontScale: Math.max(0.5, (overlayConfig.fontScale || 1) - 0.1) })}
-                      className="p-1 rounded text-gray-400 hover:bg-gray-700 text-[10px] font-bold leading-none"
+                      className="p-1 rounded text-gray-400 hover:bg-white/10 text-[10px] font-bold leading-none"
                     >A↓</button>
                     <span className="text-[10px] font-mono text-gray-400 w-7 text-center select-none">
                       {((overlayConfig.fontScale || 1) * 100).toFixed(0)}%
                     </span>
                     <button
                       onClick={() => onOverlayConfigChange({ ...overlayConfig, fontScale: Math.min(2.0, (overlayConfig.fontScale || 1) + 0.1) })}
-                      className="p-1 rounded text-gray-400 hover:bg-gray-700 text-[10px] font-bold leading-none"
+                      className="p-1 rounded text-gray-400 hover:bg-white/10 text-[10px] font-bold leading-none"
                     >A↑</button>
                   </div>
                 )}
@@ -333,27 +335,31 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
                 <button 
                     title={syncEnabled ? "Desactivar sincronització" : "Activar sincronització"}
                     onClick={() => onSyncChange(!syncEnabled)}
-                    className={`p-1.5 rounded transition-colors ${syncEnabled ? 'text-blue-400 bg-blue-600/10' : 'text-gray-500 hover:bg-gray-700'}`}
+                    className={`p-1.5 rounded transition-colors ${syncEnabled ? '' : 'text-gray-500 hover:bg-white/10'}`}
+                    style={syncEnabled ? { color: 'var(--th-accent-text)', backgroundColor: 'var(--th-accent-muted)' } : undefined}
                 >
                     {syncEnabled ? <LinkIcon className="w-4 h-4" /> : <LinkOffIcon className="w-4 h-4" />}
                 </button>
 
-                <div className="w-px h-5 bg-gray-700 mx-1" />
+                <div className="w-px h-5 mx-1" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />
 
                 <div className="flex items-center gap-1">
-                    <button 
+                    <button
                         onMouseDown={(e) => { e.preventDefault(); handleFormatAction('bold'); }}
-                        className={`w-7 h-7 rounded flex items-center justify-center text-xs font-black transition-colors ${formatState.bold ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-gray-700 text-gray-400'}`}
+                        className={`w-7 h-7 rounded flex items-center justify-center text-xs font-black transition-colors ${formatState.bold ? 'shadow-sm' : 'hover:bg-white/10'}`}
+                        style={formatState.bold ? { backgroundColor: 'var(--th-accent)', color: 'var(--th-text-inverse)' } : { color: 'var(--th-editor-meta)' }}
                         title="Negreta (Ctrl+B)"
                     >B</button>
-                    <button 
+                    <button
                         onMouseDown={(e) => { e.preventDefault(); handleFormatAction('italic'); }}
-                        className={`w-7 h-7 rounded flex items-center justify-center text-xs italic font-serif transition-colors ${formatState.italic ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-gray-700 text-gray-400'}`}
+                        className={`w-7 h-7 rounded flex items-center justify-center text-xs italic font-serif transition-colors ${formatState.italic ? 'shadow-sm' : 'hover:bg-white/10'}`}
+                        style={formatState.italic ? { backgroundColor: 'var(--th-accent)', color: 'var(--th-text-inverse)' } : { color: 'var(--th-editor-meta)' }}
                         title="Cursiva (Ctrl+I)"
                     >I</button>
-                    <button 
+                    <button
                         onMouseDown={(e) => { e.preventDefault(); handleFormatAction('underline'); }}
-                        className={`w-7 h-7 rounded flex items-center justify-center text-xs underline transition-colors ${formatState.underline ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-gray-700 text-gray-400'}`}
+                        className={`w-7 h-7 rounded flex items-center justify-center text-xs underline transition-colors ${formatState.underline ? 'shadow-sm' : 'hover:bg-white/10'}`}
+                        style={formatState.underline ? { backgroundColor: 'var(--th-accent)', color: 'var(--th-text-inverse)' } : { color: 'var(--th-editor-meta)' }}
                         title="Subratllat (Ctrl+U)"
                     >U</button>
                 </div>

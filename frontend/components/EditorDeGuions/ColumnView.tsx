@@ -479,7 +479,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
   const speakerColWidth = `${col1Width}px`;
   const textColWidth = '1fr';
   const editableClasses = isEditable
-    ? 'cursor-text outline-none focus:ring-1 focus:ring-blue-500 focus:bg-blue-50 rounded-sm'
+    ? 'cursor-text outline-none focus:ring-1 focus:ring-gray-400 focus:bg-gray-100 rounded-sm'
     : '';
 
   return (
@@ -523,7 +523,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
             }}
           >
             <div
-              className={`flex items-baseline justify-between${onTakeClick && takeNum > -1 ? ' cursor-pointer hover:bg-blue-50/60 rounded transition-colors' : ''}`}
+              className={`flex items-baseline justify-between${onTakeClick && takeNum > -1 ? ' cursor-pointer hover:bg-gray-200/60 rounded transition-colors' : ''}`}
               style={{ marginBottom: `${TAKE_HEADER_MARGIN_BOTTOM_PX}px` }}
               onClick={onTakeClick && takeNum > -1 ? () => onTakeClick(takeNum) : undefined}
             >

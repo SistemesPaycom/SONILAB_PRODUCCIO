@@ -149,9 +149,9 @@ const handleConvertToSsrtlsf = () => {
               <li>
                 <button
                   onClick={() => openInNewTab('editor-srt-standalone')}
-                  className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-cyan-600/20 hover:border-cyan-500/50 border border-transparent transition-all text-left"
+                  className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-white/5 hover:border-gray-500/50 border border-transparent transition-all text-left"
                 >
-                  <Icons.SubtitlesIcon className="w-8 h-8 text-cyan-400 flex-shrink-0" />
+                  <Icons.SubtitlesIcon className="w-8 h-8 text-gray-300 flex-shrink-0" />
                   <div>
                     <p className="font-bold text-gray-100 text-sm">Editor de subtítols (Sols SRT)</p>
                     <p className="text-xs text-gray-400">Mode graella clàssica tipus Subtitle Edit.</p>
@@ -164,9 +164,9 @@ const handleConvertToSsrtlsf = () => {
               <li>
                 <button
                   onClick={() => openInNewTab('editor')}
-                  className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-blue-600/20 hover:border-blue-500/50 border border-transparent transition-all text-left"
+                  className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-white/5 hover:border-gray-500/50 border border-transparent transition-all text-left"
                 >
-                  <Icons.ScriptEditorIcon className="w-8 h-8 text-blue-400 flex-shrink-0" />
+                  <Icons.ScriptEditorIcon className="w-8 h-8 text-gray-300 flex-shrink-0" />
                   <div>
                     <p className="font-bold text-gray-100 text-sm">Editor de guió</p>
                     <p className="text-xs text-gray-400">Processament de text estàndard.</p>

@@ -38,7 +38,7 @@ const SyncLibraryModal: React.FC<SyncLibraryModalProps> = ({ isOpen, onClose, on
         {/* Capçalera */}
         <div className="p-5 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-xl font-bold text-white flex items-center gap-3">
-            <Icons.Hash className="w-6 h-6 text-blue-400" />
+            <Icons.Hash className="w-6 h-6" style={{ color: 'var(--th-accent-text)' }} />
             Sincronitzar amb Llibreria
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl transition-colors">&times;</button>
@@ -48,13 +48,15 @@ const SyncLibraryModal: React.FC<SyncLibraryModalProps> = ({ isOpen, onClose, on
         <div className="flex bg-gray-900/80 border-b border-gray-700">
           <button
             onClick={() => setActiveTab('media')}
-            className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'media' ? 'bg-blue-600/20 text-blue-400 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'media' ? 'border-b-2' : 'text-gray-500 hover:text-gray-300'}`}
+            style={activeTab === 'media' ? { backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)', borderColor: 'var(--th-accent)' } : undefined}
           >
             Vídeo / Àudio
           </button>
           <button
             onClick={() => setActiveTab('subs')}
-            className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'subs' ? 'bg-cyan-600/20 text-cyan-400 border-b-2 border-cyan-500' : 'text-gray-500 hover:text-gray-300'}`}
+            className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'subs' ? 'border-b-2' : 'text-gray-500 hover:text-gray-300'}`}
+            style={activeTab === 'subs' ? { backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)', borderColor: 'var(--th-accent)' } : undefined}
           >
             Subtítols (SRT)
           </button>
@@ -71,7 +73,7 @@ const SyncLibraryModal: React.FC<SyncLibraryModalProps> = ({ isOpen, onClose, on
             filteredItems.map(item => (
               <div 
                 key={item.id}
-                className="group flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-gray-700/50 hover:border-blue-500/50 hover:bg-gray-900/80 transition-all cursor-default"
+                className="group flex items-center justify-between p-3 rounded-xl bg-gray-900/40 border border-gray-700/50 hover:border-gray-500/50 hover:bg-gray-900/80 transition-all cursor-default"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   <span className="text-xl">
@@ -92,7 +94,8 @@ const SyncLibraryModal: React.FC<SyncLibraryModalProps> = ({ isOpen, onClose, on
                       onClose(); // Tanquem només en vincular subtítols (acció final típica)
                     }
                   }}
-                  className="px-4 py-1.5 text-[10px] font-black bg-blue-600 hover:bg-blue-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all uppercase tracking-wider"
+                  className="px-4 py-1.5 text-[10px] font-black rounded-lg opacity-0 group-hover:opacity-100 transition-all uppercase tracking-wider"
+                  style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
                 >
                   Vincular
                 </button>

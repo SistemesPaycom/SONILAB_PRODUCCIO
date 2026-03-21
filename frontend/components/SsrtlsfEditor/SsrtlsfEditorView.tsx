@@ -68,7 +68,8 @@ export const SsrtlsfEditorView: React.FC<SsrtlsfEditorViewProps> = ({ currentDoc
           {isEditing && (
             <button 
               onClick={handleSave}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black rounded-lg transition-all shadow-md uppercase tracking-wider"
+              className="px-6 py-2 text-xs font-black rounded-lg transition-all shadow-md uppercase tracking-wider"
+              style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
             >
               Guardar Canvis
             </button>
@@ -76,7 +77,7 @@ export const SsrtlsfEditorView: React.FC<SsrtlsfEditorViewProps> = ({ currentDoc
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-4 md:p-8 bg-[#0f172a]">
+      <main className="flex-1 overflow-auto p-4 md:p-8" style={{ backgroundColor: 'var(--th-bg-app)' }}>
         <div className="max-w-5xl mx-auto bg-white rounded-sm shadow-2xl overflow-hidden">
           <table className="w-full text-sm text-left border-collapse table-fixed">
             <thead className="bg-gray-100 text-gray-600 font-black uppercase text-[10px] border-b-2 border-gray-200">
@@ -88,14 +89,14 @@ export const SsrtlsfEditorView: React.FC<SsrtlsfEditorViewProps> = ({ currentDoc
             </thead>
             <tbody className="text-gray-900">
               {rows.map((row, idx) => (
-                <tr key={row.id} className="border-b border-gray-100 hover:bg-blue-50/50 transition-colors group">
+                <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors group">
                   <td className="p-0 border-r border-gray-100 bg-gray-50/30">
                     <input 
                       type="text" 
                       value={row.tc} 
                       readOnly={!isEditing}
                       onChange={(e) => handleCellChange(idx, 'tc', e.target.value)}
-                      className="w-full p-3 bg-transparent font-mono text-[12px] text-gray-500 focus:bg-white focus:text-blue-600 focus:outline-none transition-colors"
+                      className="w-full p-3 bg-transparent font-mono text-[12px] text-gray-500 focus:bg-white focus:text-gray-800 focus:outline-none transition-colors"
                     />
                   </td>
                   <td className="p-0 border-r border-gray-100">
@@ -104,7 +105,7 @@ export const SsrtlsfEditorView: React.FC<SsrtlsfEditorViewProps> = ({ currentDoc
                       value={row.char} 
                       readOnly={!isEditing}
                       onChange={(e) => handleCellChange(idx, 'char', e.target.value)}
-                      className="w-full p-3 bg-transparent font-black text-blue-900 focus:bg-white focus:outline-none transition-colors text-center uppercase"
+                      className="w-full p-3 bg-transparent font-black text-gray-900 focus:bg-white focus:outline-none transition-colors text-center uppercase"
                     />
                   </td>
                   <td className="p-0">

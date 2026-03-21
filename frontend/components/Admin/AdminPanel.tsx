@@ -67,9 +67,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
   const roleLabel = (role: string) =>
     role === 'admin' ? (
-      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30">Admin</span>
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 border border-amber-500/30" style={{ color: 'var(--th-text-secondary)' }}>Admin</span>
     ) : (
-      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30">Usuari</span>
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border" style={{ backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)', borderColor: 'var(--th-accent)' }}>Usuari</span>
     );
 
   return (
@@ -107,7 +107,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                     required
                     value={form.email}
                     onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-gray-500 outline-none"
                     placeholder="usuari@sonilab.cat"
                   />
                 </div>
@@ -117,7 +117,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                     type="text"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-gray-500 outline-none"
                     placeholder="Nom complet"
                   />
                 </div>
@@ -130,7 +130,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                     required
                     value={form.password}
                     onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-gray-500 outline-none"
                     placeholder="Mínim 8 caràcters"
                   />
                 </div>
@@ -139,7 +139,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   <select
                     value={form.role}
                     onChange={e => setForm(f => ({ ...f, role: e.target.value as 'admin' | 'user' }))}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-gray-900 text-gray-100 text-sm border border-gray-700 focus:border-gray-500 outline-none"
                   >
                     <option value="user">Usuari</option>
                     <option value="admin">Administrador</option>
@@ -155,7 +155,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
               <button
                 type="submit"
                 disabled={creating || !form.email.trim() || !form.password.trim()}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors"
+                className="px-5 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold rounded-lg transition-colors"
+                style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
               >
                 {creating ? 'Creant...' : 'Crear Usuari'}
               </button>

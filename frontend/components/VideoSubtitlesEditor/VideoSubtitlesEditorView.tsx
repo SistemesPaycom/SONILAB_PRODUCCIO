@@ -893,7 +893,7 @@ const handleSave = useCallback(() => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#111827] text-gray-200">
+    <div className="flex flex-col h-full w-full text-gray-200" style={{ backgroundColor: 'var(--th-bg-primary)' }}>
 
       {/* ── Cos principal: panell esquerre + panell dret ───────────────────── */}
       <div ref={mainContainerRef} className="flex flex-1 min-h-0 overflow-hidden">
@@ -934,12 +934,12 @@ const handleSave = useCallback(() => {
           {/* Divisor guió | subtítols */}
           {!scriptPanelCollapsed && (
             <div
-              className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
+              className="w-1.5 hover:bg-gray-500/50 cursor-col-resize flex-shrink-0 transition-colors" style={{ backgroundColor: 'var(--th-divider)' }}
               onMouseDown={handleScriptSplitMouseDown}
             />
           )}
           {/* Subtítols */}
-          <div className="flex-grow h-full bg-[#111827] flex flex-col overflow-hidden">
+          <div className="flex-grow h-full flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--th-editor-bg)' }}>
             <SubtitlesEditor
               title="Subtítols SRT"
               segments={linkedSegmentsWithDiff}
@@ -975,7 +975,7 @@ const handleSave = useCallback(() => {
 
         {/* Divisor esquerra | dreta */}
         <div
-          className="w-1.5 bg-gray-900 hover:bg-blue-600/50 cursor-col-resize flex-shrink-0 transition-colors"
+          className="w-1.5 hover:bg-gray-500/50 cursor-col-resize flex-shrink-0 transition-colors" style={{ backgroundColor: 'var(--th-divider)' }}
           onMouseDown={handleMainSplitMouseDown}
         />
 
@@ -984,7 +984,7 @@ const handleSave = useCallback(() => {
           <div className="flex-grow min-h-0 bg-black overflow-hidden">
             <VideoPlaybackArea {...playerProps} />
           </div>
-          <div className="flex-shrink-0 bg-[#1e293b] border-t border-gray-700/50">
+          <div className="flex-shrink-0 border-t border-gray-700/50" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
             <VideoSubtitlesToolbar
               onOpenSync={() => setIsSyncModalOpen(true)} onExportSrt={handleExportSrt} isPlaying={isPlaying} onTogglePlay={onTogglePlay} onJumpSegment={onJumpSegment} onJumpTime={onJumpTime} currentTime={currentTime} duration={duration} onSeek={onSeek} playbackRate={playbackRate} onChangeRate={onChangeRate} isScriptLinked={isScriptLinked} onToggleScriptLink={() => setIsScriptLinked((p) => !p)} isEditable={isEditing} autoScrollWave={autoScrollWave} onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)} scrollModeWave={scrollModeWave} onScrollModeChangeWave={setScrollModeWave} autoScrollSubs={autoScrollSubs} onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
               subtitleOverlayShow={subsOverlayConfig.show}

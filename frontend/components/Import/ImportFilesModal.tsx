@@ -62,7 +62,7 @@ const ImportFilesModal: React.FC<ImportFilesModalProps> = ({
         <div className="flex justify-end pt-2">
           <button
             onClick={onClose}
-            className="px-8 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 uppercase text-xs tracking-widest"
+            className="px-8 py-2.5 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 uppercase text-xs tracking-widest" style={{ backgroundColor: 'var(--th-btn-primary-bg)' }}
           >
             Fet
           </button>

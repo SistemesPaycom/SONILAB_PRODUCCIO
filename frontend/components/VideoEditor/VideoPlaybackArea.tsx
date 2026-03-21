@@ -35,8 +35,8 @@ export const VideoPlaybackArea: React.FC<VideoPlaybackAreaProps> = (props) => {
             data-drop-action="link-media"
         >
             {/* Drop overlay */}
-            <div className="absolute inset-0 z-50 pointer-events-none border-4 border-dashed border-blue-500/50 bg-blue-600/10 flex items-center justify-center opacity-0 group-[.drop-hover]/droparea:opacity-100 transition-opacity duration-200">
-                <div className="bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex flex-col items-center gap-2 scale-110">
+            <div className="absolute inset-0 z-50 pointer-events-none border-4 border-dashed border-emerald-500/50 bg-emerald-600/10 flex items-center justify-center opacity-0 group-[.drop-hover]/droparea:opacity-100 transition-opacity duration-200">
+                <div className="bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex flex-col items-center gap-2 scale-110">
                     <span className="text-3xl">🎬</span>
                     <span className="text-sm font-black uppercase tracking-widest">Vincular Vídeo / Àudio</span>
                 </div>

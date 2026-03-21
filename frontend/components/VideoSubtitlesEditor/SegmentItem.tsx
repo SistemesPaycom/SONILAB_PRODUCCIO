@@ -89,7 +89,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   const gridCellStyle: React.CSSProperties = {
     borderWidth: gridOpacity > 0 ? '1px' : '0px',
     borderStyle: 'dashed',
-    borderColor: `rgba(6, 182, 212, ${gridOpacity})`, 
+    borderColor: `rgba(150, 150, 150, ${gridOpacity})`,
   };
 
   const maxCharsPerLine = generalConfig.maxCharsPerLine ?? 40;
@@ -422,17 +422,18 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex flex-col p-2 border-b border-gray-800 transition-colors duration-150 min-w-full ${
+      className={`relative flex flex-col p-2 border-b border-[var(--th-border)] transition-colors duration-150 min-w-full ${
         isActive
-          ? 'bg-blue-600/10 ring-1 ring-inset ring-blue-500/30'
+          ? 'ring-1 ring-inset'
           : proposedText
           ? 'bg-red-950/20 hover:bg-red-950/30'
           : isCorrected
           ? 'bg-rose-900/15 hover:bg-rose-900/25'
           : segment.hasDiff
           ? 'bg-red-900/10 hover:bg-red-900/20'
-          : 'hover:bg-gray-800/30'
+          : 'hover:bg-white/5'
       } cursor-pointer group`}
+      style={isActive ? { backgroundColor: 'var(--th-editor-row-active)', '--tw-ring-color': 'var(--th-focus-ring)' } as any : undefined}
       onClick={() => onClick(segment.id)}
     >
       {/* Indicador lateral vermell quan hasDiff */}
@@ -472,7 +473,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             <div style={gridCellStyle} className="flex items-center px-2 gap-1">
               {i === 0 && (
                 <>
-                  <span className="font-black text-blue-400 text-[10px] truncate">
+                  <span className="font-black text-[10px] truncate" style={{ color: 'var(--th-accent-text)' }}>
                     {segment.primaryTakeNum ? `TK${segment.primaryTakeNum}` : ''}
                   </span>
                   {segment.hasDiff && (
@@ -490,9 +491,9 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             {/* Columna 2: #Índex i CPS (a sota) */}
             <div style={gridCellStyle} className="flex items-center px-2">
               {i === 0 ? (
-                <span className="font-black text-gray-500 text-[11px]">#{segment.id}</span>
+                <span className="font-black text-[11px]" style={{ color: 'var(--th-editor-meta)' }}>#{segment.id}</span>
               ) : i === 1 ? (
-                <span className={`font-black text-[11px] whitespace-nowrap ${cpsValue > 20 ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
+                <span className={`font-black text-[11px] whitespace-nowrap ${cpsValue > 20 ? 'text-red-500 animate-pulse' : ''}`} style={cpsValue <= 20 ? { color: 'var(--th-editor-text-muted)' } : undefined}>
                   {cpsValue.toFixed(1)} <span className="text-[8px] opacity-60 font-normal">CPS</span>
                 </span>
               ) : null}
@@ -527,8 +528,9 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             <div
               style={gridCellStyle}
               className={`flex items-center px-2 justify-end font-black text-[11px] ${
-                charsPerLine[i] > maxCharsPerLine ? 'text-red-500 bg-red-500/10' : 'text-gray-400'
+                charsPerLine[i] > maxCharsPerLine ? 'text-red-500 bg-red-500/10' : ''
               }`}
+              style={charsPerLine[i] <= maxCharsPerLine ? { color: 'var(--th-editor-text-muted)' } : undefined}
             >
               {charsPerLine[i] > 0 && `${charsPerLine[i]}c`}
             </div>
@@ -552,14 +554,15 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
                 }}
                 data-segment-id={segment.id}
-                className={`outline-none whitespace-nowrap text-[14.5px] transition-colors ${
-                  isActive ? 'text-white' : 'text-gray-300'
-                } ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:bg-blue-900/30 focus:ring-1 focus:ring-blue-500/40 rounded-sm' : ''}`}
+                className={`outline-none whitespace-nowrap text-[14.5px] transition-colors ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:ring-1 rounded-sm' : ''}`}
                 style={{
                   fontFamily: "'Courier Prime', monospace",
                   lineHeight: ROW_HEIGHT,
                   minHeight: ROW_HEIGHT,
-                }}
+                  color: isActive ? 'var(--th-editor-text-active)' : 'var(--th-editor-text)',
+                  caretColor: 'var(--th-editor-caret)',
+                  '--tw-ring-color': 'var(--th-focus-ring)',
+                } as any}
                 spellCheck={false}
               />
               {charsPerLine[i] > maxCharsPerLine && <div className="absolute top-0 right-0 h-full w-0.5 bg-red-600/50" />}
@@ -609,14 +612,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
       {/* Barra d'accions: visible en hover o quan el segment és actiu */}
       {isEditable && (
         <div
-          className={`flex items-center gap-0.5 mt-0.5 pt-0.5 border-t border-gray-700/30 transition-opacity ${
+          className={`flex items-center gap-0.5 mt-0.5 pt-0.5 border-t border-white/10 transition-opacity ${
             isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
           }`}
           onClick={(e) => e.stopPropagation()}
         >
           {onInsertBefore && (
             <button
-              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-blue-300 hover:bg-blue-600/10 transition-colors"
+              className="px-1.5 py-0.5 rounded text-[9px] hover:bg-white/5 transition-colors" style={{ color: 'var(--th-editor-meta)' }}
               onClick={() => onInsertBefore(segment.id)}
               title="Insertar subtítol abans (Alt+↑)"
             >
@@ -625,14 +628,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           )}
           {onInsertAfter && (
             <button
-              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-blue-300 hover:bg-blue-600/10 transition-colors"
+              className="px-1.5 py-0.5 rounded text-[9px] hover:bg-white/5 transition-colors" style={{ color: 'var(--th-editor-meta)' }}
               onClick={() => onInsertAfter(segment.id)}
               title="Insertar subtítol després (Alt+↓)"
             >
               +↓
             </button>
           )}
-          {(onInsertBefore || onInsertAfter) && <div className="w-px h-3 bg-gray-700 mx-0.5 flex-shrink-0" />}
+          {(onInsertBefore || onInsertAfter) && <div className="w-px h-3 mx-0.5 flex-shrink-0" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />}
           {onSplit && (
             <button
               className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-amber-300 hover:bg-amber-600/10 transition-colors font-mono"

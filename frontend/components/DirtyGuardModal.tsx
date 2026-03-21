@@ -23,7 +23,7 @@ export const DirtyGuardModal: React.FC<DirtyGuardModalProps> = ({ isOpen, onSave
         <p className="text-gray-400 text-center text-sm mb-8">Vols guardar els canvis fets en aquest document abans de continuar?</p>
         
         <div className="flex flex-col gap-3">
-          <button onClick={onSave} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg">Guardar i sortir</button>
+          <button onClick={onSave} className="w-full py-3 text-white font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg" style={{ backgroundColor: 'var(--th-btn-primary-bg)' }}>Guardar i sortir</button>
           <button onClick={onDiscard} className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-gray-200 font-black uppercase text-xs tracking-widest rounded-xl transition-all">No guardar</button>
           <button onClick={onCancel} className="w-full py-3 text-gray-500 hover:text-gray-300 font-bold text-xs uppercase tracking-widest transition-all">Cancel·lar</button>
         </div>

@@ -222,11 +222,12 @@ export const LayerPanel: React.FC<LayerPanelProps> = (props) => {
             <div
               key={layer.id}
               onClick={() => !isActive && props.onSelect(layer.id)}
-              className={`p-2 rounded-lg mb-2 cursor-pointer ${isActive ? 'bg-blue-900/50 border border-blue-600' : 'bg-gray-900/50 hover:bg-gray-700/50'}`}
+              className={`p-2 rounded-lg mb-2 cursor-pointer ${isActive ? 'border' : 'bg-gray-900/50 hover:bg-gray-700/50'}`}
+              style={isActive ? { backgroundColor: 'var(--th-accent-muted)', borderColor: 'var(--th-accent)' } : undefined}
             >
               <div className="flex items-center gap-2">
                 <button onClick={() => props.onToggleVisible(layer.id)} className="p-1 rounded-md hover:bg-gray-700">
-                  {layer.visible ? <Icons.EyeIcon size={14} className="text-blue-400" /> : <Icons.EyeOffIcon size={14} className="text-gray-500" />}
+                  {layer.visible ? <Icons.EyeIcon size={14} style={{ color: 'var(--th-accent-text)' }} /> : <Icons.EyeOffIcon size={14} className="text-gray-500" />}
                 </button>
                 
                 {isEditing ? (
@@ -240,7 +241,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = (props) => {
                     className="flex-grow bg-gray-900 border border-gray-600 rounded px-1 py-0 text-sm"
                   />
                 ) : (
-                  <span onDoubleClick={() => startEditing(layer)} className={`flex-grow truncate ${isActive ? 'font-semibold text-blue-300' : ''}`}>
+                  <span onDoubleClick={() => startEditing(layer)} className={`flex-grow truncate ${isActive ? 'font-semibold' : ''}`} style={isActive ? { color: 'var(--th-accent-text)' } : undefined}>
                     {layer.name}
                   </span>
                 )}
@@ -283,7 +284,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = (props) => {
                   onChange={(e) => setPasswordInput(e.target.value)}
                   placeholder="Contrasenya"
                   maxLength={10}
-                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-900"
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-900"
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && (passwordModal.action === 'set' ? handlePasswordSet() : handlePasswordVerification())}
               />
@@ -291,9 +292,9 @@ export const LayerPanel: React.FC<LayerPanelProps> = (props) => {
               <div className="mt-4 flex justify-end gap-2">
                   <button onClick={closePasswordModal} className="px-4 py-2 bg-gray-700 text-gray-200 rounded-md text-sm font-semibold hover:bg-gray-600">Cancel·lar</button>
                   {passwordModal.action === 'set' ? (
-                      <button onClick={handlePasswordSet} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700">Establir</button>
+                      <button onClick={handlePasswordSet} className="px-4 py-2 text-white rounded-md text-sm font-semibold" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}>Establir</button>
                   ) : (
-                      <button onClick={handlePasswordVerification} className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-semibold hover:bg-blue-700">Confirmar</button>
+                      <button onClick={handlePasswordVerification} className="px-4 py-2 text-white rounded-md text-sm font-semibold" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}>Confirmar</button>
                   )}
               </div>
           </div>
@@ -306,7 +307,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = (props) => {
                   type="text"
                   value={deleteConfirmationInput}
                   onChange={(e) => setDeleteConfirmationInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-900"
+                  className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 bg-gray-900"
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && handleDeleteConfirmation()}
               />

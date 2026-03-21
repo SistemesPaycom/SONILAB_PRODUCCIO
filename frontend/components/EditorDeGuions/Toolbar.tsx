@@ -67,7 +67,8 @@ const CustomDropdown: React.FC<{
             <button
               key={opt.value}
               onClick={() => { onSelect(opt.value); setIsOpen(false); }}
-              className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${value === opt.value ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+              className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${value === opt.value ? 'text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+              style={value === opt.value ? { backgroundColor: 'var(--th-accent)' } : undefined}
             >
               {opt.icon}
               <span className="truncate">{opt.label}</span>
@@ -97,7 +98,7 @@ const PageWidthSlider: React.FC<{ value: number; onChange: (v: number) => void; 
       <div className="h-48 relative w-6 flex flex-col items-center">
         <div className="absolute inset-0 w-1.5 bg-white rounded-full left-1/2 -translate-x-1/2"></div>
         <div 
-          className="absolute bottom-0 w-1.5 bg-blue-500 rounded-full left-1/2 -translate-x-1/2 transition-all duration-75"
+          className="absolute bottom-0 w-1.5 rounded-full left-1/2 -translate-x-1/2 transition-all duration-75" style={{ backgroundColor: 'var(--th-accent)' }}
           style={{ height: `${progress}%` }}
         ></div>
         <input 
@@ -115,11 +116,11 @@ const PageWidthSlider: React.FC<{ value: number; onChange: (v: number) => void; 
           } as any}
         />
         <div 
-          className="absolute w-4 h-4 bg-blue-400 border-2 border-white rounded-full left-1/2 -translate-x-1/2 pointer-events-none shadow-md transition-all duration-75"
+          className="absolute w-4 h-4 border-2 border-white rounded-full left-1/2 -translate-x-1/2 pointer-events-none shadow-md transition-all duration-75" style={{ backgroundColor: 'var(--th-accent)' }}
           style={{ bottom: `calc(${progress}% - 8px)` }}
         ></div>
       </div>
-      <span className="text-[10px] font-mono font-bold text-blue-300">{value}px</span>
+      <span className="text-[10px] font-mono font-bold" style={{ color: 'var(--th-accent-text)' }}>{value}px</span>
     </div>
   );
 };
@@ -159,8 +160,8 @@ const TranslationModal: React.FC<{
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="text-center mb-6">
-          <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Icons.Languages className="w-8 h-8 text-blue-400" />
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: 'var(--th-accent-muted)' }}>
+            <Icons.Languages className="w-8 h-8" style={{ color: 'var(--th-accent-text)' }} />
           </div>
           <h2 className="text-2xl font-bold text-white">Traducció Intel·ligent</h2>
           <p className="text-gray-400 text-sm mt-1">Traducció optimitzada per a sincronia labial</p>
@@ -168,7 +169,7 @@ const TranslationModal: React.FC<{
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Idioma Original</label>
-            <select value={fromLang} onChange={e => setFromLang(e.target.value)} className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors">
+            <select value={fromLang} onChange={e => setFromLang(e.target.value)} className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm outline-none transition-colors">
               <option value="">Selecciona origen...</option>
               {SUPPORTED_LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
             </select>
@@ -176,7 +177,7 @@ const TranslationModal: React.FC<{
           <div className="flex justify-center py-1"><div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-gray-400">&darr;</div></div>
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Idioma a Traduir</label>
-            <select value={toLang} onChange={e => setToLang(e.target.value)} className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-colors">
+            <select value={toLang} onChange={e => setToLang(e.target.value)} className="w-full bg-gray-900 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm outline-none transition-colors">
               <option value="">Selecciona destí...</option>
               {toOptions.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
             </select>
@@ -184,7 +185,7 @@ const TranslationModal: React.FC<{
         </div>
         <div className="mt-8 flex gap-3">
           <button onClick={onClose} className="flex-1 px-4 py-3 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-bold transition-colors">Cancel·lar</button>
-          <button disabled={!fromLang || !toLang} onClick={handleStart} className="flex-[2] px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">Començar Traducció</button>
+          <button disabled={!fromLang || !toLang} onClick={handleStart} className="flex-[2] px-4 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}>Començar Traducció</button>
         </div>
       </div>
     </div>
@@ -272,8 +273,8 @@ const Toolbar: React.FC<ToolbarProps> = (props) => {
       <div className="flex items-center gap-4">
         {currentDoc && (
           <>
-            <button onClick={() => !isLocked && setShowTranslateModal(true)} disabled={isLocked} className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all shadow-lg active:scale-95 flex-shrink-0 font-bold ${isLocked ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>
-              {isLocked ? <div className="w-4 h-4 border-2 border-gray-500 border-t-blue-400 rounded-full animate-spin"></div> : <Icons.Languages className="w-4 h-4" />}
+            <button onClick={() => !isLocked && setShowTranslateModal(true)} disabled={isLocked} className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all shadow-lg active:scale-95 flex-shrink-0 font-bold ${isLocked ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'text-white'}`} style={!isLocked ? { backgroundColor: 'var(--th-btn-primary-bg)' } : undefined}>
+              {isLocked ? <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" style={{ borderTopColor: 'var(--th-accent-text)' }}></div> : <Icons.Languages className="w-4 h-4" />}
               <span>{isLocked ? 'Traduint...' : 'Traduir'}</span>
             </button>
             <div className="w-px h-6 bg-gray-700"></div>
@@ -287,7 +288,7 @@ const Toolbar: React.FC<ToolbarProps> = (props) => {
           {isExporting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Icons.Download className="w-5 h-5" />}
         </button>
         <div className="relative">
-          <button onClick={() => setShowWidthSlider(!showWidthSlider)} className={`w-10 h-10 flex items-center justify-center font-bold text-sm rounded-lg border transition-all ${showWidthSlider ? 'bg-blue-600 border-blue-400 text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'}`} title="Ajustar amplada de pàgina">&lt;F&gt;</button>
+          <button onClick={() => setShowWidthSlider(!showWidthSlider)} className={`w-10 h-10 flex items-center justify-center font-bold text-sm rounded-lg border transition-all ${showWidthSlider ? 'text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'}`} style={showWidthSlider ? { backgroundColor: 'var(--th-accent)', borderColor: 'var(--th-accent)' } : undefined} title="Ajustar amplada de pàgina">&lt;F&gt;</button>
           {showWidthSlider && <PageWidthSlider value={sliderValue} onChange={(v) => onPageWidthChange(`${v}px`)} onClose={() => setShowWidthSlider(false)} />}
         </div>
       </div>

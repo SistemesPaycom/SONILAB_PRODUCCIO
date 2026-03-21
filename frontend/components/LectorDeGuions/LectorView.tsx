@@ -931,7 +931,7 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
         return (
             <div className="w-full h-screen flex flex-col items-center justify-center bg-gray-900">
                 <p>Document not found.</p>
-                <button onClick={onClose} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">
+                <button onClick={onClose} className="mt-4 px-4 py-2 text-white rounded-lg" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}>
                     Back to Library
                 </button>
             </div>
@@ -949,9 +949,10 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                    onClick={() => setActiveLeftPanelTab('layers')}
                                    className={`w-1/2 py-2 text-sm font-medium text-center transition-colors ${
                                        activeLeftPanelTab === 'layers'
-                                           ? 'border-b-2 border-blue-500 text-blue-300 bg-gray-900'
+                                           ? 'border-b-2 bg-gray-900'
                                            : 'text-gray-400 hover:bg-gray-700'
                                    }`}
+                                   style={activeLeftPanelTab === 'layers' ? { borderColor: 'var(--th-accent)', color: 'var(--th-accent-text)' } : undefined}
                                >
                                    Capes
                                </button>
@@ -959,9 +960,10 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                    onClick={() => setActiveLeftPanelTab('director_notes')}
                                    className={`w-1/2 py-2 text-sm font-medium text-center transition-colors ${
                                        activeLeftPanelTab === 'director_notes'
-                                           ? 'border-b-2 border-blue-500 text-blue-300 bg-gray-900'
+                                           ? 'border-b-2 bg-gray-900'
                                            : 'text-gray-400 hover:bg-gray-700'
                                    }`}
+                                   style={activeLeftPanelTab === 'director_notes' ? { borderColor: 'var(--th-accent)', color: 'var(--th-accent-text)' } : undefined}
                                >
                                    Anotacions direcció
                                </button>
@@ -1131,7 +1133,8 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                             value={searchQuery} 
                             onChange={e => setSearchQuery(e.target.value)} 
                             placeholder="Buscar en el guión..." 
-                            className="w-48 text-sm bg-gray-600 px-2 py-1 rounded-md border border-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white" 
+                            className="w-48 text-sm bg-gray-600 px-2 py-1 rounded-md border border-gray-500 focus:outline-none focus:ring-1 text-white"
+                            style={{ '--tw-ring-color': 'var(--th-focus-ring)' } as React.CSSProperties} 
                         />
                         <span className="text-xs text-gray-400 font-mono w-14 text-center">{searchMatches.length > 0 ? `${activeMatch + 1}/${searchMatches.length}` : '0/0'}</span>
                         <button onClick={prevMatch} className="p-1.5 rounded-md hover:bg-gray-600"><Icons.ArrowUp className="w-4 h-4" /></button>
@@ -1155,7 +1158,8 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                             type="number"
                             value={textFormatContext.fontSize}
                             onChange={(e) => handleTextFormatChange({ fontSize: parseInt(e.target.value, 10) || 14 })}
-                            className="w-20 text-sm bg-gray-600 px-2 py-0.5 rounded-md border border-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                            className="w-20 text-sm bg-gray-600 px-2 py-0.5 rounded-md border border-gray-500 focus:outline-none focus:ring-1 text-white"
+                            style={{ '--tw-ring-color': 'var(--th-focus-ring)' } as React.CSSProperties}
                         />
                          <div className="w-px h-5 bg-gray-600 mx-1"></div>
                         <button onClick={() => handleTextFormatChange({ fontWeight: textFormatContext.fontWeight === 'bold' ? 'normal' : 'bold' })} className={`p-1.5 rounded-md ${textFormatContext.fontWeight === 'bold' ? 'bg-gray-500' : 'hover:bg-gray-600'}`}><Icons.Bold className="w-4 h-4" /></button>
@@ -1183,7 +1187,7 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                             )}
                         </div>
                         <div className="h-[50px] flex items-center px-4 border-t border-gray-700">
-                           <button onClick={onClose} className="flex items-center gap-2 text-sm font-semibold text-blue-400 hover:bg-blue-900/50 p-2 rounded-lg">
+                           <button onClick={onClose} className="flex items-center gap-2 text-sm font-semibold hover:bg-white/5 p-2 rounded-lg" style={{ color: 'var(--th-accent-text)' }}>
                                 <Icons.ArrowLeft className="w-5 h-5" />
                                 Sortir del guió
                             </button>
@@ -1193,7 +1197,7 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                     <div className="flex-grow flex flex-col min-w-0">
                         <div className="h-[50px] flex items-center justify-between px-4">
                             <div className="flex items-center">
-                                <button onClick={() => setSearchOpen(p => !p)} className={`p-2 rounded-md ${searchOpen ? 'bg-blue-900/50 text-blue-300' : 'hover:bg-gray-700'}`}>
+                                <button onClick={() => setSearchOpen(p => !p)} className={`p-2 rounded-md ${searchOpen ? '' : 'hover:bg-gray-700'}`} style={searchOpen ? { backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)' } : undefined}>
                                     <Icons.SearchIcon className="w-5 h-5" />
                                 </button>
                             </div>
@@ -1205,7 +1209,8 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                             <React.Fragment key={id}>
                                                 <button
                                                     onClick={() => handleToolChange(id)}
-                                                    className={`p-2 rounded-md ${tool === id ? 'bg-blue-900/50 text-blue-300' : 'hover:bg-gray-700'}`}
+                                                    className={`p-2 rounded-md ${tool === id ? '' : 'hover:bg-gray-700'}`}
+                                                    style={tool === id ? { backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)' } : undefined}
                                                     aria-label={toolTitles[id]}
                                                     title={toolTitles[id]}
                                                 >
@@ -1215,14 +1220,16 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                                     <div className="flex items-center gap-1 bg-gray-700 rounded-md p-0.5 ml-[-4px] border border-gray-600">
                                                         <button
                                                             onClick={() => setTipexAction('add')}
-                                                            className={`p-1.5 rounded ${tipexAction === 'add' ? 'bg-gray-800 shadow-sm text-blue-300' : 'text-gray-400 hover:bg-gray-600'}`}
+                                                            className={`p-1.5 rounded ${tipexAction === 'add' ? 'bg-gray-800 shadow-sm' : 'text-gray-400 hover:bg-gray-600'}`}
+                                                            style={tipexAction === 'add' ? { color: 'var(--th-accent-text)' } : undefined}
                                                             title="Afegir Tipex (+)"
                                                         >
                                                             <Icons.Plus size={14} />
                                                         </button>
                                                         <button
                                                             onClick={() => setTipexAction('subtract')}
-                                                            className={`p-1.5 rounded ${tipexAction === 'subtract' ? 'bg-gray-800 shadow-sm text-blue-300' : 'text-gray-400 hover:bg-gray-600'}`}
+                                                            className={`p-1.5 rounded ${tipexAction === 'subtract' ? 'bg-gray-800 shadow-sm' : 'text-gray-400 hover:bg-gray-600'}`}
+                                                            style={tipexAction === 'subtract' ? { color: 'var(--th-accent-text)' } : undefined}
                                                             title="Treure Tipex (-)"
                                                         >
                                                             <Icons.Minus size={14} />
@@ -1233,7 +1240,8 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                         ))}
                                         <button
                                             onClick={() => setIsAbsoluteViewerOn(v => !v)}
-                                            className={`p-2 rounded-md ${isAbsoluteViewerOn ? 'bg-blue-900/50 text-blue-300' : 'hover:bg-gray-700'}`}
+                                            className={`p-2 rounded-md ${isAbsoluteViewerOn ? '' : 'hover:bg-gray-700'}`}
+                                            style={isAbsoluteViewerOn ? { backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)' } : undefined}
                                             aria-label="Visualitzador absolut"
                                             title="Visualitzador absolut"
                                         >
@@ -1241,7 +1249,8 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                         </button>
                                         <button
                                             onClick={() => setShowAnnotationIds(prev => !prev)}
-                                            className={`p-2 rounded-md ${showAnnotationIds ? 'bg-blue-900/50 text-blue-300' : 'hover:bg-gray-700'}`}
+                                            className={`p-2 rounded-md ${showAnnotationIds ? '' : 'hover:bg-gray-700'}`}
+                                            style={showAnnotationIds ? { backgroundColor: 'var(--th-accent-muted)', color: 'var(--th-accent-text)' } : undefined}
                                             aria-label="Mostrar/Ocultar IDs d'anotació"
                                             title="Mostrar/Ocultar IDs d'anotació"
                                         >
@@ -1264,11 +1273,12 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                                             ? 'translate-x-0 opacity-100'
                                                             : '-translate-x-5 opacity-0 pointer-events-none'
                                                     } ${
-                                                        isActive ? 'border-blue-400 scale-110' : 'border-transparent hover:scale-110'
+                                                        isActive ? 'scale-110' : 'border-transparent hover:scale-110'
                                                     }`}
                                                     style={{
                                                         backgroundColor: color.hex,
                                                         transitionDelay: `${index * 50}ms`,
+                                                        ...(isActive ? { borderColor: 'var(--th-accent)' } : {}),
                                                     }}
                                                     aria-label={`Select color ${color.name}`}
                                                 />
@@ -1292,7 +1302,7 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                     <select
                                         value={selectedCharacter || ''}
                                         onChange={(e) => onSelectCharacter(e.target.value || null)}
-                                        className="text-sm appearance-none cursor-pointer bg-gray-700 border border-gray-600 rounded-md py-1 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="text-sm appearance-none cursor-pointer bg-gray-700 border border-gray-600 rounded-md py-1 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-gray-500"
                                     >
                                         <option value="">Personatges</option>
                                         {characters.map(char => (
@@ -1303,7 +1313,7 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                 <div className="relative">
                                     <select
                                         onChange={(e) => handleJumpToTake(Number(e.target.value))}
-                                        className="text-sm appearance-none cursor-pointer bg-gray-700 border border-gray-600 rounded-md py-1 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="text-sm appearance-none cursor-pointer bg-gray-700 border border-gray-600 rounded-md py-1 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-gray-500"
                                     >
                                         <option value="">TAKE</option>
                                         {activeDocument.takes?.map(take => (

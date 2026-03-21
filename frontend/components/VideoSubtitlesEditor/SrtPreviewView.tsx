@@ -37,20 +37,21 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
   }, [segments, filter]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#0b1120]">
+    <div className="flex-1 flex flex-col min-h-0" style={{ backgroundColor: 'var(--th-bg-app)' }}>
       {/* Header */}
-      <header className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-gray-700/50 bg-gray-900/60 backdrop-blur-md">
+      <header className="flex-shrink-0 flex items-center justify-between px-5 py-3 backdrop-blur-md" style={{ backgroundColor: 'var(--th-header-bg)', borderBottom: '1px solid var(--th-border)' }}>
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            style={{ color: 'var(--th-text-secondary)' }}
             title="Tancar"
           >
             <Icons.ArrowLeft className="w-5 h-5" />
           </button>
           <div className="min-w-0">
-            <h2 className="text-sm font-black text-white truncate">{currentDoc.name}</h2>
-            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+            <h2 className="text-sm font-black truncate" style={{ color: 'var(--th-text-primary)' }}>{currentDoc.name}</h2>
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--th-text-muted)' }}>
               Vista prèvia SRT · {segments.length} subtítols
             </span>
           </div>
@@ -63,12 +64,14 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
             value={filter}
             onChange={e => setFilter(e.target.value)}
             placeholder="Filtrar subtítols..."
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30"
+            className="w-full rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1"
+            style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)', color: 'var(--th-text-primary)', '--tw-ring-color': 'var(--th-focus-ring)' } as any}
           />
           {filter && (
             <button
               onClick={() => setFilter('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs"
+              style={{ color: 'var(--th-text-muted)' }}
             >
               ✕
             </button>
@@ -79,12 +82,12 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
       {/* Subtitle list */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
         {segments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+          <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--th-text-muted)' }}>
             <Icons.SubtitlesIcon className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm font-bold">El fitxer SRT és buit</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+          <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--th-text-muted)' }}>
             <p className="text-sm font-bold">Cap subtítol coincideix amb el filtre</p>
           </div>
         ) : (
@@ -92,25 +95,28 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
             {filtered.map((seg) => (
               <div
                 key={seg.id}
-                className="group flex gap-3 px-4 py-2.5 rounded-lg hover:bg-gray-800/60 transition-colors border border-transparent hover:border-gray-700/30"
+                className="group flex gap-3 px-4 py-2.5 rounded-lg transition-colors border border-transparent"
+                style={{ '--hover-bg': 'var(--th-editor-row-hover)' } as any}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--th-editor-row-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
               >
                 {/* Cue number */}
                 <div className="flex-shrink-0 w-8 text-right">
-                  <span className="text-[10px] font-mono font-bold text-gray-600 group-hover:text-gray-400 tabular-nums">
+                  <span className="text-[10px] font-mono font-bold tabular-nums" style={{ color: 'var(--th-editor-meta)' }}>
                     {seg.id}
                   </span>
                 </div>
 
                 {/* Timecodes */}
                 <div className="flex-shrink-0 w-[200px]">
-                  <span className="text-[11px] font-mono text-blue-400/70 group-hover:text-blue-400 tabular-nums">
+                  <span className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--th-editor-timecode)' }}>
                     {seg.start} → {seg.end}
                   </span>
                 </div>
 
                 {/* Text */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
+                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap break-words" style={{ color: 'var(--th-editor-text)' }}>
                     {seg.originalText || seg.richText || ''}
                   </p>
                 </div>
@@ -121,7 +127,7 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
       </div>
 
       {/* Footer status bar */}
-      <footer className="flex-shrink-0 px-5 py-2 border-t border-gray-800/50 bg-gray-900/40 flex items-center justify-between text-[10px] font-bold text-gray-600 uppercase tracking-widest">
+      <footer className="flex-shrink-0 px-5 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest" style={{ borderTop: '1px solid var(--th-border)', backgroundColor: 'var(--th-header-bg)', color: 'var(--th-text-muted)' }}>
         <span>{filtered.length} / {segments.length} subtítols</span>
         <span>Només lectura</span>
       </footer>

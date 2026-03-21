@@ -51,7 +51,8 @@ const ControlButton: React.FC<{ onClick: () => void; title: string; children: Re
       onClick={props.onClick}
       disabled={props.disabled}
       title={props.title}
-      className={`p-2 rounded-full transition-all text-gray-300 hover:bg-gray-700 hover:text-white disabled:opacity-20 ${props.className || ''}`}
+      className={`p-2 rounded-full transition-all hover:bg-white/10 disabled:opacity-20 ${props.className || ''}`}
+      style={{ color: 'var(--th-text-secondary)' }}
     >
       {props.children}
     </button>
@@ -102,7 +103,7 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
                 }
             `}</style>
 
-            <div className="relative w-full h-1.5 bg-gray-900 group cursor-pointer border-b border-white/5 overflow-hidden">
+            <div className="relative w-full h-1.5 group cursor-pointer border-b overflow-hidden" style={{ backgroundColor: 'var(--th-bg-tertiary)', borderBottomColor: 'var(--th-border)' }}>
                 <input
                     type="range"
                     min="0"
@@ -113,41 +114,42 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
                     className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-pointer custom-scrubber"
                 />
                 <div
-                    className="absolute top-0 left-0 h-full bg-blue-600 z-10"
-                    style={{ width: `${progressPercent}%`, transition: 'width 230ms linear' }}
+                    className="absolute top-0 left-0 h-full z-10"
+                    style={{ backgroundColor: 'var(--th-accent)', width: `${progressPercent}%`, transition: 'width 230ms linear' }}
                 />
-                <div className="absolute top-0 left-0 w-full h-full bg-gray-700/30 group-hover:bg-gray-700/50 transition-colors" />
+                <div className="absolute top-0 left-0 w-full h-full transition-colors" style={{ backgroundColor: 'rgba(128,128,128,0.1)' }} />
 
                 {/* Bola de reproducció (sempre visible sobre la barra) */}
                 <div
-                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full shadow-lg border-2 border-white z-30 group-hover:scale-125"
-                    style={{ left: `calc(${progressPercent}% - 6px)`, transition: 'left 230ms linear, transform 75ms' }}
+                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow-lg border-2 z-30 group-hover:scale-125"
+                    style={{ backgroundColor: 'var(--th-accent)', borderColor: 'var(--th-text-primary)', left: `calc(${progressPercent}% - 6px)`, transition: 'left 230ms linear, transform 75ms' }}
                 />
             </div>
 
-            <div className={`relative flex items-center justify-between px-3 py-2 select-none h-14 ${isEditable ? 'bg-gray-800/80' : 'bg-blue-900/20'}`}>
+            <div className={`relative flex items-center justify-between px-3 py-2 select-none h-14`} style={{ backgroundColor: isEditable ? 'var(--th-header-bg)' : 'var(--th-accent-muted)' }}>
 
                 {/* LEFT: Vincular */}
                 <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
                     {isEditable ? (
                         <button
                             onClick={props.onOpenSync}
-                            className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-black text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-all shadow-md uppercase tracking-tighter"
+                            className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-black rounded-md transition-all shadow-md uppercase tracking-tighter"
+                            style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
                             title="Sincronitzar mitjans"
                         >
                             <Icons.Hash className="w-3.5 h-3.5" />
                             <span>VINCULAR</span>
                         </button>
                     ) : (
-                        <div className="flex items-center gap-2 bg-blue-600/20 px-3 py-1.5 rounded-full border border-blue-500/30">
-                            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                            <span className="text-[10px] font-black text-blue-300 uppercase tracking-widest">Lector Actiu</span>
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--th-accent-muted)', borderWidth: '1px', borderColor: 'var(--th-focus-ring)' }}>
+                            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--th-accent-text)' }}></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--th-accent-text)' }}>Lector Actiu</span>
                         </div>
                     )}
                 </div>
 
                 {/* CENTER: Transport controls only */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 text-gray-200 bg-gray-950/40 px-4 py-1.5 rounded-full border border-gray-700/40 backdrop-blur-md shadow-2xl">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 text-gray-200 bg-black/40 px-4 py-1.5 rounded-full border border-white/10 backdrop-blur-md shadow-2xl">
                     <ControlButton onClick={() => props.onJumpTime(-5)} title="Retrocedir 5s (←)">
                         <RewindIcon className="w-4 h-4" />
                     </ControlButton>
@@ -155,9 +157,9 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
                         <SkipBackIcon className="w-5 h-5" />
                     </ControlButton>
 
-                    <div className="w-px h-6 bg-gray-700 mx-1 opacity-50" />
+                    <div className="w-px h-6 bg-white/10 mx-1 opacity-50" />
 
-                    <button onClick={props.onTogglePlay} className="mx-1 text-white hover:text-blue-400 transition-all active:scale-90">
+                    <button onClick={props.onTogglePlay} className="mx-1 text-white transition-all active:scale-90" style={{ '--hover-color': 'var(--th-accent-text)' } as any}>
                         {props.isPlaying ? <PauseIcon className="w-9 h-9" /> : <PlayIcon className="w-9 h-9" />}
                     </button>
 
@@ -165,14 +167,15 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
                     {onToggleSubtitleOverlay && (
                         <button
                             onClick={onToggleSubtitleOverlay}
-                            className={`p-2 rounded-full transition-all ${subtitleOverlayShow ? 'bg-cyan-600 text-white shadow-inner' : 'bg-black/40 text-gray-500 hover:text-gray-300'}`}
+                            className={`p-2 rounded-full transition-all ${subtitleOverlayShow ? 'text-white shadow-inner' : 'bg-black/40 text-gray-500 hover:text-gray-300'}`}
+                            style={subtitleOverlayShow ? { backgroundColor: 'var(--th-accent)' } : undefined}
                             title={subtitleOverlayShow ? 'Ocultar subtítols al vídeo' : 'Mostrar subtítols al vídeo'}
                         >
                             <Icons.SubtitlesIcon className="w-4 h-4" />
                         </button>
                     )}
 
-                    <div className="w-px h-6 bg-gray-700 mx-1 opacity-50" />
+                    <div className="w-px h-6 bg-white/10 mx-1 opacity-50" />
 
                     <ControlButton onClick={() => props.onJumpSegment('next')} title="Següent TAKE (↓)">
                         <SkipForwardIcon className="w-5 h-5" />
@@ -190,7 +193,7 @@ export const VideoSubtitlesToolbar: React.FC<VideoSubtitlesToolbarProps> = (prop
 
                     <div className="flex items-center gap-1 justify-end">
                         <ControlButton onClick={() => props.onChangeRate(-0.1)} title="Disminuir velocitat" className="!p-1"><MinusIcon className="w-3 h-3" /></ControlButton>
-                        <span className="text-[11px] font-mono font-bold text-blue-400 w-9 text-center">{props.playbackRate.toFixed(2)}x</span>
+                        <span className="text-[11px] font-mono font-bold w-9 text-center" style={{ color: 'var(--th-accent-text)' }}>{props.playbackRate.toFixed(2)}x</span>
                         <ControlButton onClick={() => props.onChangeRate(0.1)} title="Augmentar velocitat" className="!p-1"><PlusIcon className="w-3 h-3" /></ControlButton>
                     </div>
                 </div>

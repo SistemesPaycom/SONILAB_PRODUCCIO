@@ -75,8 +75,8 @@ export const VideoPlaybackAreaWithSubs: React.FC<VideoPlaybackAreaProps> = (prop
             data-drop-action="link-media"
         >
              {/* Visual feedback for library dragging */}
-             <div className="absolute inset-0 z-50 pointer-events-none border-4 border-dashed border-blue-500/50 bg-blue-600/10 flex items-center justify-center opacity-0 group-[.drop-hover]/droparea:opacity-100 transition-opacity duration-200">
-                <div className="bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex flex-col items-center gap-2 scale-110">
+             <div className="absolute inset-0 z-50 pointer-events-none border-4 border-dashed border-emerald-500/50 bg-emerald-600/10 flex items-center justify-center opacity-0 group-[.drop-hover]/droparea:opacity-100 transition-opacity duration-200">
+                <div className="bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex flex-col items-center gap-2 scale-110">
                     <span className="text-3xl">🎬</span>
                     <span className="text-sm font-black uppercase tracking-widest">Vincular Vídeo / Àudio</span>
                 </div>
@@ -87,10 +87,11 @@ export const VideoPlaybackAreaWithSubs: React.FC<VideoPlaybackAreaProps> = (prop
             </div>
 
             <div
-                className="flex-shrink-0 h-3 bg-gray-900 hover:bg-gray-800 cursor-row-resize flex items-center justify-center group"
+                className="flex-shrink-0 h-3 cursor-row-resize flex items-center justify-center group"
+                style={{ backgroundColor: 'var(--th-bg-primary)' }}
                 onMouseDown={handleMouseDown}
             >
-                <div className="w-10 h-1 bg-gray-700 group-hover:bg-gray-600 rounded-full" />
+                <div className="w-10 h-1 group-hover:bg-gray-600 rounded-full" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />
             </div>
 
             <div className="flex-grow min-h-0 w-full">

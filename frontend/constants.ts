@@ -14,6 +14,8 @@ export const LOCAL_STORAGE_KEYS = {
   TASKS_TRANSCRIPTION: 'slsf_tasks_transcription',
   /** Preferència d'editor per als SRT: 'editor-video-subs' | 'editor-srt-standalone' */
   SRT_EDITOR_MODE: 'slsf_srt_editor_mode',
+  /** Tema de color de la interfície */
+  THEME: 'slsf_theme',
 };
 
 export const A4_WIDTH_PX = 794;

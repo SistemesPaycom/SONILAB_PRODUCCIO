@@ -128,14 +128,16 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
                 className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-pointer custom-scrubber"
             />
             <div 
-                className="absolute top-0 left-0 h-full bg-blue-600 transition-all duration-75 z-10" 
+                className="absolute top-0 left-0 h-full transition-all duration-75 z-10"
+                style={{ backgroundColor: 'var(--th-accent)' }} 
                 style={{ width: `${progressPercent}%` }}
             />
             <div className="absolute top-0 left-0 w-full h-full bg-gray-700/30 group-hover:bg-gray-700/50 transition-colors" />
             
             {/* Bola de reproducció permanent */}
             <div 
-                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full shadow-lg border-2 border-white z-30 transition-transform duration-75 group-hover:scale-125"
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow-lg border-2 border-white z-30 transition-transform duration-75 group-hover:scale-125"
+                style={{ backgroundColor: 'var(--th-accent)' }}
                 style={{ left: `calc(${progressPercent}% - 6px)` }}
             />
         </div>
@@ -144,7 +146,7 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
             <div className="flex items-center gap-6">
                 <button 
                     onClick={onTogglePlay} 
-                    className="text-white hover:text-blue-400 transition-all active:scale-90"
+                    className="text-white hover:text-gray-300 transition-all active:scale-90"
                 >
                     {isPlaying ? <PauseIcon className="w-8 h-8" /> : <PlayIcon className="w-8 h-8" />}
                 </button>
@@ -157,7 +159,8 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
                 <div className="flex items-center gap-1 bg-black/40 rounded-full p-0.5 border border-white/5">
                     <button 
                         onClick={() => setAutoScrollWave(!autoScrollWave)}
-                        className={`p-1.5 rounded-full transition-all ${autoScrollWave ? 'bg-blue-600 text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
+                        className={`p-1.5 rounded-full transition-all ${autoScrollWave ? 'text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
+                        style={autoScrollWave ? { backgroundColor: 'var(--th-accent)' } : undefined}
                         title="Mode seguiment"
                     >
                         <Icons.ArrowDown className={`w-3.5 h-3.5 ${autoScrollWave && isPlaying ? 'animate-bounce' : ''}`} />
@@ -176,7 +179,7 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
                 <button onClick={() => onChangeRate(-0.1)} className="p-1 text-gray-400 hover:text-white transition-colors">
                     <MinusIcon className="w-4 h-4" />
                 </button>
-                <span className="text-xs font-mono font-bold text-blue-400 w-12 text-center select-none">
+                <span className="text-xs font-mono font-bold w-12 text-center select-none" style={{ color: 'var(--th-accent-text)' }}>
                     {playbackRate.toFixed(2)}x
                 </span>
                 <button onClick={() => onChangeRate(0.1)} className="p-1 text-gray-400 hover:text-white transition-colors">

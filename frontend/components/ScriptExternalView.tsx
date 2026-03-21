@@ -280,9 +280,9 @@ const ScriptExternalView: React.FC<ScriptExternalViewProps> = ({ docId }) => {
   const canLink = Boolean(projectId || docId);
 
   return (
-    <div className="h-screen w-screen bg-[#111827] text-gray-200 flex flex-col overflow-hidden">
+    <div className="h-screen w-screen text-gray-200 flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--th-bg-primary)' }}>
       {/* Header */}
-      <header className="flex-shrink-0 bg-[#1e293b] border-b border-gray-700/50 px-4 py-3 flex items-center gap-3">
+      <header className="flex-shrink-0 border-b border-gray-700/50 px-4 py-3 flex items-center gap-3" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
         <span className="text-lg font-bold text-gray-100">
           Guió de Doblatge
         </span>
@@ -310,7 +310,7 @@ const ScriptExternalView: React.FC<ScriptExternalViewProps> = ({ docId }) => {
           {/* Vincular / Canviar guió */}
           {canLink && (
             <button
-              className="text-[9px] text-gray-400 hover:text-blue-300 bg-gray-700/50 hover:bg-blue-900/30 border border-gray-600/50 px-2 py-1 rounded transition-colors disabled:opacity-40"
+              className="text-[9px] text-gray-400 hover:text-gray-200 bg-gray-700/50 hover:bg-white/5 border border-gray-600/50 px-2 py-1 rounded transition-colors disabled:opacity-40"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               title={hasContent ? 'Canviar guió (DOCX o PDF)' : 'Vincular guió (DOCX o PDF)'}
@@ -376,7 +376,8 @@ const ScriptExternalView: React.FC<ScriptExternalViewProps> = ({ docId }) => {
       <main
         ref={scrollRef as React.RefObject<HTMLElement>}
         data-script-scroll-container="true"
-        className="flex-grow overflow-y-auto flex flex-col items-center min-h-0 bg-[#111827] px-4 pb-12 pt-6 custom-scrollbar"
+        className="flex-grow overflow-y-auto flex flex-col items-center min-h-0 px-4 pb-12 pt-6 custom-scrollbar"
+        style={{ backgroundColor: 'var(--th-bg-primary)' }}
       >
         {loading ? (
           <div className="flex items-center justify-center h-full">

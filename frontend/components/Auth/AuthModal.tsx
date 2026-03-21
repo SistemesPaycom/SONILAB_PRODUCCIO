@@ -72,7 +72,7 @@ export const AuthModal: React.FC<{
           {err && <div className="text-sm text-red-300">{err}</div>}
 
           <button
-            className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold disabled:opacity-60"
+            className="w-full px-3 py-2 rounded-lg text-white font-semibold disabled:opacity-60" style={{ backgroundColor: 'var(--th-btn-primary-bg)' }}
             disabled={busy || !email || !password}
             onClick={submit}
           >

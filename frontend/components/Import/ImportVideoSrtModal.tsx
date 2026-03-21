@@ -71,7 +71,7 @@ const ImportVideoSrtModal: React.FC<ImportVideoSrtModalProps> = ({
             <button onClick={onClose} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors">
                 Cancel·lar
             </button>
-            <button onClick={handleImportClick} disabled={!videoFile && !srtFile} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded transition-colors">
+            <button onClick={handleImportClick} disabled={!videoFile && !srtFile} className="disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded transition-colors" style={{ backgroundColor: 'var(--th-btn-primary-bg)' }}>
                 Importar
             </button>
         </div>

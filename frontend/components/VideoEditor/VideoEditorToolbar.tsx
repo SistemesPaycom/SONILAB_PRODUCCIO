@@ -55,7 +55,8 @@ export const VideoEditorToolbar: React.FC<VideoEditorToolbarProps> = (props) => 
             <div className="flex items-center gap-2">
                  <button 
                     onClick={props.onImportVideo}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-md"
+                    style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
                     title="Importar vídeo"
                 >
                     <UploadIcon className="w-4 h-4" />
@@ -75,12 +76,13 @@ export const VideoEditorToolbar: React.FC<VideoEditorToolbarProps> = (props) => 
                 <ControlButton 
                     onClick={props.onToggleScriptLink} 
                     title={props.isScriptLinked ? "Desvincular guió del vídeo" : "Vincular guió al vídeo"} 
-                    className={props.isScriptLinked ? 'bg-blue-600 text-white' : ''}
+                    className={props.isScriptLinked ? 'text-white' : ''}
+                    style={props.isScriptLinked ? { backgroundColor: 'var(--th-accent)' } : undefined}
                 >
                     {props.isScriptLinked ? <LinkIcon className="w-5 h-5" /> : <LinkOffIcon className="w-5 h-5" />}
                 </ControlButton>
                 
-                <button onClick={props.onTogglePlay} title="Reproduir/Pausa" className="mx-2 text-white hover:text-blue-300">
+                <button onClick={props.onTogglePlay} title="Reproduir/Pausa" className="mx-2 text-white hover:text-gray-300">
                     {props.isPlaying ? <PauseIcon className="w-9 h-9" /> : <PlayIcon className="w-9 h-9" />}
                 </button>
 
@@ -117,7 +119,8 @@ export const VideoEditorToolbar: React.FC<VideoEditorToolbarProps> = (props) => 
                             type="range" min="0" max="1" step="0.05"
                             value={isMuted ? 0 : volume}
                             onChange={handleVolumeChange}
-                            className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                            className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                            style={{ accentColor: 'var(--th-accent)' }}
                         />
                     </div>
                 </div>

@@ -313,13 +313,15 @@ export const CreateProjectModal: React.FC<{
 
         <div className="flex gap-2 mb-4">
           <button
-            className={`px-3 py-1.5 rounded-lg text-sm font-bold ${tab === 'transcribe' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200'}`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-bold ${tab === 'transcribe' ? 'text-white' : 'bg-gray-800 text-gray-200'}`}
+            style={tab === 'transcribe' ? { backgroundColor: 'var(--th-accent)' } : undefined}
             onClick={() => setTab('transcribe')}
           >
             Transcribir
           </button>
           <button
-            className={`px-3 py-1.5 rounded-lg text-sm font-bold ${tab === 'importSrt' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200'}`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-bold ${tab === 'importSrt' ? 'text-white' : 'bg-gray-800 text-gray-200'}`}
+            style={tab === 'importSrt' ? { backgroundColor: 'var(--th-accent)' } : undefined}
             onClick={() => setTab('importSrt')}
           >
             Importar SRT
@@ -411,7 +413,7 @@ export const CreateProjectModal: React.FC<{
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-green-400 font-mono truncate max-w-[180px]">{guionFile.name}</span>
                   {guionConverting && (
-                    <span className="text-[10px] text-blue-300 animate-pulse">⏳ Convertint…</span>
+                    <span className="text-[10px] animate-pulse" style={{ color: 'var(--th-accent-text)' }}>⏳ Convertint…</span>
                   )}
                   {guionConvertErr && (
                     <span className="text-[10px] text-red-400">{guionConvertErr}</span>
@@ -491,7 +493,7 @@ export const CreateProjectModal: React.FC<{
                   ))}
                 </select>
                 {engine === 'purfview-xxl' && (
-                  <div className="mt-1 text-xs text-blue-400 bg-blue-900/30 rounded px-2 py-1">
+                  <div className="mt-1 text-xs rounded px-2 py-1" style={{ color: 'var(--th-accent-text)', backgroundColor: 'var(--th-accent-muted)' }}>
                     Purfview XXL: usa faster-whisper + post-procesado (fix casing, puntuación, fusión de líneas) — equivalente a SubtitleEdit Purfview's Faster-Whisper-XXL
                   </div>
                 )}
@@ -600,7 +602,7 @@ export const CreateProjectModal: React.FC<{
               <div className="mt-2">
                 <div className="text-xs text-gray-300 mb-1">Progreso</div>
                 <div className="h-2 w-full bg-gray-700 rounded overflow-hidden">
-                  <div className="h-2 bg-blue-500" style={{ width: `${jobProgress}%` }} />
+                  <div className="h-2" style={{ width: `${jobProgress}%`, backgroundColor: 'var(--th-accent)' }} />
                 </div>
                 <div className="text-xs text-gray-300 mt-1">{jobProgress}%</div>
               </div>
@@ -617,7 +619,8 @@ export const CreateProjectModal: React.FC<{
                 <button
                   disabled={busy}
                   onClick={createByTranscribe}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold disabled:opacity-60"
+                  className="px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
+                  style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
                 >
                   {engine === 'script-align' ? 'Alinear guion' : 'Transcribir'}
                 </button>
@@ -625,7 +628,8 @@ export const CreateProjectModal: React.FC<{
                 <button
                   disabled={busy}
                   onClick={createFromExistingSrt}
-                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold disabled:opacity-60"
+                  className="px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
+                  style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
                 >
                   Importar SRT
                 </button>

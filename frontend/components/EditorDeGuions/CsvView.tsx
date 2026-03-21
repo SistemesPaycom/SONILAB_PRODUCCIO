@@ -184,7 +184,7 @@ export const CsvView: React.FC<CsvViewProps> = ({
   };
 
   const commonInputClasses = 'bg-transparent w-full p-2 focus:outline-none text-[13px] leading-snug text-black';
-  const editableInputClasses = isEditable ? 'focus:bg-blue-50' : 'cursor-default';
+  const editableInputClasses = isEditable ? 'focus:bg-gray-100' : 'cursor-default';
   const gridTemplateColumns = `${columnWidths.take}px ${columnWidths.speaker}px 1fr`;
 
   return (
