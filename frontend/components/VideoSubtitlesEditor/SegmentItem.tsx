@@ -554,7 +554,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                 data-segment-id={segment.id}
                 className={`outline-none whitespace-nowrap text-[14.5px] transition-colors ${
                   isActive ? 'text-white' : 'text-gray-300'
-                }`}
+                } ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:bg-blue-900/30 focus:ring-1 focus:ring-blue-500/40 rounded-sm' : ''}`}
                 style={{
                   fontFamily: "'Courier Prime', monospace",
                   lineHeight: ROW_HEIGHT,
