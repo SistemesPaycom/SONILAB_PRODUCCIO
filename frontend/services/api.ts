@@ -82,7 +82,13 @@ export const api = {
     });
   },
   async me() {
-    return request<{ id: string; email: string; name?: string; role: string }>(`/auth/me`);
+    return request<{ id: string; email: string; name?: string; role: string; preferences?: any }>(`/auth/me`);
+  },
+  async updateMe(body: { name?: string; email?: string; preferences?: any }) {
+    return request<{ id: string; email: string; name?: string; role: string; preferences?: any }>(`/auth/me`, {
+      method: 'PATCH',
+      body,
+    });
   },
   async adminListUsers() {
     return request<any[]>(`/auth/admin/users`);

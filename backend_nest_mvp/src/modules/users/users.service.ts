@@ -64,9 +64,16 @@ export class UsersService {
     const set: any = {};
     if (updates.name !== undefined) set.name = updates.name;
     if (updates.email !== undefined) set.email = updates.email.toLowerCase();
-    if (updates.preferences !== undefined) set.preferences = updates.preferences;
 
-    const updated = await this.userModel.findByIdAndUpdate(id, set, { new: true }).lean();
+    // Merge preferences en lloc de reemplaçar — cada clau de preferences
+    // s'actualitza individualment amb dot notation de MongoDB ($set).
+    if (updates.preferences !== undefined && typeof updates.preferences === 'object') {
+      for (const [key, value] of Object.entries(updates.preferences)) {
+        set[`preferences.${key}`] = value;
+      }
+    }
+
+    const updated = await this.userModel.findByIdAndUpdate(id, { $set: set }, { new: true }).lean();
     if (!updated) throw new NotFoundException('User not found');
     const { passwordHash, ...safe } = updated as any;
     return { id: (updated as any)._id.toString(), ...safe };

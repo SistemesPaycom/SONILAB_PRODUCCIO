@@ -1,12 +1,20 @@
 // context/Theme/ThemeContext.tsx
 // Proveïdor central del tema de color de l'aplicació.
 // Aplica CSS custom properties (--th-*) a :root i persisiteix la preferència
-// de l'usuari a localStorage.
+// de l'usuari a localStorage + backend (preferences.customThemeTokens).
 
-import React, { createContext, useContext, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
-import { ThemeDefinition, ALL_THEMES, DEFAULT_THEME_ID, getThemeById } from './themes';
+import {
+  ThemeDefinition,
+  PRESET_THEMES,
+  DEFAULT_THEME_ID,
+  CUSTOM_THEME_ID,
+  getThemeById,
+  buildCustomTheme,
+} from './themes';
+import { api, getToken } from '../../services/api';
 
 interface ThemeContextValue {
   /** Tema actiu actual */
@@ -15,8 +23,14 @@ interface ThemeContextValue {
   themeId: string;
   /** Canviar el tema actiu */
   setThemeId: (id: string) => void;
-  /** Llista de tots els temes disponibles */
+  /** Llista de tots els temes disponibles (presets) */
   themes: ThemeDefinition[];
+  /** Tokens del tema personalitzat (editables) */
+  customTokens: Record<string, string>;
+  /** Actualitzar un o més tokens del tema personalitzat */
+  setCustomTokens: (tokens: Record<string, string>) => void;
+  /** Restablir tokens personalitzats a un preset base */
+  resetCustomTokensFromPreset: (presetId: string) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -354,10 +368,159 @@ function applyThemeToDOM(theme: ThemeDefinition) {
   injectThemeOverrides(theme.id);
 }
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themeId, setThemeId] = useLocalStorage<string>(LOCAL_STORAGE_KEYS.THEME, DEFAULT_THEME_ID);
+// ── Debounce per a persistència al backend ──────────────────────────────
+const SAVE_DEBOUNCE_MS = 1500;
 
-  const theme = useMemo(() => getThemeById(themeId), [themeId]);
+// ── Validació de color CSS ──────────────────────────────────────────────
+// Accepta: #hex, rgb(), rgba(), hsl(), hsla(), keywords CSS, transparent
+const COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([\d\s.,/%]+\)|hsla?\([\d\s.,/%]+\)|transparent|inherit|currentColor|[a-zA-Z]+)$/;
+
+function isValidCssColor(value: string): boolean {
+  if (!value || typeof value !== 'string') return false;
+  const v = value.trim();
+  if (COLOR_RE.test(v)) return true;
+  // Fallback: usar un element temporal per validar via el navegador
+  if (typeof document === 'undefined') return false;
+  const el = document.createElement('div');
+  el.style.color = '';
+  el.style.color = v;
+  return el.style.color !== '';
+}
+
+/** Sanititza un objecte de tokens: descarta valors buits o invàlids */
+function sanitizeTokens(tokens: Record<string, string>): Record<string, string> {
+  const clean: Record<string, string> = {};
+  for (const [key, value] of Object.entries(tokens)) {
+    if (value && typeof value === 'string' && isValidCssColor(value.trim())) {
+      clean[key] = value.trim();
+    }
+  }
+  return clean;
+}
+
+// ── localStorage amb userId scope ───────────────────────────────────────
+// Quan hi ha un userId disponible, les claus es sufixaren amb _<userId>
+// per evitar mescles entre comptes al mateix navegador.
+function scopedKey(base: string, userId?: string | null): string {
+  return userId ? `${base}_${userId}` : base;
+}
+
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // userId per scoping de localStorage — es resol quan AuthProvider carrega el perfil
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // ── localStorage sense scope (primer render ràpid, evita flash) ──
+  const [themeIdRaw, setThemeIdRaw] = useLocalStorage<string>(LOCAL_STORAGE_KEYS.THEME, DEFAULT_THEME_ID);
+  const [customTokensRaw, setCustomTokensRawLS] = useLocalStorage<Record<string, string>>(
+    LOCAL_STORAGE_KEYS.CUSTOM_THEME_TOKENS,
+    {}
+  );
+
+  // ── State real (pot venir de backend o de localStorage) ──
+  const [themeId, setThemeIdState] = useState<string>(themeIdRaw);
+  const [customTokens, setCustomTokensState] = useState<Record<string, string>>(customTokensRaw);
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Persistir al backend (debounced) ──
+  const persistToBackend = useCallback((tid: string, tokens: Record<string, string>) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const token = getToken();
+      if (!token) return;
+      api.updateMe({ preferences: { themeId: tid, customThemeTokens: tokens } }).catch(() => {});
+    }, SAVE_DEBOUNCE_MS);
+  }, []);
+
+  // ── Persistir a localStorage (amb scope si tenim userId) ──
+  const persistToLocal = useCallback((tid: string, tokens: Record<string, string>, uid?: string | null) => {
+    try {
+      // Sempre desar a la clau genèrica (per al flash prevention del primer render)
+      localStorage.setItem(LOCAL_STORAGE_KEYS.THEME, JSON.stringify(tid));
+      localStorage.setItem(LOCAL_STORAGE_KEYS.CUSTOM_THEME_TOKENS, JSON.stringify(tokens));
+      // Si hi ha userId, desar també a la clau scopada
+      if (uid) {
+        localStorage.setItem(scopedKey(LOCAL_STORAGE_KEYS.THEME, uid), JSON.stringify(tid));
+        localStorage.setItem(scopedKey(LOCAL_STORAGE_KEYS.CUSTOM_THEME_TOKENS, uid), JSON.stringify(tokens));
+      }
+    } catch { /* quota exceeded, etc */ }
+  }, []);
+
+  // ── setThemeId: actualitza state + persiste ──
+  const setThemeId = useCallback((newId: string) => {
+    setThemeIdState(newId);
+    persistToLocal(newId, customTokens, userId);
+    persistToBackend(newId, customTokens);
+  }, [customTokens, userId, persistToLocal, persistToBackend]);
+
+  // ── setCustomTokens: merge parcial + valida + persiste ──
+  const setCustomTokens = useCallback((newTokens: Record<string, string>) => {
+    setCustomTokensState((prev) => {
+      const merged = { ...prev, ...sanitizeTokens(newTokens) };
+      persistToLocal(themeId, merged, userId);
+      persistToBackend(themeId, merged);
+      return merged;
+    });
+  }, [themeId, userId, persistToLocal, persistToBackend]);
+
+  // ── Restablir des d'un preset ──
+  const resetCustomTokensFromPreset = useCallback((presetId: string) => {
+    const preset = PRESET_THEMES.find(t => t.id === presetId) ?? PRESET_THEMES[0];
+    const tokens = { ...preset.tokens };
+    setCustomTokensState(tokens);
+    persistToLocal(themeId, tokens, userId);
+    persistToBackend(themeId, tokens);
+  }, [themeId, userId, persistToLocal, persistToBackend]);
+
+  // ── Escoltar USER_PROFILE_LOADED des d'AuthContext (evita api.me() duplicat) ──
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const profile = (e as CustomEvent).detail;
+      if (!profile?.id) return;
+
+      const uid = profile.id as string;
+      setUserId(uid);
+
+      const prefs = profile.preferences;
+      if (!prefs || typeof prefs !== 'object') {
+        // No hi ha preferències al backend — intentar carregar del localStorage scopat
+        try {
+          const savedTid = localStorage.getItem(scopedKey(LOCAL_STORAGE_KEYS.THEME, uid));
+          const savedTokens = localStorage.getItem(scopedKey(LOCAL_STORAGE_KEYS.CUSTOM_THEME_TOKENS, uid));
+          if (savedTid) setThemeIdState(JSON.parse(savedTid));
+          if (savedTokens) setCustomTokensState(JSON.parse(savedTokens));
+        } catch { /* ignore parse errors */ }
+        return;
+      }
+
+      // Restaurar themeId del backend
+      if (prefs.themeId && typeof prefs.themeId === 'string') {
+        setThemeIdState(prefs.themeId);
+        try { localStorage.setItem(LOCAL_STORAGE_KEYS.THEME, JSON.stringify(prefs.themeId)); } catch {}
+        try { localStorage.setItem(scopedKey(LOCAL_STORAGE_KEYS.THEME, uid), JSON.stringify(prefs.themeId)); } catch {}
+      }
+
+      // Restaurar customThemeTokens del backend
+      if (prefs.customThemeTokens && typeof prefs.customThemeTokens === 'object' && Object.keys(prefs.customThemeTokens).length > 0) {
+        const cleaned = sanitizeTokens(prefs.customThemeTokens);
+        setCustomTokensState(cleaned);
+        try { localStorage.setItem(LOCAL_STORAGE_KEYS.CUSTOM_THEME_TOKENS, JSON.stringify(cleaned)); } catch {}
+        try { localStorage.setItem(scopedKey(LOCAL_STORAGE_KEYS.CUSTOM_THEME_TOKENS, uid), JSON.stringify(cleaned)); } catch {}
+      }
+    };
+
+    window.addEventListener('USER_PROFILE_LOADED', handler);
+    return () => window.removeEventListener('USER_PROFILE_LOADED', handler);
+  }, []);
+
+  // ── Tema actiu resolt ──
+  const theme = useMemo(() => {
+    if (themeId === CUSTOM_THEME_ID) {
+      const hasTokens = Object.keys(customTokens).length > 0;
+      return buildCustomTheme(hasTokens ? customTokens : {});
+    }
+    return getThemeById(themeId);
+  }, [themeId, customTokens]);
 
   // Aplicar tokens al DOM quan canvia el tema
   useEffect(() => {
@@ -365,14 +528,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [theme]);
 
   // Aplicar immediatament al primer render (evita flash)
-  useMemo(() => applyThemeToDOM(getThemeById(themeId)), []);
+  useMemo(() => applyThemeToDOM(getThemeById(themeIdRaw)), []);
 
   const value = useMemo<ThemeContextValue>(() => ({
     theme,
     themeId,
     setThemeId,
-    themes: ALL_THEMES,
-  }), [theme, themeId, setThemeId]);
+    themes: PRESET_THEMES,
+    customTokens,
+    setCustomTokens,
+    resetCustomTokensFromPreset,
+  }), [theme, themeId, setThemeId, customTokens, setCustomTokens, resetCustomTokensFromPreset]);
 
   return (
     <ThemeContext.Provider value={value}>

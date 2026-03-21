@@ -88,6 +88,13 @@ export const THEME_SONILAB: ThemeDefinition = {
     'badge-bg':         'rgba(196, 0, 0, 0.15)',
     'badge-text':       '#FF4444',
     'badge-border':     'rgba(196, 0, 0, 0.3)',
+
+    'alert-warning-bg':     'rgba(234, 179, 8, 0.10)',
+    'alert-warning-text':   '#fbbf24',
+    'alert-warning-border': 'rgba(234, 179, 8, 0.30)',
+    'alert-error-bg':       'rgba(239, 68, 68, 0.10)',
+    'alert-error-text':     '#fca5a5',
+    'alert-error-border':   'rgba(239, 68, 68, 0.30)',
   },
 };
 
@@ -167,6 +174,13 @@ export const THEME_DARK: ThemeDefinition = {
     'badge-bg':         'rgba(59, 130, 246, 0.15)',
     'badge-text':       '#60a5fa',
     'badge-border':     'rgba(59, 130, 246, 0.3)',
+
+    'alert-warning-bg':     'rgba(245, 158, 11, 0.10)',
+    'alert-warning-text':   '#f59e0b',
+    'alert-warning-border': 'rgba(245, 158, 11, 0.25)',
+    'alert-error-bg':       'rgba(239, 68, 68, 0.10)',
+    'alert-error-text':     '#fca5a5',
+    'alert-error-border':   'rgba(239, 68, 68, 0.30)',
   },
 };
 
@@ -246,6 +260,13 @@ export const THEME_LIGHT: ThemeDefinition = {
     'badge-bg':         'rgba(37, 99, 235, 0.10)',
     'badge-text':       '#2563eb',
     'badge-border':     'rgba(37, 99, 235, 0.25)',
+
+    'alert-warning-bg':     'rgba(202, 138, 4, 0.12)',
+    'alert-warning-text':   '#92400e',
+    'alert-warning-border': 'rgba(202, 138, 4, 0.35)',
+    'alert-error-bg':       'rgba(220, 38, 38, 0.08)',
+    'alert-error-text':     '#991b1b',
+    'alert-error-border':   'rgba(220, 38, 38, 0.25)',
   },
 };
 
@@ -325,10 +346,28 @@ export const THEME_MIDNIGHT: ThemeDefinition = {
     'badge-bg':         'rgba(99, 102, 241, 0.15)',
     'badge-text':       '#a5b4fc',
     'badge-border':     'rgba(99, 102, 241, 0.3)',
+
+    'alert-warning-bg':     'rgba(251, 191, 36, 0.10)',
+    'alert-warning-text':   '#fbbf24',
+    'alert-warning-border': 'rgba(251, 191, 36, 0.25)',
+    'alert-error-bg':       'rgba(248, 113, 113, 0.10)',
+    'alert-error-text':     '#fca5a5',
+    'alert-error-border':   'rgba(248, 113, 113, 0.25)',
   },
 };
 
-/** Tots els temes disponibles */
+/** ID del tema personalitzat */
+export const CUSTOM_THEME_ID = 'custom';
+
+/** Tots els temes predefinits (presets) */
+export const PRESET_THEMES: ThemeDefinition[] = [
+  THEME_SONILAB,
+  THEME_DARK,
+  THEME_LIGHT,
+  THEME_MIDNIGHT,
+];
+
+/** Tots els temes disponibles (presets + custom) */
 export const ALL_THEMES: ThemeDefinition[] = [
   THEME_SONILAB,
   THEME_DARK,
@@ -343,3 +382,156 @@ export const DEFAULT_THEME_ID = 'sonilab';
 export function getThemeById(id: string): ThemeDefinition {
   return ALL_THEMES.find(t => t.id === id) ?? THEME_SONILAB;
 }
+
+/** Construir un ThemeDefinition personalitzat a partir de tokens arbitraris */
+export function buildCustomTheme(tokens: Record<string, string>): ThemeDefinition {
+  // Merge amb Sonilab com a base per garantir que tots els tokens existeixin
+  const merged = { ...THEME_SONILAB.tokens, ...tokens };
+  return {
+    id: CUSTOM_THEME_ID,
+    name: 'Personalitzat',
+    description: 'Tema personalitzat amb colors definits per l\'usuari',
+    preview: [
+      merged['bg-app'] || '#0A0A0A',
+      merged['bg-surface'] || '#161616',
+      merged['accent'] || '#C40000',
+      merged['text-primary'] || '#FFFFFF',
+    ],
+    tokens: merged,
+  };
+}
+
+// ── TOKEN GROUPS (metadata per al panell d'edició) ──────────────────────
+// Agrupació semàntica dels tokens per a la UI de personalització.
+// Cada grup mostra un conjunt coherent de tokens editables.
+
+export interface TokenGroupDef {
+  id: string;
+  label: string;
+  description?: string;
+  tokens: { key: string; label: string }[];
+}
+
+export const TOKEN_GROUPS: TokenGroupDef[] = [
+  {
+    id: 'backgrounds',
+    label: 'Fons',
+    description: 'Colors de fons de l\'aplicació',
+    tokens: [
+      { key: 'bg-app',       label: 'Aplicació (fons principal)' },
+      { key: 'bg-primary',   label: 'Primari' },
+      { key: 'bg-secondary', label: 'Secundari' },
+      { key: 'bg-tertiary',  label: 'Terciari' },
+      { key: 'bg-surface',   label: 'Superfícies / panells' },
+      { key: 'bg-hover',     label: 'Hover' },
+      { key: 'bg-active',    label: 'Selecció activa' },
+      { key: 'bg-overlay',   label: 'Overlays / modals' },
+    ],
+  },
+  {
+    id: 'texts',
+    label: 'Textos',
+    description: 'Jerarquia de colors de text',
+    tokens: [
+      { key: 'text-primary',   label: 'Principal' },
+      { key: 'text-secondary', label: 'Secundari' },
+      { key: 'text-muted',     label: 'Atenuat' },
+      { key: 'text-disabled',  label: 'Desactivat' },
+      { key: 'text-inverse',   label: 'Invers' },
+    ],
+  },
+  {
+    id: 'borders',
+    label: 'Bordes i separadors',
+    tokens: [
+      { key: 'border',        label: 'Bord principal' },
+      { key: 'border-strong', label: 'Bord fort' },
+      { key: 'border-subtle', label: 'Bord subtil' },
+      { key: 'divider',       label: 'Divisor' },
+    ],
+  },
+  {
+    id: 'accent',
+    label: 'Accent i botons',
+    description: 'Color principal d\'accent, botons i selecció',
+    tokens: [
+      { key: 'accent',           label: 'Accent' },
+      { key: 'accent-hover',     label: 'Accent hover' },
+      { key: 'accent-muted',     label: 'Accent atenuat' },
+      { key: 'accent-text',      label: 'Text accent' },
+      { key: 'btn-primary-bg',   label: 'Botó primari fons' },
+      { key: 'btn-primary-hover',label: 'Botó primari hover' },
+      { key: 'btn-primary-text', label: 'Botó primari text' },
+      { key: 'tab-active-bg',    label: 'Tab actiu fons' },
+      { key: 'tab-active-text',  label: 'Tab actiu text' },
+      { key: 'tab-active-border',label: 'Tab actiu bord' },
+      { key: 'focus-ring',       label: 'Anell de focus' },
+      { key: 'link',             label: 'Enllaços' },
+    ],
+  },
+  {
+    id: 'status',
+    label: 'Estats i alertes',
+    tokens: [
+      { key: 'success',              label: 'Èxit' },
+      { key: 'warning',              label: 'Avís' },
+      { key: 'error',                label: 'Error' },
+      { key: 'info',                 label: 'Informació' },
+      { key: 'alert-warning-bg',     label: 'Alerta avís fons' },
+      { key: 'alert-warning-text',   label: 'Alerta avís text' },
+      { key: 'alert-warning-border', label: 'Alerta avís bord' },
+      { key: 'alert-error-bg',       label: 'Alerta error fons' },
+      { key: 'alert-error-text',     label: 'Alerta error text' },
+      { key: 'alert-error-border',   label: 'Alerta error bord' },
+    ],
+  },
+  {
+    id: 'editor',
+    label: 'Editor de subtítols',
+    description: 'Colors de l\'editor de segments',
+    tokens: [
+      { key: 'editor-bg',          label: 'Fons editor' },
+      { key: 'editor-row-hover',   label: 'Fila hover' },
+      { key: 'editor-row-active',  label: 'Fila activa' },
+      { key: 'editor-text',        label: 'Text' },
+      { key: 'editor-text-active', label: 'Text actiu' },
+      { key: 'editor-text-muted',  label: 'Text atenuat' },
+      { key: 'editor-caret',       label: 'Cursor' },
+      { key: 'editor-timecode',    label: 'Codi de temps' },
+      { key: 'editor-meta',        label: 'Metadades' },
+      { key: 'editor-label-bg',    label: 'Fons etiquetes' },
+    ],
+  },
+  {
+    id: 'waveform',
+    label: 'Timeline / Ona',
+    description: 'Colors del timeline i la visualització d\'ona',
+    tokens: [
+      { key: 'waveform-bg',              label: 'Fons' },
+      { key: 'waveform-ruler-bg',        label: 'Fons regla temporal' },
+      { key: 'waveform-line',            label: 'Línia central' },
+      { key: 'waveform-grid',            label: 'Graella' },
+      { key: 'waveform-grid-text',       label: 'Text graella' },
+      { key: 'waveform-bar',             label: 'Barres ona' },
+      { key: 'waveform-bar-play',        label: 'Barres ona (reproduint)' },
+      { key: 'waveform-seg',             label: 'Segment actiu fons' },
+      { key: 'waveform-seg-idle',        label: 'Segment inactiu fons' },
+      { key: 'waveform-seg-border',      label: 'Segment actiu bord' },
+      { key: 'waveform-seg-border-idle', label: 'Segment inactiu bord' },
+      { key: 'waveform-seg-handle',      label: 'Handle actiu' },
+      { key: 'waveform-seg-handle-idle', label: 'Handle inactiu' },
+      { key: 'waveform-seg-text',        label: 'Text segment actiu' },
+      { key: 'waveform-seg-text-idle',   label: 'Text segment inactiu' },
+    ],
+  },
+  {
+    id: 'misc',
+    label: 'Altres',
+    tokens: [
+      { key: 'header-bg',    label: 'Fons capçalera' },
+      { key: 'badge-bg',     label: 'Fons badge' },
+      { key: 'badge-text',   label: 'Text badge' },
+      { key: 'badge-border', label: 'Bord badge' },
+    ],
+  },
+];

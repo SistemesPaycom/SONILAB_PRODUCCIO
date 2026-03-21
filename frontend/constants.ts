@@ -16,6 +16,8 @@ export const LOCAL_STORAGE_KEYS = {
   SRT_EDITOR_MODE: 'slsf_srt_editor_mode',
   /** Tema de color de la interfície */
   THEME: 'slsf_theme',
+  /** Tokens del tema personalitzat (fallback local) */
+  CUSTOM_THEME_TOKENS: 'slsf_custom_theme_tokens',
 };
 
 export const A4_WIDTH_PX = 794;

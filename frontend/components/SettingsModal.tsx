@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { EditorStyles, EditorStyle, AppShortcuts, Shortcut } from '../types';
 import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS } from '../constants';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { useAuth } from '../context/Auth/AuthContext';
 import { useTheme } from '../context/Theme/ThemeContext';
+import { CUSTOM_THEME_ID, PRESET_THEMES, TOKEN_GROUPS, buildCustomTheme } from '../context/Theme/themes';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -15,6 +16,81 @@ type ActiveTab = 'general' | 'editor' | 'shortcuts' | 'reader' | 'theme';
 type ShortcutApp = keyof AppShortcuts;
 
 const FONT_FACES = ['sans-serif', 'serif', 'monospace', 'Arial', 'Verdana', 'Times New Roman'];
+
+// ── Token editor row amb estat local per a escriptura fluida ──
+// L'input de text manté estat local per permetre escriptura lliure.
+// Només es commiteja al tema quan el valor és un color CSS vàlid (onBlur o onKeyDown Enter).
+const TokenRow: React.FC<{
+  tokenKey: string;
+  label: string;
+  value: string;
+  onChange: (key: string, value: string) => void;
+}> = ({ tokenKey, label, value, onChange }) => {
+  const [draft, setDraft] = useState(value);
+  const [invalid, setInvalid] = useState(false);
+  const prevValueRef = React.useRef(value);
+
+  // Sync draft when external value changes (e.g. preset copy)
+  if (value !== prevValueRef.current) {
+    prevValueRef.current = value;
+    if (draft !== value) {
+      setDraft(value);
+      setInvalid(false);
+    }
+  }
+
+  const isHex = /^#[0-9a-fA-F]{3,8}$/.test(value);
+
+  const commit = (val: string) => {
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    // Validar amb un element temporal
+    const el = document.createElement('div');
+    el.style.color = '';
+    el.style.color = trimmed;
+    if (el.style.color !== '' || trimmed === 'transparent' || trimmed === 'inherit') {
+      onChange(tokenKey, trimmed);
+      setInvalid(false);
+    } else {
+      setInvalid(true);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-1 group">
+      <div className="relative flex-shrink-0">
+        <div
+          className="w-5 h-5 rounded border cursor-pointer"
+          style={{ backgroundColor: value, borderColor: 'var(--th-border)' }}
+        />
+        <input
+          type="color"
+          value={isHex ? value : '#888888'}
+          onChange={(e) => { onChange(tokenKey, e.target.value); setDraft(e.target.value); setInvalid(false); }}
+          className="absolute inset-0 w-5 h-5 opacity-0 cursor-pointer"
+          title={tokenKey}
+        />
+      </div>
+      <span className="text-[10px] flex-shrink-0 w-[120px] truncate" style={{ color: 'var(--th-text-muted)' }} title={tokenKey}>
+        {label}
+      </span>
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => { setDraft(e.target.value); setInvalid(false); }}
+        onBlur={() => commit(draft)}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(draft); }}
+        className="flex-1 min-w-0 px-1.5 py-0.5 text-[10px] font-mono rounded"
+        style={{
+          backgroundColor: 'var(--th-bg-tertiary)',
+          border: `1px solid ${invalid ? 'var(--th-error)' : 'var(--th-border)'}`,
+          color: 'var(--th-text-secondary)',
+        }}
+        spellCheck={false}
+      />
+    </div>
+  );
+};
 
 const StyleControlGroup: React.FC<{ label: string; styleKey: keyof EditorStyles; styles: EditorStyles; onChange: (styles: EditorStyles) => void }> = ({ label, styleKey, styles, onChange }) => {
     const currentStyle = styles[styleKey];
@@ -112,7 +188,21 @@ const ShortcutsTab: React.FC = () => {
 const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, onStylesChange }) => {
   const { logout } = useAuth();
-  const { theme, themeId, setThemeId, themes } = useTheme();
+  const { theme, themeId, setThemeId, themes, customTokens, setCustomTokens, resetCustomTokensFromPreset } = useTheme();
+  const [customEditorOpen, setCustomEditorOpen] = useState(false);
+  const [copyFromPreset, setCopyFromPreset] = useState<string | null>(null);
+
+  // Resolver els tokens actuals del tema personalitzat (merged amb base)
+  const resolvedCustomTheme = buildCustomTheme(customTokens);
+
+  const handleCustomTokenChange = useCallback((key: string, value: string) => {
+    setCustomTokens({ [key]: value });
+  }, [setCustomTokens]);
+
+  const handleCopyFromPreset = useCallback((presetId: string) => {
+    resetCustomTokensFromPreset(presetId);
+    setCopyFromPreset(null);
+  }, [resetCustomTokensFromPreset]);
   const [activeTab, setActiveTab] = useState<ActiveTab>('general');
   const [libraryWidth, setLibraryWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_WIDTH, 420);
   const [takeMargin, setTakeMargin] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.TAKE_MARGIN, 2);
@@ -240,8 +330,145 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, on
                           </button>
                           );
                         })}
+                        {/* ── Tarjeta del tema personalitzat ── */}
+                        {(() => {
+                          const isCustomActive = themeId === CUSTOM_THEME_ID;
+                          return (
+                          <button
+                            key="custom"
+                            onClick={() => {
+                              // Si és el primer cop, inicialitzar des del tema actual
+                              if (Object.keys(customTokens).length === 0) {
+                                resetCustomTokensFromPreset(themeId !== CUSTOM_THEME_ID ? themeId : 'sonilab');
+                              }
+                              setThemeId(CUSTOM_THEME_ID);
+                              setCustomEditorOpen(true);
+                            }}
+                            className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left ${
+                              isCustomActive ? 'shadow-lg' : ''
+                            }`}
+                            style={isCustomActive
+                              ? { borderColor: 'var(--th-accent)', backgroundColor: 'var(--th-accent-muted)' }
+                              : { borderColor: 'var(--th-border-subtle)', backgroundColor: 'var(--th-bg-hover)' }
+                            }
+                          >
+                            {/* Preview: mostra els colors actuals del custom theme */}
+                            <div className="flex-shrink-0 flex gap-1">
+                              {resolvedCustomTheme.preview.map((color, i) => (
+                                <div
+                                  key={i}
+                                  className="w-8 h-8 rounded-lg shadow-inner"
+                                  style={{ backgroundColor: color, border: '1px solid var(--th-border-subtle)' }}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm" style={{ color: 'var(--th-text-primary)' }}>
+                                  <svg className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                  Personalitzat
+                                </span>
+                                {isCustomActive && (
+                                  <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded" style={{ color: 'var(--th-accent-text)', backgroundColor: 'var(--th-accent-muted)' }}>Actiu</span>
+                                )}
+                              </div>
+                              <p className="text-xs mt-0.5" style={{ color: 'var(--th-text-muted)' }}>Tema personalitzat amb colors definits per l'usuari</p>
+                            </div>
+                            {/* Radio */}
+                            <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0"
+                              style={isCustomActive
+                                ? { borderColor: 'var(--th-accent)', backgroundColor: 'var(--th-accent)' }
+                                : { borderColor: 'var(--th-text-disabled)' }
+                              }
+                            >
+                              {isCustomActive && (
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="white"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                              )}
+                            </div>
+                          </button>
+                          );
+                        })()}
                     </div>
                 </div>
+
+                {/* ── Editor de tema personalitzat ── */}
+                {themeId === CUSTOM_THEME_ID && customEditorOpen && (
+                  <div className="p-6 rounded-2xl" style={{ backgroundColor: 'var(--th-bg-secondary)', border: '1px solid var(--th-border)' }}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-black uppercase tracking-tight flex items-center gap-2" style={{ color: 'var(--th-text-primary)' }}>
+                        <svg className="w-4 h-4" style={{ color: 'var(--th-accent-text)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        Editor de Colors
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {/* Copiar des d'un preset */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setCopyFromPreset(prev => prev ? null : 'open')}
+                            className="px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors"
+                            style={{ color: 'var(--th-text-muted)', backgroundColor: 'var(--th-bg-hover)', border: '1px solid var(--th-border)' }}
+                          >
+                            Copiar des de…
+                          </button>
+                          {copyFromPreset && (
+                            <div className="absolute right-0 top-full mt-1 rounded-lg shadow-xl z-50 py-1 min-w-[140px]"
+                              style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}>
+                              {PRESET_THEMES.map(p => (
+                                <button
+                                  key={p.id}
+                                  onClick={() => handleCopyFromPreset(p.id)}
+                                  className="w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2"
+                                  style={{ color: 'var(--th-text-secondary)' }}
+                                >
+                                  <div className="flex gap-0.5">
+                                    {p.preview.slice(0, 2).map((c, i) => (
+                                      <div key={i} className="w-3 h-3 rounded" style={{ backgroundColor: c, border: '1px solid var(--th-border-subtle)' }} />
+                                    ))}
+                                  </div>
+                                  {p.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setCustomEditorOpen(false)}
+                          className="px-2.5 py-1 text-[10px] font-bold rounded-lg transition-colors"
+                          style={{ color: 'var(--th-text-muted)', backgroundColor: 'var(--th-bg-hover)', border: '1px solid var(--th-border)' }}
+                        >
+                          Tancar editor
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 max-h-[320px] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+                      {TOKEN_GROUPS.map(group => (
+                        <div key={group.id}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--th-text-primary)' }}>{group.label}</h4>
+                            {group.description && (
+                              <span className="text-[9px]" style={{ color: 'var(--th-text-disabled)' }}>{group.description}</span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                            {group.tokens.map(({ key, label }) => (
+                              <TokenRow
+                                key={key}
+                                tokenKey={key}
+                                label={label}
+                                value={resolvedCustomTheme.tokens[key] || ''}
+                                onChange={handleCustomTokenChange}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 pt-3 flex items-center justify-between text-[9px]" style={{ borderTop: '1px solid var(--th-border)', color: 'var(--th-text-disabled)' }}>
+                      <span>Els canvis s'apliquen en viu i es guarden automàticament al teu compte.</span>
+                    </div>
+                  </div>
+                )}
              </div>
            ) :
            activeTab === 'editor' ? (

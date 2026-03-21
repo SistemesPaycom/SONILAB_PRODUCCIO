@@ -136,8 +136,8 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
   const [scrollModeWave, setScrollModeWave] = useState<'stationary' | 'page'>('stationary');
 
   const [isScriptLinked, setIsScriptLinked] = useState(true);
-  /** Panell del guió: l'usuari pot col·lapsar-lo manualment per guanyar espai */
-  const [scriptPanelCollapsed, setScriptPanelCollapsed] = useState(false);
+  /** Panell del guió: col·lapsat per defecte per comoditat del lector */
+  const [scriptPanelCollapsed, setScriptPanelCollapsed] = useState(true);
   const scriptScrollRef = useRef<HTMLElement>(null);
   const takeLayoutRef = useRef<Map<number, number>>(new Map());
   const activeTakeByTimeRef = useRef<number | null>(null);

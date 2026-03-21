@@ -31,57 +31,88 @@ export const AuthModal: React.FC<{
     }
   };
 
- return (
+  return (
     <div className="fixed inset-0 z-[1000] bg-black/70 flex items-center justify-center p-4" onClick={() => {}}>
-      <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="w-full max-w-md rounded-2xl p-5"
+        style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-100">
-            {mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--th-text-primary)' }}>
+            {mode === 'login' ? 'Iniciar sessió' : 'Crear compte'}
           </h2>
           <button
-            className="text-sm text-gray-300 hover:text-white"
+            className="text-sm transition-colors"
+            style={{ color: 'var(--th-accent-text)' }}
             onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
           >
-            {mode === 'login' ? 'Crear cuenta' : 'Tengo cuenta'}
+            {mode === 'login' ? 'Crear compte' : 'Ja tinc compte'}
           </button>
         </div>
 
         {reason === 'expired' && (
-          <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 px-3 py-2 text-sm">
-            Sesión caducada. Vuelve a iniciar sesión.
+          <div
+            className="mb-3 rounded-lg px-3 py-2 text-sm"
+            style={{
+              backgroundColor: 'var(--th-alert-warning-bg)',
+              border: '1px solid var(--th-alert-warning-border)',
+              color: 'var(--th-alert-warning-text)',
+            }}
+          >
+            Sessió caducada. Torna a iniciar sessió.
           </div>
         )}
 
         <div className="space-y-3">
           <input
-            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
-            placeholder="Email"
+            className="w-full px-3 py-2 rounded-lg"
+            style={{
+              backgroundColor: 'var(--th-bg-tertiary)',
+              border: '1px solid var(--th-border)',
+              color: 'var(--th-text-primary)',
+            }}
+            placeholder="Correu electrònic"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !busy && email && password && submit()}
           />
           <input
-            className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-100"
-            placeholder="Contraseña"
+            className="w-full px-3 py-2 rounded-lg"
+            style={{
+              backgroundColor: 'var(--th-bg-tertiary)',
+              border: '1px solid var(--th-border)',
+              color: 'var(--th-text-primary)',
+            }}
+            placeholder="Contrasenya"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !busy && email && password && submit()}
           />
 
-          {err && <div className="text-sm text-red-300">{err}</div>}
+          {err && (
+            <div
+              className="text-sm rounded-lg px-3 py-2"
+              style={{
+                backgroundColor: 'var(--th-alert-error-bg)',
+                border: '1px solid var(--th-alert-error-border)',
+                color: 'var(--th-alert-error-text)',
+              }}
+            >
+              {err}
+            </div>
+          )}
 
           <button
-            className="w-full px-3 py-2 rounded-lg text-white font-semibold disabled:opacity-60" style={{ backgroundColor: 'var(--th-btn-primary-bg)' }}
+            className="w-full px-3 py-2 rounded-lg font-semibold disabled:opacity-60 transition-colors"
+            style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
             disabled={busy || !email || !password}
             onClick={submit}
           >
             {busy ? '...' : (mode === 'login' ? 'Entrar' : 'Registrar')}
           </button>
 
-          <div className="text-xs text-gray-400">
-            App transcripció i subtitulació de vídeos. Fet amb ❤️ per Sonilab.
-          </div>
         </div>
       </div>
     </div>

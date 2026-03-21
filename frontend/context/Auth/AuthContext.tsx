@@ -29,6 +29,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const profile = await api.me();
       setMe(profile);
+      // Notificar ThemeProvider (que està fora d'AuthProvider) amb les preferències
+      window.dispatchEvent(new CustomEvent('USER_PROFILE_LOADED', { detail: profile }));
     } catch {
       // no bloquear UX por un /me temporalmente roto
     }
