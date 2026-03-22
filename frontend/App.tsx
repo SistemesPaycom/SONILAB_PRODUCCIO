@@ -595,7 +595,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
         <button
           onClick={() => setIsLibraryCollapsed(!isLibraryCollapsed)}
           title={isLibraryCollapsed ? 'Expandir librería' : 'Colapsar librería'}
-          className="absolute top-1/2 -right-3 -translate-y-1/2 z-[60] w-6 h-10 flex items-center justify-center rounded-r-md bg-gray-700 text-gray-300 hover:text-white transition-colors shadow-lg border border-gray-600"
+          className="absolute top-1/2 -right-3 -translate-y-1/2 z-[40] w-6 h-10 flex items-center justify-center rounded-r-md bg-gray-700 text-gray-300 hover:text-white transition-colors shadow-lg border border-gray-600"
           style={{ fontSize: '10px' }}
         >
           {isLibraryCollapsed ? '›' : '‹'}

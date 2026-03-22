@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Document } from '../../types';
-import { parseSrt } from '../../utils/SubtitlesEditor/srtParser';
+import { parseSrt, secondsToSrtTime } from '../../utils/SubtitlesEditor/srtParser';
 import { useLibrary } from '../../context/Library/LibraryContext';
 import * as Icons from '../icons';
 
@@ -91,37 +91,70 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
             <p className="text-sm font-bold">Cap subtítol coincideix amb el filtre</p>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto space-y-1">
-            {filtered.map((seg) => (
-              <div
-                key={seg.id}
-                className="group flex gap-3 px-4 py-2.5 rounded-lg transition-colors border border-transparent"
-                style={{ '--hover-bg': 'var(--th-editor-row-hover)' } as any}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--th-editor-row-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-              >
-                {/* Cue number */}
-                <div className="flex-shrink-0 w-8 text-right">
-                  <span className="text-[10px] font-mono font-bold tabular-nums" style={{ color: 'var(--th-editor-meta)' }}>
-                    {seg.id}
-                  </span>
-                </div>
+          <div className="space-y-0.5">
+            {filtered.map((seg) => {
+              const textLines = (seg.originalText || seg.richText || '').split('\n');
+              const line1 = textLines[0] || '';
+              const line2 = textLines.slice(1).join('\n');
+              return (
+                <div
+                  key={seg.id}
+                  className="group flex items-start px-3 py-2 rounded-lg transition-colors"
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--th-editor-row-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                >
+                  {/* Col 1: Cue number — fixed width */}
+                  <div className="flex-shrink-0 text-right pt-[3px]" style={{ width: '32px' }}>
+                    <span className="text-[11px] font-mono font-bold tabular-nums" style={{ color: 'var(--th-text-muted)', opacity: 0.5 }}>
+                      {seg.id}
+                    </span>
+                  </div>
 
-                {/* Timecodes */}
-                <div className="flex-shrink-0 w-[200px]">
-                  <span className="text-[11px] font-mono tabular-nums" style={{ color: 'var(--th-editor-timecode)' }}>
-                    {seg.start} → {seg.end}
-                  </span>
+                  {/* Col 2+3 grid */}
+                  <div className="flex-1 min-w-0 flex flex-col gap-1 ml-3">
+                    {/* Row 1: TC IN badge + line1 */}
+                    <div className="flex items-center">
+                      <div
+                        className="flex-shrink-0 flex items-center justify-center font-mono tabular-nums font-semibold rounded"
+                        style={{
+                          width: '134px',
+                          height: '22px',
+                          fontSize: '11px',
+                          lineHeight: '22px',
+                          backgroundColor: 'var(--th-accent)',
+                          color: '#FFFFFF',
+                        }}
+                      >{secondsToSrtTime(seg.startTime)}</div>
+                      <span className="flex-1 min-w-0 truncate ml-3" style={{ fontSize: '13px', lineHeight: '22px', color: 'var(--th-editor-text)' }}>
+                        {line1}
+                      </span>
+                    </div>
+                    {/* Row 2: TC OUT badge + line2 */}
+                    <div className="flex items-center">
+                      <div
+                        className="flex-shrink-0 flex items-center justify-center font-mono tabular-nums rounded"
+                        style={{
+                          width: '134px',
+                          height: '22px',
+                          fontSize: '11px',
+                          lineHeight: '22px',
+                          backgroundColor: 'var(--th-bg-tertiary)',
+                          color: 'var(--th-editor-timecode)',
+                          border: '1px solid var(--th-border-subtle)',
+                        }}
+                      >{secondsToSrtTime(seg.endTime)}</div>
+                      {line2 ? (
+                        <span className="flex-1 min-w-0 truncate ml-3" style={{ fontSize: '12px', lineHeight: '22px', color: 'var(--th-editor-text)', opacity: 0.7 }}>
+                          {line2}
+                        </span>
+                      ) : (
+                        <span className="flex-1 ml-3" style={{ height: '22px' }}>{'\u00A0'}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-
-                {/* Text */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap break-words" style={{ color: 'var(--th-editor-text)' }}>
-                    {seg.originalText || seg.richText || ''}
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
