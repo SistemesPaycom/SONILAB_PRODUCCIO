@@ -284,8 +284,8 @@ const Toolbar: React.FC<ToolbarProps> = (props) => {
       </div>
 
       <div className="flex items-center gap-4">
-        <button onClick={handleExport} disabled={isExporting || !currentDoc} className="p-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-all disabled:opacity-40 shadow-md group relative" title="Exportar">
-          {isExporting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Icons.Download className="w-5 h-5" />}
+        <button onClick={handleExport} disabled={isExporting || !currentDoc} className="p-1 text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-40" title="Exportar">
+          {isExporting ? <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin"></div> : <Icons.Download className="w-4 h-4" />}
         </button>
         <div className="relative">
           <button onClick={() => setShowWidthSlider(!showWidthSlider)} className={`w-10 h-10 flex items-center justify-center font-bold text-sm rounded-lg border transition-all ${showWidthSlider ? 'text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'}`} style={showWidthSlider ? { backgroundColor: 'var(--th-accent)', borderColor: 'var(--th-accent)' } : undefined} title="Ajustar amplada de pàgina">&lt;F&gt;</button>

@@ -11,6 +11,7 @@ import type { Layer, Stroke, Tool, TextAnnotation, TextHighlightAnnotation, Poin
 import type { TakeStatus, CharacterNote, EditorStyles } from '../../types';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
 import { A4_WIDTH_PX } from '../../constants';
+import { parseScript } from '../../utils/EditorDeGuions/scriptParser';
 
 
 interface LectorViewProps {
@@ -286,10 +287,12 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
     const [searchMatches, setSearchMatches] = useState<Match[]>([]);
     const [activeMatch, setActiveMatch] = useState(-1);
     
-    // Character and Take state
+    // Actor, Character and Take state
+    const [selectedActor, setSelectedActor] = useState<string | null>(null);
     const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
     const [charMatches, setCharMatches] = useState<Match[]>([]);
     const [jumpMode, setJumpMode] = useState(true);
+    const takeSelectRef = useRef<HTMLSelectElement>(null);
     const [takeStatuses, setTakeStatuses] = useState<Record<string, Record<string, TakeStatus>>>(activeDocument?.takeStatuses || {});
     const [takeNotes, setTakeNotes] = useState<Record<string, string>>(activeDocument?.takeNotes || {});
     const [characterNotes, setCharacterNotes] = useState<CharacterNote[]>(activeDocument?.characterNotes || []);
@@ -322,7 +325,49 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
         const content = activeDocument.contentByLang[langToUse];
         return content !== undefined ? content : "Document text not available.";
     }, [activeDocument]);
-    const characters = activeDocument?.characters || [];
+    // ── Derive takes & unique characters from script text using parseScript ──
+    // Same extraction logic the Editor de Guions DADES mode uses.
+    const parsedScript = useMemo(() => {
+        if (!SCRIPT_TEXT || SCRIPT_TEXT === 'Document text not available.') return { preamble: '', takes: [] };
+        return parseScript(SCRIPT_TEXT);
+    }, [SCRIPT_TEXT]);
+
+    // Extract unique character names using the same *NAME* splitting as csvConverter's splitSpeakers
+    const parsedCharacters = useMemo(() => {
+        const speakerRegex = /\*([^*]+)\*/g;
+        const nameSet = new Set<string>();
+        for (const take of parsedScript.takes) {
+            for (const line of take.lines) {
+                if (!line.speaker) continue;
+                let m: RegExpExecArray | null;
+                speakerRegex.lastIndex = 0;
+                while ((m = speakerRegex.exec(line.speaker)) !== null) {
+                    nameSet.add(m[1].trim());
+                }
+            }
+        }
+        return Array.from(nameSet).sort();
+    }, [parsedScript]);
+
+    // Build take list for selector — uses parsed takes or falls back to document takes.
+    // IMPORTANT: `num` must match the real TAKE number from the label (e.g. "TAKE #5" → 5),
+    // because ColumnView populates takeYRef using that same regex-extracted number.
+    const parsedTakes = useMemo(() => {
+        if (parsedScript.takes.length > 0) {
+            return parsedScript.takes.map(t => {
+                const m = t.takeLabel.match(/TAKE\s*#?\s*(\d+)/i);
+                const realNum = m ? parseInt(m[1], 10) : t.id;
+                return { num: realNum, label: t.takeLabel };
+            });
+        }
+        // Fallback to existing document takes if parseScript found nothing
+        return (activeDocument?.takes || []).map((t: any) => ({ num: t.num, label: `TAKE #${t.num}` }));
+    }, [parsedScript, activeDocument]);
+
+    // Keep backward compatibility — components that read activeDocument.characters
+    const characters = parsedCharacters.length > 0
+        ? parsedCharacters.map(name => ({ name }))
+        : (activeDocument?.characters || []);
     
     // Refs for scrolling
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -828,28 +873,57 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
     const handleMatchLayout = useCallback((idx: number, y: number) => matchYRef.current.set(idx, y), []);
     const handleTakeLayout = useCallback((num: number, y: number) => takeYRef.current.set(num, y), []);
 
-    // Character selection
+    // Character selection — selector only sets shared state;
+    // highlight logic is decoupled into the useEffect below.
     const onSelectCharacter = (name: string | null) => {
         setSelectedCharacter(name);
-        if (!name) {
+    };
+
+    // Derive character highlight matches reactively from selectedCharacter
+    useEffect(() => {
+        if (!selectedCharacter) {
             setCharMatches([]);
             return;
         }
-        const needle = `*${name}*`;
+        const needle = `*${selectedCharacter}*`;
         setCharMatches(findMatches(SCRIPT_TEXT, needle));
-    };
+    }, [selectedCharacter, SCRIPT_TEXT]);
     
     const takesForSelectedCharacter = useMemo(() => {
-        if (!selectedCharacter || !activeDocument?.takes) return [];
+        if (!selectedCharacter) return [];
+        // Use parsed script data (DADES-equivalent logic) when available
+        if (parsedScript.takes.length > 0) {
+            const speakerRegex = /\*([^*]+)\*/g;
+            return parsedScript.takes
+                .filter(take => {
+                    return take.lines.some(line => {
+                        if (!line.speaker) return false;
+                        speakerRegex.lastIndex = 0;
+                        let m: RegExpExecArray | null;
+                        while ((m = speakerRegex.exec(line.speaker)) !== null) {
+                            if (m[1].trim() === selectedCharacter) return true;
+                        }
+                        return false;
+                    });
+                })
+                .map(take => {
+                    // Extract real TAKE number from label, matching ColumnView's takeYRef keys
+                    const m = take.takeLabel.match(/TAKE\s*#?\s*(\d+)/i);
+                    return m ? parseInt(m[1], 10) : take.id;
+                })
+                .sort((a, b) => a - b);
+        }
+        // Fallback to document takes with text search
+        if (!activeDocument?.takes) return [];
         const needle = `*${selectedCharacter}*`;
         return activeDocument.takes
-            .filter(take => {
+            .filter((take: any) => {
                 const slice = SCRIPT_TEXT.slice(take.start, take.end);
                 return findMatches(slice, needle).length > 0;
             })
-            .map(take => take.num)
-            .sort((a, b) => a - b);
-    }, [selectedCharacter, activeDocument, SCRIPT_TEXT]);
+            .map((take: any) => take.num)
+            .sort((a: number, b: number) => a - b);
+    }, [selectedCharacter, parsedScript, activeDocument, SCRIPT_TEXT]);
 
     const handleJumpToTake = (num: number) => {
         const y = takeYRef.current.get(num);
@@ -858,6 +932,8 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
             const topMargin = 20;
             scrollRef.current?.scrollTo({ top: Math.max(0, y + paddingTop - topMargin), behavior: 'smooth' });
         }
+        // Reset the selector to show "TAKE" — navigation is temporal, no persistent state
+        if (takeSelectRef.current) takeSelectRef.current.value = '';
     };
     
     // Zoom handlers
@@ -1298,6 +1374,18 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                         <div className="h-[50px] flex items-center justify-between px-4 border-t border-gray-700">
                             <h1 className="text-md font-semibold text-gray-200 truncate">{activeDocument.name}</h1>
                             <div className="flex items-center gap-2">
+                                {/* Actor selector — prepared for future data source */}
+                                <div className="relative">
+                                    <select
+                                        value={selectedActor || ''}
+                                        onChange={(e) => setSelectedActor(e.target.value || null)}
+                                        disabled
+                                        className="text-sm appearance-none cursor-pointer bg-gray-700 border border-gray-600 rounded-md py-1 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="">Actor</option>
+                                    </select>
+                                </div>
+                                {/* Character selector — sets shared state only */}
                                 <div className="relative">
                                     <select
                                         value={selectedCharacter || ''}
@@ -1310,14 +1398,16 @@ export const LectorView: React.FC<LectorViewProps> = ({ documentId, onClose, onN
                                         ))}
                                     </select>
                                 </div>
+                                {/* Take selector — temporal navigation, resets after jump */}
                                 <div className="relative">
                                     <select
-                                        onChange={(e) => handleJumpToTake(Number(e.target.value))}
+                                        ref={takeSelectRef}
+                                        onChange={(e) => { if (e.target.value) handleJumpToTake(Number(e.target.value)); }}
                                         className="text-sm appearance-none cursor-pointer bg-gray-700 border border-gray-600 rounded-md py-1 pl-3 pr-8 focus:outline-none focus:ring-2 focus:ring-gray-500"
                                     >
                                         <option value="">TAKE</option>
-                                        {activeDocument.takes?.map(take => (
-                                            <option key={take.num} value={take.num}>TAKE #{take.num}</option>
+                                        {parsedTakes.map(take => (
+                                            <option key={take.num} value={take.num}>{take.label}</option>
                                         ))}
                                     </select>
                                 </div>
