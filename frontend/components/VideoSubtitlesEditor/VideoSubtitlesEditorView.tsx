@@ -822,6 +822,14 @@ const handleSave = useCallback(() => {
       case 'SAVE': handleSave(); break;
       case 'SPLIT_SEGMENT': handleSplitSegmentAtCursor(); break;
       case 'MERGE_SEGMENT': handleMergeSegmentWithNext(); break;
+      case 'DELETE_ACTIVE_SEGMENT': {
+        // Only fires if there is an active segment and focus is NOT inside an editable text field
+        const active = document.activeElement as HTMLElement | null;
+        if (activeSegmentId && !active?.isContentEditable) {
+          handleDeleteSegment(activeSegmentId);
+        }
+        break;
+      }
     }
   });
 

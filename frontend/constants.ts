@@ -50,6 +50,7 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
   subtitlesEditor: [
     { id: 'sub_new', action: 'INSERT_SUBTITLE', label: 'Nou subtítol (playhead)', combo: 'Ctrl+N' },
     { id: 'sub_delete', action: 'DELETE_SEGMENT', label: 'Esborrar subtítol', combo: 'Delete' },
+    { id: 'sub_delete_active', action: 'DELETE_ACTIVE_SEGMENT', label: 'Esborrar subtítol actiu', combo: 'Shift+Delete' },
 
     { id: 'sub_split', action: 'SPLIT_SEGMENT', label: 'Dividir subtítol al cursor', combo: 'Ctrl+K' },
     { id: 'sub_split_ph', action: 'SPLIT_AT_PLAYHEAD', label: 'Dividir al playhead', combo: 'Ctrl+Shift+K' },

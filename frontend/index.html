@@ -7,6 +7,12 @@
   <title>Script Editor Pro</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    /* Scale UI base ~10% — equivalent to browser at 110%.
+       Affects all Tailwind rem-based sizes (text, spacing, gaps, heights).
+       Revert by removing this rule. Does not affect canvas px calculations. */
+    html {
+      font-size: 110%;
+    }
     body {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;

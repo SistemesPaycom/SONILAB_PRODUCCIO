@@ -268,6 +268,13 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
       case 'JUMP_PREV_SEGMENT': case 'NAVIGATE_SEGMENT_UP': onJumpSegment('prev'); break;
       case 'SPLIT_SEGMENT': handleSplitSegmentAtCursor(); break;
       case 'MERGE_SEGMENT': handleMergeSegmentWithNext(); break;
+      case 'DELETE_ACTIVE_SEGMENT': {
+        const active = document.activeElement as HTMLElement | null;
+        if (activeSegmentId && !active?.isContentEditable) {
+          handleDeleteSegment(activeSegmentId);
+        }
+        break;
+      }
     }
   });
 
