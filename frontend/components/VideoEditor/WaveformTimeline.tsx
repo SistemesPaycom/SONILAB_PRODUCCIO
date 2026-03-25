@@ -46,6 +46,8 @@ interface WaveformTimelineProps {
   onToggleAutosave?: () => void;
   onSave?: () => void;
   onExportSrt?: () => void;
+  /** Marge mínim entre subtítols consecutius (ms). Default: 160 */
+  minGapMs?: number;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -89,6 +91,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   onToggleAutosave,
   onSave,
   onExportSrt,
+  minGapMs = 160,
 }) => {
   // ── Refs ──
   const containerRef = useRef<HTMLDivElement>(null);
@@ -518,17 +521,18 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     }
   }, []);
 
-  // ── Neighbor bounds for overlap prevention ──
+  // ── Neighbor bounds for overlap prevention + minimum gap ──
+  const gapSec = minGapMs / 1000;
   const getNeighborBounds = useCallback(
     (segId: Id) => {
       const segs = segmentsRef.current;
       const idx = segs.findIndex((s) => s.id === segId);
       return {
-        prevEnd: idx > 0 ? segs[idx - 1].endTime : 0,
-        nextStart: idx < segs.length - 1 ? segs[idx + 1].startTime : duration,
+        prevEnd: idx > 0 ? segs[idx - 1].endTime + gapSec : 0,
+        nextStart: idx < segs.length - 1 ? segs[idx + 1].startTime - gapSec : duration,
       };
     },
-    [duration]
+    [duration, gapSec]
   );
 
   // ── Mouse handlers with short-click / long-press discrimination ──

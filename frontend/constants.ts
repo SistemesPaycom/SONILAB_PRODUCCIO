@@ -14,6 +14,8 @@ export const LOCAL_STORAGE_KEYS = {
   TASKS_TRANSCRIPTION: 'slsf_tasks_transcription',
   /** Preferència d'editor per als SRT: 'editor-video-subs' | 'editor-srt-standalone' */
   SRT_EDITOR_MODE: 'slsf_srt_editor_mode',
+  /** Marge mínim entre subtítols a l'editor (ms). Preferència d'usuari, independent del projecte. */
+  EDITOR_MIN_GAP_MS: 'slsf_editor_min_gap_ms',
   /** Tema de color de la interfície */
   THEME: 'slsf_theme',
   /** Tokens del tema personalitzat (fallback local) */

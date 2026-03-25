@@ -51,6 +51,8 @@ interface VideoSubtitlesEditorViewProps {
   handleEditorBackgroundClick: (e: React.MouseEvent<HTMLElement>) => void;
 }
 
+const MIN_SEG_DURATION = 0.1; // seconds
+
 const VideoSubtitlesEditorViewInner: React.FC<VideoSubtitlesEditorViewProps> = (props) => {
   const {
     currentDoc,
@@ -232,10 +234,13 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
     fontScale: 1,
   });
 
+  const [editorMinGapMs, setEditorMinGapMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_GAP_MS, 160);
+
   const generalConfig = useMemo<GeneralConfig>(() => ({
     maxCharsPerLine: 40,
     maxLinesPerSubtitle: maxLinesSubs,
-  }), [maxLinesSubs]);
+    minGapMs: editorMinGapMs,
+  }), [maxLinesSubs, editorMinGapMs]);
 
   const [syncSubsEnabled, setSyncSubsEnabled] = useState(true);
   // Ref mirall per accedir a syncSubsEnabled dins callbacks estables (deps=[])
@@ -835,8 +840,19 @@ const handleSave = useCallback(() => {
 
   const handleSegmentChange = useCallback((updated: Segment) => {
     if (!isEditing) return;
-    subsHistory.updateDraft(prev => prev.map((s) => (s.id === updated.id ? updated : s)));
-  }, [isEditing, subsHistory]);
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    subsHistory.updateDraft(prev => {
+      const idx = prev.findIndex(s => s.id === updated.id);
+      if (idx === -1) return prev.map(s => s.id === updated.id ? updated : s);
+      const prevSeg = idx > 0 ? prev[idx - 1] : null;
+      const nextSeg = idx < prev.length - 1 ? prev[idx + 1] : null;
+      let { startTime, endTime } = updated;
+      if (prevSeg && startTime < prevSeg.endTime + gap) startTime = prevSeg.endTime + gap;
+      if (nextSeg && endTime > nextSeg.startTime - gap) endTime = nextSeg.startTime - gap;
+      if (endTime - startTime < MIN_SEG_DURATION) endTime = startTime + MIN_SEG_DURATION;
+      return prev.map(s => s.id === updated.id ? { ...updated, startTime, endTime } : s);
+    });
+  }, [isEditing, subsHistory, generalConfig.minGapMs]);
 
   const handleSegmentBlur = useCallback(() => {
     if (!isEditing) return;
@@ -962,6 +978,8 @@ const handleSave = useCallback(() => {
               overlayConfig={subsOverlayConfig}
               onOverlayConfigChange={setSubsOverlayConfig}
               generalConfig={generalConfig}
+              editorMinGapMs={editorMinGapMs}
+              onEditorMinGapMsChange={setEditorMinGapMs}
               autoScroll={autoScrollSubs}
               onOpenAIOperations={handleOpenAIOperations}
               onSplit={handleSplitSegmentAtCursor}
@@ -1030,6 +1048,7 @@ const handleSave = useCallback(() => {
           onScrollModeChangeWave={setScrollModeWave}
           onSave={handleSave}
           onExportSrt={handleExportSrt}
+          minGapMs={generalConfig.minGapMs}
         />
       </div>
 

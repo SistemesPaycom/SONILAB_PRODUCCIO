@@ -55,6 +55,18 @@ export class TranscriptionSettingsDto {
   @Min(1)
   @Max(20)
   maxSpeakers?: number;
+
+  /** Marge mínim entre subtítols consecutius (ms). Default: 160 */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2000)
+  minSubGapMs?: number;
+
+  /** Si el pipeline ha d'aplicar el marge mínim automàticament. Default: true */
+  @IsOptional()
+  @IsBoolean()
+  enforceMinSubGap?: boolean;
 }
 
 export class CreateProjectDto {

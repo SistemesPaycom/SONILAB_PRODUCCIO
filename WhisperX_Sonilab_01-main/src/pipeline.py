@@ -197,6 +197,9 @@ def pipeline_generate(
     # Diarización: número de speakers (None = auto-detección pyannote)
     min_speakers: Optional[int] = None,
     max_speakers: Optional[int] = None,
+    # Margen mínimo entre subtítulos consecutivos
+    enforce_min_gap: bool = False,
+    min_gap_ms: int = 160,
 ):
     offline_mode = bool(offline_mode)
 
@@ -506,6 +509,8 @@ def pipeline_generate(
                 do_add_periods=postprocess_add_periods,
                 do_merge_lines=postprocess_merge_lines,
                 do_balance_lines=postprocess_balance_lines,
+                do_enforce_min_gap=enforce_min_gap,
+                min_gap_ms=min_gap_ms,
                 status_cb=_status,
             )
             _status("Post-procesado de texto completado.")

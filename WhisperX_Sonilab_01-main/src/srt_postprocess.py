@@ -111,6 +111,11 @@ def main():
     p.add_argument("--no-periods", dest="no_periods",
                    action="store_true", default=False,
                    help="Desactiva add_periods.")
+    p.add_argument("--min-gap-ms", dest="min_gap_ms", type=int, default=160,
+                   help="Marge mínim entre cues consecutius (ms). Default: 160")
+    p.add_argument("--enforce-min-gap", dest="enforce_min_gap",
+                   action="store_true", default=False,
+                   help="Aplica el marge mínim entre cues al final del postprocessat.")
     args = p.parse_args()
 
     inp = Path(args.input)
@@ -140,6 +145,8 @@ def main():
         do_merge_lines=do_merge,
         do_balance_lines=do_balance,
         do_split_long_lines=do_balance,   # desactivar junt amb balance
+        do_enforce_min_gap=args.enforce_min_gap,
+        min_gap_ms=args.min_gap_ms,
         status_cb=lambda msg: print(msg, flush=True),
     )
 
