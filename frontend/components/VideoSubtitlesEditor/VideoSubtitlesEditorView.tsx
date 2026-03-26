@@ -487,16 +487,18 @@ useEffect(() => {
 
   if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
   autosaveTimer.current = setTimeout(() => {
+    // Only update lastSavedRef — do NOT dispatch UPDATE_DOCUMENT_CONTENTS here.
+    // Dispatching changes state.documents, which re-triggers the video auto-load
+    // effect (dep: state.documents) → handleSyncMedia → setCurrentTime(0) → playhead reset.
     void api.updateSrt(currentDoc.id, srt).then(() => {
       lastSavedRef.current = srt;
-      dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: '_unassigned', content: srt, csvContent: '' }});
     }).catch(()=>{});
   }, 300);
 
   return () => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
   };
-}, [autosave, useBackend, isEditing, subsHistory.historyState.present, currentDoc.id, dispatch]);
+}, [autosave, useBackend, isEditing, subsHistory.historyState.present, currentDoc.id]);
   // ── Guió efectiu: el guió vinculat al projecte té prioritat sobre el contingut del doc SRT ──
   const effectiveGuionContent = guionContent || currentContent;
 
