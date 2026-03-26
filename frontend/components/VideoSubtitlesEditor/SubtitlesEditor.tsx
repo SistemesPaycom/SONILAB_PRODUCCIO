@@ -369,26 +369,6 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
                     >U</button>
                 </div>
 
-                {/* Min gap control */}
-                {onEditorMinGapMsChange && (
-                  <>
-                    <div className="w-px h-5 mx-1" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />
-                    <div className="flex items-center gap-1" title="Marge mínim entre subtítols consecutius (ms)">
-                      <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: 'var(--th-editor-meta)' }}>Gap</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={2000}
-                        step={10}
-                        className="w-14 px-1 py-0.5 rounded text-[11px] font-mono text-center border"
-                        style={{ backgroundColor: 'var(--th-bg-tertiary)', borderColor: 'var(--th-border)', color: 'var(--th-text-primary)' }}
-                        value={editorMinGapMs ?? 160}
-                        onChange={(e) => onEditorMinGapMsChange(Math.max(0, Number(e.target.value)))}
-                      />
-                      <span className="text-[9px]" style={{ color: 'var(--th-editor-meta)' }}>ms</span>
-                    </div>
-                  </>
-                )}
             </div>
         </div>
       </header>

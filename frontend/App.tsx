@@ -915,6 +915,14 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
             Canvis sense desar
           </span>
         )}
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className={`${history.isDirty ? '' : 'ml-auto'} p-1.5 rounded-lg transition-colors hover:bg-white/10`}
+          style={{ color: 'var(--th-text-secondary)' }}
+          title="Configuració"
+        >
+          <Icons.Settings className="w-5 h-5" />
+        </button>
       </header>
 
       {/* Lock banner: read-only mode when document is in use by another user */}
