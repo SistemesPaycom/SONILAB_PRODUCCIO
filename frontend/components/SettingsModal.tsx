@@ -1,6 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { EditorStyles, EditorStyle, AppShortcuts, Shortcut } from '../types';
-import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS } from '../constants';
+import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS, mergeShortcuts } from '../constants';
+import { api } from '../services/api';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { useAuth } from '../context/Auth/AuthContext';
 import { useTheme } from '../context/Theme/ThemeContext';
@@ -124,9 +125,52 @@ const StyleControlGroup: React.FC<{ label: string; styleKey: keyof EditorStyles;
     );
 };
 
+/** Build the combo string from a KeyboardEvent */
+function comboFromEvent(e: KeyboardEvent | React.KeyboardEvent): string | null {
+  if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
+  const parts: string[] = [];
+  if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.altKey) parts.push('Alt');
+  let keyName = e.key;
+  if (keyName === ' ') keyName = 'Space';
+  if (keyName === '+') keyName = 'Plus';
+  if (keyName === '-') keyName = 'Minus';
+  if (keyName === ',') keyName = 'Comma';
+  if (keyName === 'Escape') return null; // Escape cancels recording
+  if (keyName.length === 1) keyName = keyName.toUpperCase();
+  parts.push(keyName);
+  return parts.join('+');
+}
+
+/** Find duplicate combo within the same scope as currentId, return the conflicting shortcut or null */
+function findDuplicate(
+  shortcuts: AppShortcuts,
+  currentId: string,
+  combo: string,
+): Shortcut | null {
+  const norm = combo.replace(/\s+/g, '').toLowerCase();
+  // Find which scope the current shortcut belongs to
+  for (const key of Object.keys(shortcuts) as (keyof AppShortcuts)[]) {
+    const group = shortcuts[key];
+    if (!group.some((s) => s.id === currentId)) continue;
+    // Only check for duplicates within this same scope
+    for (const s of group) {
+      if (s.id !== currentId && s.combo.replace(/\s+/g, '').toLowerCase() === norm) {
+        return s;
+      }
+    }
+    break;
+  }
+  return null;
+}
+
 const ShortcutsTab: React.FC = () => {
-    const [shortcuts] = useLocalStorage<AppShortcuts>(LOCAL_STORAGE_KEYS.SHORTCUTS, DEFAULT_SHORTCUTS);
+    const [shortcuts, setShortcuts] = useLocalStorage<AppShortcuts>(LOCAL_STORAGE_KEYS.SHORTCUTS, DEFAULT_SHORTCUTS);
     const [activeApp, setActiveApp] = useState<ShortcutApp>('general');
+    const [recordingId, setRecordingId] = useState<string | null>(null);
+    const [conflict, setConflict] = useState<{ id: string; with: Shortcut } | null>(null);
+    const { me } = useAuth();
 
     const appLabels: Record<ShortcutApp, string> = {
         general: 'General',
@@ -136,12 +180,87 @@ const ShortcutsTab: React.FC = () => {
         subtitlesEditor: 'Subtítols SRT'
     };
 
-    // Ordenem les pestanyes per posar General al principi
     const sortedApps: ShortcutApp[] = ['general', 'scriptEditor', 'lector', 'videoEditor', 'subtitlesEditor'];
+
+    // Ensure all default shortcuts exist (merge with defaults for missing ids)
+    const merged = useMemo(() => mergeShortcuts(DEFAULT_SHORTCUTS, shortcuts), [shortcuts]);
+
+    const persistToBackend = useCallback((updated: AppShortcuts) => {
+      if (USE_BACKEND && me) {
+        api.updateMe({ preferences: { shortcuts: updated } }).catch(() => {});
+      }
+    }, [me]);
+
+    const updateCombo = useCallback((shortcutId: string, newCombo: string) => {
+      const dup = findDuplicate(merged, shortcutId, newCombo);
+      if (dup) {
+        setConflict({ id: shortcutId, with: dup });
+        return;
+      }
+      setConflict(null);
+      const updated: AppShortcuts = { ...merged };
+      for (const key of Object.keys(updated) as (keyof AppShortcuts)[]) {
+        updated[key] = updated[key].map((s) =>
+          s.id === shortcutId ? { ...s, combo: newCombo } : s,
+        );
+      }
+      setShortcuts(updated);
+      persistToBackend(updated);
+    }, [merged, setShortcuts, persistToBackend]);
+
+    const resetOne = useCallback((shortcutId: string) => {
+      const updated: AppShortcuts = { ...merged };
+      for (const key of Object.keys(DEFAULT_SHORTCUTS) as (keyof AppShortcuts)[]) {
+        const def = DEFAULT_SHORTCUTS[key].find((s) => s.id === shortcutId);
+        if (def) {
+          updated[key] = updated[key].map((s) =>
+            s.id === shortcutId ? { ...s, combo: def.combo } : s,
+          );
+        }
+      }
+      setConflict(null);
+      setShortcuts(updated);
+      persistToBackend(updated);
+    }, [merged, setShortcuts, persistToBackend]);
+
+    const resetAll = useCallback(() => {
+      setConflict(null);
+      setRecordingId(null);
+      setShortcuts(DEFAULT_SHORTCUTS);
+      persistToBackend(DEFAULT_SHORTCUTS);
+    }, [setShortcuts, persistToBackend]);
+
+    const handleKeyCapture = useCallback((e: React.KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Lone modifier → ignore, stay in recording mode
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+      // Escape → cancel recording
+      if (e.key === 'Escape') {
+        setRecordingId(null);
+        setConflict(null);
+        return;
+      }
+      const combo = comboFromEvent(e);
+      if (combo && recordingId) {
+        updateCombo(recordingId, combo);
+        setRecordingId(null);
+      }
+    }, [recordingId, updateCombo]);
+
+    /** Check if a shortcut has been modified from its default */
+    const isModified = (s: Shortcut): boolean => {
+      for (const key of Object.keys(DEFAULT_SHORTCUTS) as (keyof AppShortcuts)[]) {
+        const def = DEFAULT_SHORTCUTS[key].find((d) => d.id === s.id);
+        if (def) return def.combo !== s.combo;
+      }
+      return false;
+    };
 
     return (
         <div className="flex flex-col h-full">
-            <div className="flex gap-2 mb-6 p-1 rounded-xl" style={{ backgroundColor: 'var(--th-bg-secondary)', border: '1px solid var(--th-border)' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex gap-2 flex-1 p-1 rounded-xl" style={{ backgroundColor: 'var(--th-bg-secondary)', border: '1px solid var(--th-border)' }}>
                 {sortedApps.map(appId => (
                     <button
                         key={String(appId)}
@@ -152,28 +271,78 @@ const ShortcutsTab: React.FC = () => {
                         {appLabels[appId]}
                     </button>
                 ))}
+              </div>
+              <button
+                onClick={resetAll}
+                className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all hover:opacity-80"
+                style={{ backgroundColor: 'var(--th-bg-tertiary)', color: 'var(--th-text-muted)', border: '1px solid var(--th-border)' }}
+                title="Restablir totes les dreceres als valors per defecte"
+              >
+                Restablir tot
+              </button>
             </div>
 
+            {conflict && (
+              <div className="mb-3 px-3 py-2 rounded-lg text-xs font-medium" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: 'var(--th-error, #ef4444)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                Conflicte: aquesta combinació ja està assignada a «{conflict.with.label}».
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                {shortcuts[activeApp]?.length > 0 ? (
+                {merged[activeApp]?.length > 0 ? (
                     <table className="w-full text-sm text-left">
                         <thead className="text-gray-500 uppercase text-[10px] font-bold border-b border-[var(--th-border)]">
                             <tr>
                                 <th className="pb-2 pl-2">Acció</th>
                                 <th className="pb-2 text-right pr-2">Drecera</th>
+                                <th className="pb-2 w-8"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-700/50">
-                            {shortcuts[activeApp].map((s: Shortcut) => (
+                            {merged[activeApp].map((s: Shortcut) => {
+                                const recording = recordingId === s.id;
+                                const modified = isModified(s);
+                                return (
                                 <tr key={s.id} className="group hover:bg-white/5">
                                     <td className="py-3 pl-2 text-gray-300">{s.label}</td>
                                     <td className="py-3 text-right pr-2">
-                                        <span className="px-2 py-1 rounded text-[11px] font-mono transition-colors" style={{ color: 'var(--th-accent-text)', backgroundColor: 'var(--th-bg-primary)', border: '1px solid var(--th-border)' }}>
+                                      {recording ? (
+                                        <input
+                                          autoFocus
+                                          readOnly
+                                          onKeyDown={handleKeyCapture}
+                                          onBlur={() => { setRecordingId(null); setConflict(null); }}
+                                          className="px-2 py-1 rounded text-[11px] font-mono text-center w-40 outline-none animate-pulse"
+                                          style={{ color: 'var(--th-accent-text)', backgroundColor: 'var(--th-bg-tertiary)', border: '2px solid var(--th-accent)' }}
+                                          value="Prem una combinació..."
+                                        />
+                                      ) : (
+                                        <button
+                                          onClick={() => { setRecordingId(s.id); setConflict(null); }}
+                                          className="px-2 py-1 rounded text-[11px] font-mono transition-colors cursor-pointer hover:opacity-80"
+                                          style={{ color: 'var(--th-accent-text)', backgroundColor: 'var(--th-bg-primary)', border: `1px solid ${modified ? 'var(--th-accent)' : 'var(--th-border)'}` }}
+                                          title="Clic per canviar la drecera"
+                                        >
                                             {s.combo}
-                                        </span>
+                                        </button>
+                                      )}
+                                    </td>
+                                    <td className="py-3 w-8 text-center">
+                                      {modified && (
+                                        <button
+                                          onClick={() => resetOne(s.id)}
+                                          className="text-gray-500 hover:text-gray-300 transition-colors"
+                                          title="Restablir al valor per defecte"
+                                        >
+                                          <svg className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0115.36-5.36M20 15a9 9 0 01-15.36 5.36" />
+                                          </svg>
+                                        </button>
+                                      )}
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 ) : (

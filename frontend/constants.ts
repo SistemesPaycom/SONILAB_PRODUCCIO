@@ -1,4 +1,4 @@
-import { AppShortcuts } from './types';
+import { AppShortcuts, Shortcut } from './types';
 
 export const LOCAL_STORAGE_KEYS = {
   SHORTCUTS: 'slsf_shortcuts',
@@ -32,6 +32,27 @@ export const SUPPORTED_LANGUAGES = [
 ];
 
 export const MAX_SPEAKER_CHARS_PER_LINE = 30;
+
+/**
+ * Merge user overrides onto DEFAULT_SHORTCUTS by shortcut id.
+ * Only the `combo` field is overridden; new defaults not present in overrides are kept.
+ */
+export function mergeShortcuts(
+  defaults: AppShortcuts,
+  overrides: Partial<Record<keyof AppShortcuts, Shortcut[]>> | null | undefined,
+): AppShortcuts {
+  if (!overrides) return defaults;
+  const result = { ...defaults };
+  for (const key of Object.keys(defaults) as (keyof AppShortcuts)[]) {
+    const overs = overrides[key];
+    if (!overs) continue;
+    result[key] = defaults[key].map((def) => {
+      const ov = overs.find((s) => s.id === def.id);
+      return ov ? { ...def, combo: ov.combo } : def;
+    });
+  }
+  return result;
+}
 
 export const DEFAULT_SHORTCUTS: AppShortcuts = {
   general: [
