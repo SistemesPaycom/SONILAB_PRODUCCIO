@@ -379,7 +379,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, on
   const [maxLinesSubs, setMaxLinesSubs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.MAX_LINES_SUBS, 2);
   const [gridOpacity, setGridOpacity] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.SUB_GRID_OPACITY, 0);
   const [editorMinGapMs, setEditorMinGapMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_GAP_MS, 160);
-  const [waveformHoldMs, setWaveformHoldMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS, 1000);
+  const [waveformHoldMs, setWaveformHoldMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS, 500);
 
   const TabButton: React.FC<{ tabId: ActiveTab; label: string; disabled?: boolean }> = ({ tabId, label, disabled }) => {
     const isActive = activeTab === tabId;
@@ -723,6 +723,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, on
                                 <span className="text-xs font-mono" style={{ color: 'var(--th-editor-meta)' }}>ms</span>
                             </div>
                         </div>
+                        <div className="flex items-center justify-between pt-4 border-t border-[var(--th-border)]/30">
+                            <div>
+                                <p className="font-bold text-gray-200">Temps de pressió per moure segment</p>
+                                <p className="text-xs text-gray-500 italic">Temps mínim (ms) de pulsació mantinguda per activar el drag d'un segment al timeline.</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <input
+                                    type="range"
+                                    min="0" max="2000" step="50"
+                                    value={waveformHoldMs}
+                                    onChange={(e) => setWaveformHoldMs(Math.max(0, Math.min(2000, parseInt(e.target.value, 10) || 500)))}
+                                    className="w-32 cursor-pointer" style={{ accentColor: 'var(--th-accent)' }}
+                                />
+                                <span className="text-xs font-mono font-bold w-16 text-right" style={{ color: 'var(--th-accent-text)' }}>{waveformHoldMs} ms</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -757,22 +773,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, on
                                 onChange={(e) => setTakeMargin(parseInt(e.target.value, 10) || 0)}
                                 className="w-20 rounded-lg px-3 py-2 text-white font-mono text-center outline-none" style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)', '--tw-ring-color': 'var(--th-accent)' } as any}
                             />
-                        </div>
-                        <div className="flex items-center justify-between pt-2 border-t border-[var(--th-border)]/30">
-                            <div>
-                                <p className="font-bold text-gray-200">Temps de pressió per editar ona</p>
-                                <p className="text-xs text-gray-500 italic">Quant de temps s'ha de mantenir premut un segment per poder-lo moure (ms).</p>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <input 
-                                    type="range" 
-                                    min="0" max="2000" step="50"
-                                    value={waveformHoldMs} 
-                                    onChange={(e) => setWaveformHoldMs(parseInt(e.target.value, 10))}
-                                    className="w-32 cursor-pointer" style={{ accentColor: 'var(--th-accent)' }}
-                                />
-                                <span className="text-xs font-mono font-bold w-16 text-right" style={{ color: 'var(--th-accent-text)' }}>{waveformHoldMs} ms</span>
-                            </div>
                         </div>
                     </div>
                 </div>
