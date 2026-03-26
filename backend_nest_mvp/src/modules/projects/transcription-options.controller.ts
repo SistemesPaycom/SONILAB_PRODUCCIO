@@ -26,6 +26,8 @@ export class TranscriptionOptionsController {
         diarization: envBool(this.config.get('WHISPERX_DIARIZATION'), true),
         offline: envBool(this.config.get('WHISPERX_OFFLINE'), false),
         timingFix: envBool(this.config.get('WHISPERX_TIMING_FIX'), true),
+        minSubGapMs: 160,
+        enforceMinSubGap: true,
       },
     };
   }

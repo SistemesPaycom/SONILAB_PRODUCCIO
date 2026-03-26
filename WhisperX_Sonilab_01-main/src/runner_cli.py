@@ -113,6 +113,21 @@ def main():
     )
 
     p.add_argument(
+        "--min-gap-ms",
+        dest="min_gap_ms",
+        type=int,
+        default=160,
+        help="Marge mínim entre cues consecutius (ms). Default: 160"
+    )
+    p.add_argument(
+        "--enforce-min-gap",
+        dest="enforce_min_gap",
+        action="store_true",
+        default=False,
+        help="Aplica el marge mínim entre cues al final del postprocessat."
+    )
+
+    p.add_argument(
         "--guion-snap",
         dest="guion_snap",
         action="store_true",
@@ -225,6 +240,8 @@ def main():
         postprocess_balance_lines=postprocess_balance,
         min_speakers=getattr(args, 'min_speakers', None),
         max_speakers=getattr(args, 'max_speakers', None),
+        enforce_min_gap=getattr(args, 'enforce_min_gap', False),
+        min_gap_ms=getattr(args, 'min_gap_ms', 160),
     )
 
     # Vuestro pipeline devuelve tupla de paths:

@@ -657,9 +657,16 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           <div className="flex-grow" />
           {onDelete && (
             <button
-              className="px-1.5 py-0.5 rounded text-[9px] text-gray-600 hover:text-red-400 hover:bg-red-600/10 transition-colors"
+              className="px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors hover:bg-red-600/20"
+              style={{
+                color: '#ef4444',
+                backgroundColor: 'rgba(239,68,68,0.10)',
+                border: '1px solid rgba(239,68,68,0.25)',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f87171'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
               onClick={() => onDelete(segment.id)}
-              title="Eliminar subtítol (Ctrl+Supr)"
+              title="Eliminar subtítol (Shift+Supr)"
             >
               ✕
             </button>

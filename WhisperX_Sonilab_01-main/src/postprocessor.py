@@ -393,6 +393,44 @@ def split_long_lines(cues: List[Dict], max_chars: int = MAX_CUE_CHARS) -> List[D
     return result
 
 
+# ─── Margen mínimo entre cues ─────────────────────────────────────────────────
+
+def enforce_min_gap(cues: List[Dict], min_gap_ms: float = 160.0) -> List[Dict]:
+    """
+    Assegura que el gap entre cues consecutius sigui almenys min_gap_ms ms.
+
+    Estratègia: retallar el FINAL (end) del cue anterior — mai moure el START
+    del cue següent.  Això preserva l'entrada a temps del subtítol següent.
+
+    Garanties de no-regressió:
+    - Mai genera durades negatives (start < end): preserva almenys 1 ms de durada.
+    - Mai modifica el start de cap cue.
+    - Mai modifica cues que ja tenen prou gap.
+    - Si min_gap_ms <= 0, retorna la llista sense canvis.
+    """
+    if not cues or min_gap_ms <= 0:
+        return cues
+
+    min_gap_s = min_gap_ms / 1000.0
+    result = [dict(c) for c in cues]
+
+    for i in range(len(result) - 1):
+        prev_end = float(result[i].get("end", 0))
+        next_start = float(result[i + 1].get("start", 0))
+        gap = next_start - prev_end
+
+        if gap < min_gap_s:
+            # Retallar el OUT del cue anterior
+            new_end = next_start - min_gap_s
+            prev_start = float(result[i].get("start", 0))
+            # Garantir durada mínima de 1 ms per al cue anterior
+            if new_end <= prev_start:
+                new_end = prev_start + 0.001
+            result[i]["end"] = round(new_end, 3)
+
+    return result
+
+
 # ─── Función principal ────────────────────────────────────────────────────────
 
 def apply_postprocessing(
@@ -402,6 +440,8 @@ def apply_postprocessing(
     do_merge_lines: bool = True,
     do_balance_lines: bool = True,
     do_split_long_lines: bool = True,
+    do_enforce_min_gap: bool = False,
+    min_gap_ms: int = 160,
     status_cb=None,
 ) -> List[Dict]:
     """
@@ -409,12 +449,14 @@ def apply_postprocessing(
 
     Parámetros
     ----------
-    cues             : lista de cues del pipeline (dicts con start/end/text o lines)
-    do_fix_casing    : capitalizar primer letra
-    do_add_periods   : añadir puntos en pausas largas
-    do_merge_lines   : fusionar cues muy cortos y consecutivos
-    do_balance_lines : equilibrar texto en dos líneas
-    status_cb        : callback opcional para logging
+    cues                : lista de cues del pipeline (dicts con start/end/text o lines)
+    do_fix_casing       : capitalizar primer letra
+    do_add_periods      : añadir puntos en pausas largas
+    do_merge_lines      : fusionar cues muy cortos y consecutivos
+    do_balance_lines    : equilibrar texto en dos líneas
+    do_enforce_min_gap  : aplicar margen mínimo entre cues consecutivos
+    min_gap_ms          : margen mínimo en ms (solo si do_enforce_min_gap=True)
+    status_cb           : callback opcional para logging
     """
     def _st(msg: str):
         if callable(status_cb):
@@ -449,6 +491,10 @@ def apply_postprocessing(
     if do_add_periods:
         cues = add_periods(cues)
         _st("[postprocessor] add_periods: OK")
+
+    if do_enforce_min_gap:
+        cues = enforce_min_gap(cues, min_gap_ms)
+        _st(f"[postprocessor] enforce_min_gap({min_gap_ms}ms): OK")
 
     _st(f"[postprocessor] Finalizado: {len(cues)} cues")
     return cues

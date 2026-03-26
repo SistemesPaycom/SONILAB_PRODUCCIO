@@ -25,4 +25,6 @@ export interface Segment {
 export interface GeneralConfig {
 	maxCharsPerLine: number;
 	maxLinesPerSubtitle: number;
+	/** Marge mínim entre subtítols consecutius (ms). Default: 160 */
+	minGapMs?: number;
 }

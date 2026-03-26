@@ -85,6 +85,9 @@ export class TranscriptionProcessor {
       const scriptText = String(s.scriptText || '').trim();
       const minSpeakers = s.minSpeakers ? Number(s.minSpeakers) : null;
       const maxSpeakers = s.maxSpeakers ? Number(s.maxSpeakers) : null;
+      // Subtitle gap settings — extracted here for future pipeline integration
+      const minSubGapMs = s.minSubGapMs != null ? Number(s.minSubGapMs) : 160;
+      const enforceMinSubGap = s.enforceMinSubGap !== false;
 
       // ─── PURFVIEW REAL EXE CHECK ──────────────────────────────────────────────
       // Si PURFVIEW_XXL_EXE_PATH apunta a un faster-whisper-xxl.exe real i l'engine
@@ -246,6 +249,8 @@ export class TranscriptionProcessor {
             '--subtitle-edit-compat',  // no merge agressiu (compat amb SE)
             '--no-balance',            // Purfview ja fa el seu propi format de línies
             // --no-fix-casing i --no-periods NO s'afegeixen: volem majúscules i punts
+            '--min-gap-ms', String(minSubGapMs),
+            ...(enforceMinSubGap ? ['--enforce-min-gap'] : []),
           ];
           console.log(`[PURFVIEW-EXE] Reinjectant SRT per postprocessador: ${postArgs.join(' ')}`);
 
@@ -334,6 +339,8 @@ export class TranscriptionProcessor {
         if (engine === 'purfview-xxl') {
           args.push('--postprocess');
           args.push('--subtitle-edit-compat');
+          args.push('--min-gap-ms', String(minSubGapMs));
+          if (enforceMinSubGap) args.push('--enforce-min-gap');
         }
 
         console.log(`[TRANSCRIBE] Engine: ${engine} | Model: ${model} | Device: ${device} | Language: ${language || 'auto'} | Args: ${args.slice(2).join(' ')}`);

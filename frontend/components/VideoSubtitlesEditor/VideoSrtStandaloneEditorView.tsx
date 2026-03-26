@@ -68,10 +68,13 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
     show: true, position: 'bottom', offsetPx: 10, fontScale: 1,
   });
 
+  const [editorMinGapMs, setEditorMinGapMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_GAP_MS, 160);
+
   const generalConfig = useMemo<GeneralConfig>(() => ({
     maxCharsPerLine: 40,
-    maxLinesPerSubtitle: maxLinesSubs
-  }), [maxLinesSubs]);
+    maxLinesPerSubtitle: maxLinesSubs,
+    minGapMs: editorMinGapMs,
+  }), [maxLinesSubs, editorMinGapMs]);
 
   const [syncSubsEnabled, setSyncSubsEnabled] = useState(true);
 
@@ -238,7 +241,10 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   useEffect(() => {
     if (!autosave || !useBackend || !isEditing) return;
 
-    const srtText = serializeSrt(segments);
+    // Use historyState.present (committed state) so autosave only fires on confirmed
+    // actions (drag-end commit, text blur, split, merge, insert, delete, undo, redo)
+    // — not on every intermediate updateDraft call during drag or typing.
+    const srtText = serializeSrt(subsHistory.historyState.present);
     if (srtText === lastAutosaved.current) return;
 
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -249,12 +255,12 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
           dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: '_unassigned', content: srtText, csvContent: '' } });
         })
         .catch(() => {});
-    }, 1500);
+    }, 300);
 
     return () => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
-  }, [autosave, useBackend, isEditing, segments, currentDoc.id, dispatch]);
+  }, [autosave, useBackend, isEditing, subsHistory.historyState.present, currentDoc.id, dispatch]);
 
   useKeyboardShortcuts('subtitlesEditor', (action) => {
     switch (action) {
@@ -268,6 +274,13 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
       case 'JUMP_PREV_SEGMENT': case 'NAVIGATE_SEGMENT_UP': onJumpSegment('prev'); break;
       case 'SPLIT_SEGMENT': handleSplitSegmentAtCursor(); break;
       case 'MERGE_SEGMENT': handleMergeSegmentWithNext(); break;
+      case 'DELETE_ACTIVE_SEGMENT': {
+        const active = document.activeElement as HTMLElement | null;
+        if (activeSegmentId && !active?.isContentEditable) {
+          handleDeleteSegment(activeSegmentId);
+        }
+        break;
+      }
     }
   });
 
@@ -311,7 +324,18 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
 
   const handleSegmentChange = (updated: Segment) => {
     if (!isEditing) return;
-    subsHistory.updateDraft(prev => prev.map(s => (s.id === updated.id ? updated : s)));
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    subsHistory.updateDraft(prev => {
+      const idx = prev.findIndex(s => s.id === updated.id);
+      if (idx === -1) return prev.map(s => s.id === updated.id ? updated : s);
+      const prevSeg = idx > 0 ? prev[idx - 1] : null;
+      const nextSeg = idx < prev.length - 1 ? prev[idx + 1] : null;
+      let { startTime, endTime } = updated;
+      if (prevSeg && startTime < prevSeg.endTime + gap) startTime = prevSeg.endTime + gap;
+      if (nextSeg && endTime > nextSeg.startTime - gap) endTime = nextSeg.startTime - gap;
+      if (endTime - startTime < 0.1) endTime = startTime + 0.1;
+      return prev.map(s => s.id === updated.id ? { ...updated, startTime, endTime } : s);
+    });
   };
 const segIndexRef = useRef<Map<Id, number>>(new Map());
 
@@ -397,6 +421,8 @@ useEffect(() => {
             overlayConfig={subsOverlayConfig}
             onOverlayConfigChange={setSubsOverlayConfig}
             generalConfig={generalConfig}
+            editorMinGapMs={editorMinGapMs}
+            onEditorMinGapMsChange={setEditorMinGapMs}
             autoScroll={autoScrollSubs}
             onOpenAIOperations={(m) => { setAiMode(m); setIsAIModalOpen(true); }}
             onSplit={handleSplitSegmentAtCursor}
@@ -460,6 +486,7 @@ useEffect(() => {
           videoRef={videoRef}
           activeId={activeSegmentId}
           onSegmentUpdate={handleSegmentUpdate}
+          onSegmentUpdateEnd={() => subsHistory.commit()}
           onSegmentClick={handleSegmentClick}
           autoScroll={autoScrollWave}
           scrollMode={scrollModeWave}
@@ -475,6 +502,7 @@ useEffect(() => {
           onToggleAutosave={() => setAutosave(!autosave)}
           onSave={handleSave}
           onExportSrt={() => {}}
+          minGapMs={generalConfig.minGapMs}
         />
       </div>
 

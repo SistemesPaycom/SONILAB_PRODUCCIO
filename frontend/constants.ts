@@ -14,6 +14,8 @@ export const LOCAL_STORAGE_KEYS = {
   TASKS_TRANSCRIPTION: 'slsf_tasks_transcription',
   /** Preferència d'editor per als SRT: 'editor-video-subs' | 'editor-srt-standalone' */
   SRT_EDITOR_MODE: 'slsf_srt_editor_mode',
+  /** Marge mínim entre subtítols a l'editor (ms). Preferència d'usuari, independent del projecte. */
+  EDITOR_MIN_GAP_MS: 'slsf_editor_min_gap_ms',
   /** Tema de color de la interfície */
   THEME: 'slsf_theme',
   /** Tokens del tema personalitzat (fallback local) */
@@ -50,6 +52,7 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
   subtitlesEditor: [
     { id: 'sub_new', action: 'INSERT_SUBTITLE', label: 'Nou subtítol (playhead)', combo: 'Ctrl+N' },
     { id: 'sub_delete', action: 'DELETE_SEGMENT', label: 'Esborrar subtítol', combo: 'Delete' },
+    { id: 'sub_delete_active', action: 'DELETE_ACTIVE_SEGMENT', label: 'Esborrar subtítol actiu', combo: 'Shift+Delete' },
 
     { id: 'sub_split', action: 'SPLIT_SEGMENT', label: 'Dividir subtítol al cursor', combo: 'Ctrl+K' },
     { id: 'sub_split_ph', action: 'SPLIT_AT_PLAYHEAD', label: 'Dividir al playhead', combo: 'Ctrl+Shift+K' },

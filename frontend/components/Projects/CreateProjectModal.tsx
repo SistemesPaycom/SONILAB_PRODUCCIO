@@ -58,6 +58,8 @@ export const CreateProjectModal: React.FC<{
   const [numSpeakers, setNumSpeakers] = useState<number | 'auto'>('auto');
   const [offline, setOffline] = useState(false);
   const [timingFix, setTimingFix] = useState(true);
+  const [minSubGapMs, setMinSubGapMs] = useState(160);
+  const [enforceMinSubGap, setEnforceMinSubGap] = useState(true);
 
   // script-align
   const [scriptText, setScriptText] = useState('');
@@ -112,6 +114,8 @@ export const CreateProjectModal: React.FC<{
         setBatchSize(Number(d.batchSize || 8));
         setDiarization(!!d.diarization);
         setTimingFix(d.timingFix !== false);
+        setMinSubGapMs(d.minSubGapMs != null ? Number(d.minSubGapMs) : 160);
+        setEnforceMinSubGap(d.enforceMinSubGap !== false);
         // offline sempre desactivat (deshabilitada temporalment)
       } catch (e: any) {
         // no bloquea el modal si falla options
@@ -132,6 +136,8 @@ export const CreateProjectModal: React.FC<{
     diarization,
     offline,
     timingFix,
+    minSubGapMs,
+    enforceMinSubGap,
     ...(engine === 'script-align' && scriptText.trim() ? { scriptText: scriptText.trim() } : {}),
     ...(diarization && numSpeakers !== 'auto' ? { minSpeakers: numSpeakers, maxSpeakers: numSpeakers } : {}),
   };
@@ -597,6 +603,32 @@ export const CreateProjectModal: React.FC<{
                 </label>
               </>
             )}
+
+            {/* Margen mínimo entre subtítulos */}
+            <div className="border border-gray-700 rounded-lg p-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={enforceMinSubGap}
+                  onChange={(e) => setEnforceMinSubGap(e.target.checked)}
+                />
+                Margen mínimo entre subtítulos
+              </label>
+              {enforceMinSubGap && (
+                <div className="flex items-center gap-2 ml-5">
+                  <input
+                    type="number"
+                    min={0}
+                    max={2000}
+                    step={10}
+                    className="w-20 px-2 py-1 rounded bg-gray-800 border border-gray-600 text-gray-100 text-sm"
+                    value={minSubGapMs}
+                    onChange={(e) => setMinSubGapMs(Math.max(0, Number(e.target.value)))}
+                  />
+                  <span className="text-xs text-gray-400">ms entre cues consecutivos</span>
+                </div>
+              )}
+            </div>
 
             {busy && (
               <div className="mt-2">
