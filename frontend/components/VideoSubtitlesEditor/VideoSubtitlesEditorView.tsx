@@ -479,7 +479,10 @@ const handleSyncMedia = useCallback((doc: Document) => {
 useEffect(() => {
   if (!autosave || !useBackend || !isEditing) return;
 
-  const srt = serializeSrt(subsHistory.present);
+  // Use historyState.present (committed state) so autosave only fires on confirmed
+  // actions (drag-end commit, text blur, split, merge, insert, delete, undo, redo)
+  // — not on every intermediate updateDraft call during drag or typing.
+  const srt = serializeSrt(subsHistory.historyState.present);
   if (srt === lastSavedRef.current) return;
 
   if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -488,12 +491,12 @@ useEffect(() => {
       lastSavedRef.current = srt;
       dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: '_unassigned', content: srt, csvContent: '' }});
     }).catch(()=>{});
-  }, 1500);
+  }, 300);
 
   return () => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
   };
-}, [autosave, useBackend, isEditing, subsHistory.present, currentDoc.id, dispatch]);
+}, [autosave, useBackend, isEditing, subsHistory.historyState.present, currentDoc.id, dispatch]);
   // ── Guió efectiu: el guió vinculat al projecte té prioritat sobre el contingut del doc SRT ──
   const effectiveGuionContent = guionContent || currentContent;
 
@@ -1046,6 +1049,8 @@ const handleSave = useCallback(() => {
           onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)}
           scrollModeWave={scrollModeWave}
           onScrollModeChangeWave={setScrollModeWave}
+          autosaveEnabled={autosave}
+          onToggleAutosave={() => setAutosave(!autosave)}
           onSave={handleSave}
           onExportSrt={handleExportSrt}
           minGapMs={generalConfig.minGapMs}

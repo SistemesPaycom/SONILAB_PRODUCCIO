@@ -241,7 +241,10 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   useEffect(() => {
     if (!autosave || !useBackend || !isEditing) return;
 
-    const srtText = serializeSrt(segments);
+    // Use historyState.present (committed state) so autosave only fires on confirmed
+    // actions (drag-end commit, text blur, split, merge, insert, delete, undo, redo)
+    // — not on every intermediate updateDraft call during drag or typing.
+    const srtText = serializeSrt(subsHistory.historyState.present);
     if (srtText === lastAutosaved.current) return;
 
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
@@ -252,12 +255,12 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
           dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: '_unassigned', content: srtText, csvContent: '' } });
         })
         .catch(() => {});
-    }, 1500);
+    }, 300);
 
     return () => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
-  }, [autosave, useBackend, isEditing, segments, currentDoc.id, dispatch]);
+  }, [autosave, useBackend, isEditing, subsHistory.historyState.present, currentDoc.id, dispatch]);
 
   useKeyboardShortcuts('subtitlesEditor', (action) => {
     switch (action) {
@@ -483,6 +486,7 @@ useEffect(() => {
           videoRef={videoRef}
           activeId={activeSegmentId}
           onSegmentUpdate={handleSegmentUpdate}
+          onSegmentUpdateEnd={() => subsHistory.commit()}
           onSegmentClick={handleSegmentClick}
           autoScroll={autoScrollWave}
           scrollMode={scrollModeWave}
