@@ -343,15 +343,20 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const reloadTree = async () => {
-    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
+    const previousFolderId = state.currentFolderId;
     const tree = await api.getTree();
+    const normalizedFolders = (tree.folders || []).map(normalizeFolder);
+    const folderStillExists =
+      previousFolderId !== null &&
+      normalizedFolders.some(f => f.id === previousFolderId && !f.isDeleted);
     dispatch({
       type: 'SET_INITIAL_STATE',
       payload: {
         ...initialState,
-        folders: (tree.folders || []).map(normalizeFolder),
+        folders: normalizedFolders,
         documents: (tree.documents || []).map(normalizeDocument),
         selectedIds: new Set(),
+        currentFolderId: folderStillExists ? previousFolderId : null,
       },
     });
   };
