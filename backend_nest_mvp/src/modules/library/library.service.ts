@@ -15,8 +15,8 @@ export class LibraryService {
   // Workspace compartit: tots els usuaris autenticats veuen el mateix contingut.
   // El _ownerId es rep per compatibilitat però no s'usa com a filtre.
   const [folders, documents] = await Promise.all([
-    this.folderModel.find({ isDeleted: { $ne: true } }).lean(),
-    this.docModel.find({ isDeleted: { $ne: true } }).lean(),
+    this.folderModel.find({}).lean(),
+    this.docModel.find({}).lean(),
   ]);
 
   return {
@@ -64,6 +64,16 @@ async softDeleteFolderTree(ownerId: string, rootFolderId: string) {
 async restoreFolderTree(ownerId: string, rootFolderId: string) {
   const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
+
+  // Si el padre fue purgado o no existe, restaurar en raíz
+  if ((root as any).parentId) {
+    const parentExists = await this.folderModel
+      .findOne({ _id: (root as any).parentId, isDeleted: { $ne: true } })
+      .lean();
+    if (!parentExists) {
+      await this.folderModel.updateOne({ _id: rootFolderId }, { $set: { parentId: null } });
+    }
+  }
 
   // Cogemos todas las folders (incluidas borradas) para reconstruir el árbol
   const folders = await this.folderModel
@@ -141,6 +151,18 @@ async restoreDocument(ownerId: string, id: string) {
     .lean();
 
   if (!doc) throw new NotFoundException('Document not found');
+
+  // Si el padre fue purgado o no existe, restaurar en raíz
+  if ((doc as any).parentId) {
+    const parentExists = await this.folderModel
+      .findOne({ _id: (doc as any).parentId, isDeleted: { $ne: true } })
+      .lean();
+    if (!parentExists) {
+      await this.docModel.updateOne({ _id: id }, { $set: { parentId: null } });
+      return { ...doc, id: doc._id.toString(), parentId: null };
+    }
+  }
+
   return { ...doc, id: doc._id.toString() };
 }
 

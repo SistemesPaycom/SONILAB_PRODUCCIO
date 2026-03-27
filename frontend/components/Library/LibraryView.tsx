@@ -266,7 +266,19 @@ setUploadProgress(null);
   const ids = Array.from(state.selectedIds).map((v) => String(v));
 
   if (!useBackend) {
-    dispatch({ type: 'PERMANENTLY_DELETE_ITEMS', payload: { itemIds: ids } });
+    // Cascade soft delete to all descendants of selected folders
+    const allIds = new Set<string>(ids);
+    const queue = ids.filter((id) => state.folders.some((f) => f.id === id));
+    while (queue.length) {
+      const cur = queue.shift()!;
+      for (const f of state.folders.filter((f) => f.parentId === cur && !f.isDeleted)) {
+        allIds.add(f.id); queue.push(f.id);
+      }
+      for (const d of state.documents.filter((d) => d.parentId === cur && !d.isDeleted)) {
+        allIds.add(d.id);
+      }
+    }
+    dispatch({ type: 'DELETE_ITEMS', payload: { itemIds: Array.from(allIds) } });
     return;
   }
 
@@ -275,8 +287,8 @@ setUploadProgress(null);
     const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
 
     await Promise.all([
-      ...folderIds.map((id) => api.purgeFolder(id)),
-      ...docIds.map((id) => api.purgeDocument(id)),
+      ...folderIds.map((id) => api.deleteFolder(id)),
+      ...docIds.map((id) => api.deleteDocument(id)),
     ]);
 
     await reloadTree();
@@ -286,7 +298,19 @@ setUploadProgress(null);
   const ids = Array.from(state.selectedIds).map((v) => String(v));
 
   if (!useBackend) {
-    dispatch({ type: 'RESTORE_ITEMS', payload: { itemIds: ids } });
+    // Cascade restore to all descendants of selected folders
+    const allIds = new Set<string>(ids);
+    const queue = ids.filter((id) => state.folders.some((f) => f.id === id));
+    while (queue.length) {
+      const cur = queue.shift()!;
+      for (const f of state.folders.filter((f) => f.parentId === cur && f.isDeleted)) {
+        allIds.add(f.id); queue.push(f.id);
+      }
+      for (const d of state.documents.filter((d) => d.parentId === cur && d.isDeleted)) {
+        allIds.add(d.id);
+      }
+    }
+    dispatch({ type: 'RESTORE_ITEMS', payload: { itemIds: Array.from(allIds) } });
     return;
   }
 
@@ -305,6 +329,7 @@ setUploadProgress(null);
   
   const handlePermanentDeleteConfirmed = () => {
   const ids = Array.from(state.selectedIds).map((v) => String(v));
+  console.log('[purge] handler invoked, ids:', ids);
 
   if (!useBackend) {
     dispatch({ type: 'PERMANENTLY_DELETE_ITEMS', payload: { itemIds: ids } });
@@ -314,13 +339,19 @@ setUploadProgress(null);
   void (async () => {
     const folderIds = ids.filter((id) => state.folders.some((f) => f.id === id));
     const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
+    console.log('[purge] folderIds:', folderIds, 'docIds:', docIds);
 
-    await Promise.all([
-      ...folderIds.map((id) => api.purgeFolder(id)),
-      ...docIds.map((id) => api.purgeDocument(id)),
-    ]);
-
-    await reloadTree();
+    try {
+      await Promise.all([
+        ...folderIds.map((id) => api.purgeFolder(id)),
+        ...docIds.map((id) => api.purgeDocument(id)),
+      ]);
+      console.log('[purge] API calls succeeded, reloading tree');
+      await reloadTree();
+      dispatch({ type: 'SET_VIEW', payload: 'trash' });
+    } catch (err) {
+      console.error('[purge] error during purge:', err);
+    }
   })();
 };
   const breadcrumbs = React.useMemo(() => {
@@ -501,7 +532,7 @@ const itemsToRender = currentItems.filter((item) => {
   </button>
 )}
                             {view === 'library' && (
-                                <button onClick={() => setShowPermanentDeleteConfirm(true)} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Esborrar permanentment">
+                                <button onClick={handleDeleteSelected} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Mou a paperera">
                                     <Icons.Trash /><span>{`Esborrar (${selectedIds.size})`}</span>
                                 </button>
                             )}
