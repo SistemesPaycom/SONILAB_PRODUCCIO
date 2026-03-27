@@ -80,6 +80,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [isRenameModalOpen, setRenameModalOpen] = useState(false);
 const [renameValue, setRenameValue] = useState('');
 const [page, setPage] = useState<'library'|'media'|'projects'>('library');
+  const [projectFolderIds, setProjectFolderIds] = useState<Set<string>>(new Set());
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [nameColWidth, setNameColWidth] = useState(200);
@@ -114,6 +115,16 @@ const goTrash = () => {
   // page lo dejamos igual o lo puedes resetear si quieres:
   // setPage('library');
 };
+
+  // Fetch project folder IDs from the backend when the projects tab is active
+  useEffect(() => {
+    if (!useBackend || page !== 'projects') return;
+    api.listProjects()
+      .then((projects) => {
+        setProjectFolderIds(new Set((projects || []).map((p: any) => p.folderId).filter(Boolean)));
+      })
+      .catch(() => {});
+  }, [useBackend, page]);
 
   const handleResizeNameMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -451,9 +462,8 @@ const itemsToRender = currentItems.filter((item) => {
     );
   }
 
-  if (page === 'projects') {
-    const st = ((item as any).sourceType || '').toLowerCase();
-    return item.type === 'document' && (st === 'srt' || item.name.toLowerCase().endsWith('.srt'));
+  if (page === 'projects' && state.currentFolderId === null) {
+    return item.type === 'folder' && projectFolderIds.has(item.id);
   }
 
   return true;
@@ -495,10 +505,10 @@ const itemsToRender = currentItems.filter((item) => {
     className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
       ${(view === 'library' && page === 'projects') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
-    title="Proyectos"
+    title="Projectes"
   >
     <span>📌</span>
-    <span className={isCollapsed ? 'hidden' : 'inline'}>Proyectos</span>
+    <span className={isCollapsed ? 'hidden' : 'inline'}>Projectes</span>
   </button>
 
   <button
