@@ -70,6 +70,7 @@ export interface Document {
   isLocked: boolean;
   originalName?: string;
   sourceType?: string;
+  refTargetId?: string | null;
   characters: any[];
   takes: any[];
   layers: any[];

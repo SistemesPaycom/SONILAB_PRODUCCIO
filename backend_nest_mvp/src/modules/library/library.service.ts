@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Folder, FolderDocument } from './schemas/folder.schema';
@@ -30,7 +30,16 @@ export class LibraryService {
   const doc = await this.docModel.findOne(q).lean();
   return doc ? { ...doc, id: doc._id.toString() } : null;
 }
-async softDeleteFolderTree(ownerId: string, rootFolderId: string) {
+  /** Lightweight precheck: find a media document by original name + file size. */
+  async findMediaByNameAndSize(name: string, size: number): Promise<any | null> {
+    const doc = await this.docModel
+      .findOne({ isDeleted: false, media: { $ne: null }, 'media.size': size, name })
+      .collation({ locale: 'en', strength: 2 })
+      .lean();
+    return doc ? { ...doc, id: doc._id.toString() } : null;
+  }
+
+async softDeleteFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: string[]) {
   const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
 
@@ -54,6 +63,34 @@ async softDeleteFolderTree(ownerId: string, rootFolderId: string) {
     toDelete.push(cur);
     const kids = children.get(cur) ?? [];
     for (const k of kids) queue.push(k);
+  }
+
+  // Guard: comprova si algun media canònic dins l'arbre té LNK actius EXTERNS.
+  // LNK que estan dins el mateix arbre (parentId en toDelete) no bloquen — s'esborren amb la carpeta.
+  // Només bloquen LNK actius cuyo parentId queda fora del conjunt a esborrar.
+  const mediaInTree = await this.docModel
+    .find(
+      { parentId: { $in: toDelete }, isDeleted: { $ne: true }, media: { $ne: null }, refTargetId: null },
+      { _id: 1, name: 1 },
+    )
+    .lean();
+
+  if (mediaInTree.length > 0) {
+    const mediaIds = mediaInTree.map((d: any) => d._id.toString());
+    // Exclou LNK que estan dins l'arbre (parentId en toDelete)
+    // i també LNK que formen part del lot total de borrat (batchDocIds).
+    const exclude = batchDocIds?.length ? { _id: { $nin: batchDocIds } } : {};
+    const externalLnkCount = await this.docModel.countDocuments({
+      refTargetId: { $in: mediaIds },
+      isDeleted: { $ne: true },
+      parentId: { $nin: toDelete },
+      ...exclude,
+    });
+    if (externalLnkCount > 0) {
+      throw new BadRequestException(
+        `No es pot esborrar la carpeta: ${externalLnkCount} referència(es) activa(es) externa(es) apunten a assets de media continguts. Esborra primer les referències.`,
+      );
+    }
   }
 
   await this.folderModel.updateMany({ ownerId, _id: { $in: toDelete } }, { $set: { isDeleted: true } });
@@ -112,7 +149,7 @@ async restoreFolderTree(ownerId: string, rootFolderId: string) {
   return { restoredFolderIds: toRestore.length };
 }
 
-async purgeFolderTree(ownerId: string, rootFolderId: string) {
+async purgeFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: string[]) {
   const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
 
@@ -136,6 +173,30 @@ async purgeFolderTree(ownerId: string, rootFolderId: string) {
     toDelete.push(cur);
     const kids = children.get(cur) ?? [];
     for (const k of kids) queue.push(k);
+  }
+
+  // Guard: comprova si algun media canònic dins l'arbre té LNK actius EXTERNS al lot.
+  const mediaInTree = await this.docModel
+    .find(
+      { parentId: { $in: toDelete }, isDeleted: { $ne: true }, media: { $ne: null }, refTargetId: null },
+      { _id: 1 },
+    )
+    .lean();
+
+  if (mediaInTree.length > 0) {
+    const mediaIds = mediaInTree.map((d: any) => d._id.toString());
+    const exclude = batchDocIds?.length ? { _id: { $nin: batchDocIds } } : {};
+    const externalLnkCount = await this.docModel.countDocuments({
+      refTargetId: { $in: mediaIds },
+      isDeleted: { $ne: true },
+      parentId: { $nin: toDelete },
+      ...exclude,
+    });
+    if (externalLnkCount > 0) {
+      throw new BadRequestException(
+        `No es pot eliminar permanentment la carpeta: ${externalLnkCount} referència(es) activa(es) externa(es) apunten a assets de media continguts. Esborra primer les referències.`,
+      );
+    }
   }
 
   // Borra docs del árbol y luego folders del árbol
@@ -166,7 +227,26 @@ async restoreDocument(ownerId: string, id: string) {
   return { ...doc, id: doc._id.toString() };
 }
 
-async purgeDocument(ownerId: string, id: string) {
+async purgeDocument(ownerId: string, id: string, batchDocIds?: string[]): Promise<any> {
+  const doc = await this.docModel.findOne({ _id: id, ownerId }).lean();
+  if (!doc) throw new NotFoundException('Document not found');
+
+  const isCanonicalMedia = !!(doc as any).media && !(doc as any).refTargetId;
+  if (isCanonicalMedia) {
+    // Exclou del recompte els LNK que formen part del mateix lot de purge.
+    const exclude = batchDocIds?.length ? { _id: { $nin: batchDocIds } } : {};
+    const activeLnkCount = await this.docModel.countDocuments({
+      refTargetId: id,
+      isDeleted: { $ne: true },
+      ...exclude,
+    });
+    if (activeLnkCount > 0) {
+      throw new BadRequestException(
+        `No es pot eliminar permanentment: ${activeLnkCount} referència(es) activa(es) apunten a aquest asset. Esborra primer les referències.`,
+      );
+    }
+  }
+
   const res = await this.docModel.deleteOne({ _id: id, ownerId });
   if (!res.deletedCount) throw new NotFoundException('Document not found');
   return { ok: true };
@@ -303,6 +383,74 @@ async folderNameExists(ownerId: string, name: string, parentId: string | null) {
       .lean();
     if (!doc) throw new NotFoundException('Document not found');
     return { ...doc, id: doc._id.toString() };
+  }
+
+  /**
+   * Soft-deletes a document.
+   * Guard: si el document és media canònica (media poblat, sense refTargetId),
+   * comprova si hi ha LNK actius (no esborrats) apuntant-hi.
+   * Si n'hi ha, llança BadRequestException — no es permet deixar referències actives orfes.
+   * El borrat de LNK individuals i documents clàssics no queda afectat.
+   */
+  async softDeleteDocument(_ownerId: string, id: string, batchDocIds?: string[]): Promise<any> {
+    const doc = await this.docModel.findById(id).lean();
+    if (!doc) throw new NotFoundException('Document not found');
+
+    const isCanonicalMedia = !!(doc as any).media && !(doc as any).refTargetId;
+    if (isCanonicalMedia) {
+      // Exclou del recompte els LNK que formen part del mateix lot de borrat.
+      const exclude = batchDocIds?.length ? { _id: { $nin: batchDocIds } } : {};
+      const activeLnkCount = await this.docModel.countDocuments({
+        refTargetId: id,
+        isDeleted: { $ne: true },
+        ...exclude,
+      });
+      if (activeLnkCount > 0) {
+        throw new BadRequestException(
+          `No es pot esborrar: ${activeLnkCount} referència(es) activa(es) apunten a aquest asset. Esborra primer les referències.`,
+        );
+      }
+    }
+
+    const updated = await this.docModel
+      .findOneAndUpdate({ _id: id }, { $set: { isDeleted: true } }, { new: true })
+      .lean();
+    if (!updated) throw new NotFoundException('Document not found');
+    return { ...updated, id: (updated as any)._id.toString() };
+  }
+
+  /** Checks name uniqueness across ALL non-deleted media documents (workspace-wide). */
+  async findMediaByName(name: string): Promise<any | null> {
+    const doc = await this.docModel
+      .findOne({ isDeleted: false, media: { $ne: null }, name })
+      .collation({ locale: 'en', strength: 2 })
+      .lean();
+    return doc ? { ...doc, id: doc._id.toString() } : null;
+  }
+
+  /** Creates a reference document pointing to an existing media document. */
+  async createMediaRef(ownerId: string, targetDocId: string, parentId: string | null): Promise<any> {
+    const target = await this.docModel.findById(targetDocId).lean();
+    if (!target) throw new NotFoundException('Target document not found');
+    // Només es permet crear referències cap a documents de media canònica.
+    // Documents de text, srt, pdf o docx no accepten ref.
+    if (!(target as any).media) {
+      throw new BadRequestException('Only media assets can be referenced. Target document has no media.');
+    }
+    const doc = await this.docModel.create({
+      ownerId,
+      name: (target as any).name,
+      parentId,
+      sourceType: (target as any).sourceType,
+      refTargetId: targetDocId,
+      contentByLang: {},
+      csvContentByLang: {},
+      sourceLang: null,
+      isLocked: false,
+      isDeleted: false,
+      media: null,
+    });
+    return { ...doc.toObject(), id: doc._id.toString() };
   }
 
   async listMedia(_ownerId: string, sourceTypes?: string[]) {

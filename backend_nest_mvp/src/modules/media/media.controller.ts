@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Delete, Get, Param, Post, Res, UploadedFile, UseGuards, UseInterceptors, Logger } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors, Logger } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
@@ -86,6 +86,22 @@ export class MediaController {
     }
   }
 
+  /** Lightweight precheck: probable duplicate by name + file size (no content hashing). */
+  @Get('/check-duplicate')
+  async checkDuplicate(
+    @CurrentUser() user: RequestUser,
+    @Query('name') name: string,
+    @Query('size') size: string,
+  ) {
+    if (!name) throw new BadRequestException('name is required');
+    if (!size) throw new BadRequestException('size is required');
+    const sizeNum = parseInt(size, 10);
+    if (isNaN(sizeNum)) throw new BadRequestException('size must be a number');
+    const existing = await this.library.findMediaByNameAndSize(name, sizeNum);
+    if (existing) return { exists: true, document: existing };
+    return { exists: false };
+  }
+
   @Post('/upload')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -104,7 +120,7 @@ export class MediaController {
       limits: { fileSize: 50 * 1024 * 1024 * 1024 }, // 50GB
     }),
   )
-  async upload(@CurrentUser() user: RequestUser, @UploadedFile() file?: Express.Multer.File) {
+  async upload(@CurrentUser() user: RequestUser, @UploadedFile() file?: Express.Multer.File, @Body('parentId') parentId?: string) {
     if (!file) throw new BadRequestException('file is required');
 
     const ext = extFromOriginalname(file.originalname);
@@ -156,9 +172,11 @@ if (existing) {
   return { document: existing, duplicated: true };
 }
 
+    const finalName = file.originalname;
+
     const doc = await this.library.createDocument(user.userId, {
-      name: file.originalname,
-      parentId: null,
+      name: finalName,
+      parentId: parentId || null,
       sourceType,
       media: {
         storage: 'local',

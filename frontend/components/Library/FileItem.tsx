@@ -1,5 +1,5 @@
 // components/Library/FileItem.tsx
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { LibraryItem, Document } from '../../types';
 import { useLibrary } from '../../context/Library/LibraryContext';
 import * as Icons from '../icons';
@@ -14,6 +14,10 @@ interface FileItemProps {
   onPreviewDocument: (documentId: string) => void;
   onDoubleClickOpen: (documentId: string) => void;
   gridColumns: string;
+  onCopy?: (ids: string[]) => void;
+  onCut?: (ids: string[]) => void;
+  isCut?: boolean;
+  isProject?: boolean;
 }
 
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
@@ -36,6 +40,10 @@ export const FileItem: React.FC<FileItemProps> = ({
   onPreviewDocument,
   onDoubleClickOpen,
   gridColumns,
+  onCopy,
+  onCut,
+  isCut,
+  isProject,
 }) => {
   const { state, dispatch } = useLibrary();
   const { view, folders, documents, currentFolderId, selectedIds } = state;
@@ -44,6 +52,9 @@ export const FileItem: React.FC<FileItemProps> = ({
 
   const isLocked = item.type === 'document' && item.isLocked;
   const sourceType = item.type === 'document' ? item.sourceType : '';
+  const isRef = item.type === 'document' && !!(item as any).refTargetId;
+  const isOrphanLnk = isRef && !documents.find(d => d.id === (item as any).refTargetId && !d.isDeleted);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleToggleSelection = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,6 +67,7 @@ export const FileItem: React.FC<FileItemProps> = ({
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (item.type === 'document') {
+      if (isOrphanLnk) return; // target deleted or missing — do not attempt to open
       onDoubleClickOpen(item.id);
     }
   };
@@ -82,6 +94,14 @@ export const FileItem: React.FC<FileItemProps> = ({
       }
 
       // 2. GESTIÓ DE MOVIMENT DE FITXERS (FILE MOVE)
+      // Guard: media canònica no es pot moure com un fitxer clàssic.
+      // Un LNK (refTargetId poblat) no queda blocat per aquesta regla.
+      const hasCanonicalMediaInDrag = draggedItemIds.some(id => {
+        const doc = documents.find(d => d.id === id);
+        return !!(doc && (doc as any).media && !(doc as any).refTargetId);
+      });
+      if (hasCanonicalMediaInDrag) return;
+
       if (destinationFolderId === currentFolderId && item.type === 'folder') return;
       if (draggedItemIds.includes(destinationFolderId as string)) return;
 
@@ -159,7 +179,13 @@ export const FileItem: React.FC<FileItemProps> = ({
             const draggedIds = selectedIds.has(item.id) ? Array.from(selectedIds) : [item.id];
             
             if (!dropAction) {
-                isCompatible = true;
+                // Moviment genèric a carpeta: bloquejat si algun element és media canònica.
+                // Un LNK (refTargetId poblat) no és media canònica i no queda blocat.
+                const dragHasCanonicalMedia = draggedIds.some(id => {
+                  const doc = documents.find(d => d.id === id);
+                  return !!(doc && (doc as any).media && !(doc as any).refTargetId);
+                });
+                isCompatible = !dragHasCanonicalMedia;
             } else if (draggedIds.length === 1) {
                 const doc = documents.find(d => d.id === draggedIds[0]);
                 if (doc && doc.type === 'document') {
@@ -206,8 +232,14 @@ export const FileItem: React.FC<FileItemProps> = ({
                   const draggedIds = selectedIds.has(item.id) ? Array.from(selectedIds) : [item.id];
                   
                   let canProceed = false;
-                  if (!dropAction) canProceed = finalDropTargetId !== item.id;
-                  else if (draggedIds.length === 1) {
+                  if (!dropAction) {
+                    // Moviment genèric a carpeta: bloquejat si algun element és media canònica.
+                    const dropHasCanonicalMedia = draggedIds.some(id => {
+                      const doc = documents.find(d => d.id === id);
+                      return !!(doc && (doc as any).media && !(doc as any).refTargetId);
+                    });
+                    canProceed = finalDropTargetId !== item.id && !dropHasCanonicalMedia;
+                  } else if (draggedIds.length === 1) {
                       const doc = documents.find(d => d.id === draggedIds[0]);
                       if (doc) {
                           const sType = doc.sourceType?.toLowerCase() || '';
@@ -220,7 +252,10 @@ export const FileItem: React.FC<FileItemProps> = ({
               }
             } else {
               if (item.type === 'folder') dispatch({ type: 'SET_CURRENT_FOLDER', payload: item.id });
-              else if (item.type === 'document') onPreviewDocument(item.id);
+              else if (item.type === 'document') {
+                if (isOrphanLnk) return; // target deleted or missing — do not attempt to preview
+                onPreviewDocument(item.id);
+              }
             }
         } finally {
             setDropTargetId(null);
@@ -247,7 +282,8 @@ export const FileItem: React.FC<FileItemProps> = ({
   const isDropTarget = item.type === 'folder' && dropTargetId === item.id && !selectedIds.has(item.id);
   const formattedDate = new Date(item.updatedAt).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
   const formattedTime = new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const formatLabel = item.type === 'folder' ? 'Carpeta' : ((item as Document).sourceType || 'slsf').toUpperCase();
+  const rawFormat = ((item as Document).sourceType || 'slsf').toUpperCase();
+  const formatLabel = item.type === 'folder' ? (isProject ? 'Projecte' : 'Carpeta') : isRef ? `LNK (${rawFormat})` : rawFormat;
 
   return (
     <div
@@ -258,6 +294,7 @@ export const FileItem: React.FC<FileItemProps> = ({
         ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'}
         ${isDropTarget ? 'ring-2 rounded-md' : ''}
         ${isLocked ? 'opacity-70' : ''}
+        ${isCut ? 'opacity-40' : ''}
       `}
       style={{ gridTemplateColumns: gridColumns, ...(isDropTarget ? { backgroundColor: 'var(--th-bg-tertiary)' } : {}) }}
     >
@@ -278,13 +315,23 @@ export const FileItem: React.FC<FileItemProps> = ({
         </div>
       </div>
 
-      <div 
+      <div
         ref={dragHandleRef}
         onDoubleClick={handleDoubleClick}
         className="flex items-center gap-2 cursor-pointer select-none overflow-hidden px-4"
       >
-        <span className="flex-shrink-0">{item.type === 'folder' ? '📁' : getFileIcon(sourceType || '', isLocked)}</span>
-        <span className={`truncate text-gray-100 ${isLocked ? 'italic text-gray-400' : ''}`}>{item.name}</span>
+        {/* Icon: shortcut arrow overlay for refs */}
+        <span className="relative flex-shrink-0">
+          {item.type === 'folder' ? (isProject ? '🗃️' : '📁') : getFileIcon(sourceType || '', isLocked)}
+          {isRef && (
+            <span
+              className="absolute -bottom-1 -right-1.5 text-[13px] leading-none select-none font-bold"
+              style={{ color: isOrphanLnk ? '#ef4444' : 'var(--th-accent)', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
+              title={isOrphanLnk ? 'Accés directe trencat (original eliminat o no trobat)' : 'Accés directe'}
+            >{isOrphanLnk ? '⚠' : '↗'}</span>
+          )}
+        </span>
+        <span className={`truncate text-gray-100 ${isLocked ? 'italic text-gray-400' : ''} ${isRef ? 'opacity-80' : ''} ${isOrphanLnk ? 'line-through text-gray-500' : ''}`}>{item.name}</span>
         {isLocked && <Icons.LockIcon size={12} className="animate-pulse flex-shrink-0" style={{ color: 'var(--th-accent-text)' }} />}
       </div>
 
@@ -297,7 +344,68 @@ export const FileItem: React.FC<FileItemProps> = ({
         <span className="opacity-40">{formattedTime}</span>
       </div>
       
-      <div className="z-10" />
+      <div className="z-10 flex items-center justify-center px-2 relative">
+        {(() => {
+          const ids = selectedIds.has(item.id) && selectedIds.size > 1 ? Array.from(selectedIds) : [item.id];
+          // Copiar: visible only if ALL items in the effective selection are documents.
+          // Never filter silently — if any folder is in the selection, hide the action entirely.
+          const allAreDocs = ids.every(id => documents.some(d => d.id === id));
+          // Amaga Copiar/Retallar si la selecció conté algun asset de media canònica
+          // (media poblat i sense refTargetId). Un LNK no és media canònica.
+          const selectionHasCanonicalMedia = ids.some(id => {
+            const doc = documents.find(d => d.id === id);
+            return !!(doc && (doc as any).media && !(doc as any).refTargetId);
+          });
+          const menuItems: { label: string; icon: string; action: () => void }[] = [];
+          if (onCopy && allAreDocs && !selectionHasCanonicalMedia) menuItems.push({ label: 'Copiar', icon: '📋', action: () => onCopy(ids) });
+          if (onCut && !selectionHasCanonicalMedia) menuItems.push({ label: 'Retallar', icon: '✂️', action: () => onCut(ids) });
+          if (isRef && !isOrphanLnk) {
+            const targetDoc = documents.find(d => d.id === (item as any).refTargetId && !d.isDeleted);
+            if (targetDoc) {
+              menuItems.push({
+                label: 'Mostrar ubicació real',
+                icon: '📂',
+                action: () => {
+                  dispatch({ type: 'SET_VIEW', payload: 'library' });
+                  dispatch({ type: 'SET_CURRENT_FOLDER', payload: targetDoc.parentId ?? null });
+                },
+              });
+            }
+          }
+          if (menuItems.length === 0) return null;
+          return (
+            <>
+              <button
+                title="Opcions"
+                aria-label="Opcions"
+                onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
+                className="opacity-50 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded text-sm font-bold"
+                style={{ color: 'var(--th-text-muted)' }}
+              >⋯</button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-[400]" onClick={e => { e.stopPropagation(); setMenuOpen(false); }} />
+                  <div
+                    className="absolute right-0 top-full mt-1 z-[401] rounded-lg shadow-xl py-1 min-w-[160px]"
+                    style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}
+                  >
+                    {menuItems.map((mi, i) => (
+                      <button
+                        key={i}
+                        onClick={e => { e.stopPropagation(); mi.action(); setMenuOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:brightness-125"
+                        style={{ color: 'var(--th-text-secondary)' }}
+                      >
+                        <span>{mi.icon}</span><span>{mi.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          );
+        })()}
+      </div>
     </div>
   );
 };

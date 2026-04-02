@@ -35,6 +35,16 @@ export class LibraryController {
     return this.library.createDocument(user.userId, dto as any);
   }
 
+  /** Creates a reference/shortcut document pointing to an existing media document. */
+  @Post('/documents/:id/ref')
+  createMediaRef(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body('parentId') parentId?: string,
+  ) {
+    return this.library.createMediaRef(user.userId, id, parentId ?? null);
+  }
+
   @Get('/documents/:id')
   getDocument(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.library.getDocument(user.userId, id);
@@ -52,13 +62,21 @@ export class LibraryController {
   }
 
     @Delete('/documents/:id')
-  deleteDocument(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-    return this.library.updateDocument(user.userId, id, { isDeleted: true } as any);
+  deleteDocument(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body('batchDocIds') batchDocIds?: string[],
+  ) {
+    return this.library.softDeleteDocument(user.userId, id, batchDocIds);
   }
 
   @Delete('/folders/:id')
-  deleteFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-    return this.library.softDeleteFolderTree(user.userId, id);
+  deleteFolder(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body('batchDocIds') batchDocIds?: string[],
+  ) {
+    return this.library.softDeleteFolderTree(user.userId, id, batchDocIds);
   }
   @Patch('/folders/:id/restore')
 restoreFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
@@ -71,13 +89,21 @@ restoreDocument(@CurrentUser() user: RequestUser, @Param('id') id: string) {
 }
 
 @Delete('/folders/:id/purge')
-purgeFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-  return this.library.purgeFolderTree(user.userId, id);
+purgeFolder(
+  @CurrentUser() user: RequestUser,
+  @Param('id') id: string,
+  @Body('batchDocIds') batchDocIds?: string[],
+) {
+  return this.library.purgeFolderTree(user.userId, id, batchDocIds);
 }
 
 @Delete('/documents/:id/purge')
-purgeDocument(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-  return this.library.purgeDocument(user.userId, id);
+purgeDocument(
+  @CurrentUser() user: RequestUser,
+  @Param('id') id: string,
+  @Body('batchDocIds') batchDocIds?: string[],
+) {
+  return this.library.purgeDocument(user.userId, id, batchDocIds);
 }
 
   @Patch('/documents/:id/srt')

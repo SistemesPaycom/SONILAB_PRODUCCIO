@@ -14,6 +14,7 @@ import {
   PopOutIcon,
   PopInIcon,
 } from './PlayerIcons';
+import LoadingOverlay from './LoadingOverlay';
 
 /**
  * Component per renderitzar línies de subtítols interpretant tags de format (b, i, u).
@@ -157,6 +158,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
+
+  // Mostra l'overlay de càrrega cada cop que canvia la font de vídeo
+  useEffect(() => {
+    if (src) setIsVideoLoading(true);
+    else setIsVideoLoading(false);
+  }, [src]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -211,10 +219,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           src={src}
           onTimeUpdate={(e) => handleTimeUpdateWithSave(e.currentTarget.currentTime)}
           onLoadedMetadata={(e) => onDurationChange(e.currentTarget.duration)}
+          onCanPlay={() => setIsVideoLoading(false)}
+          onError={() => setIsVideoLoading(false)}
           onPlay={onPlay}
           onPause={onPause}
           className="w-full h-full object-contain pointer-events-none"
         />
+        {isVideoLoading && <LoadingOverlay />}
 
         {overlayConfig.original.show &&
           activeSegment &&

@@ -60,9 +60,12 @@ sourceLang: string | null;
   @Prop({ default: false, index: true })
   isDeleted: boolean;
 
-  
-@Prop({ type: Object, default: null })
-media: MediaInfo | null;
+  @Prop({ type: Object, default: null })
+  media: MediaInfo | null;
+
+  /** If set, this document is a reference/shortcut to the document with this ID. */
+  @Prop({ type: String, default: null })
+  refTargetId: string | null;
 }
 
 export const DocumentSchema = SchemaFactory.createForClass(Document);

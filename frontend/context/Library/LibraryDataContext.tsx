@@ -329,6 +329,8 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       isLocked: !!d.isLocked,
       originalName: d.originalName,
       sourceType: d.sourceType,
+      refTargetId: d.refTargetId ?? null,
+      media: d.media ?? null,
       characters: indexCharacters(content),
       takes: findTakesWithRanges(content),
       layers: [{ id: `L${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: 'Capa 1', visible: true, locked: false, order: 1 }],

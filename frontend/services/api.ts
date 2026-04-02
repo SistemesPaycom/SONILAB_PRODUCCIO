@@ -111,19 +111,22 @@ async listProjects() {
   async patchFolder(id: string, patch: any) {
     return request<any>(`/folders/${id}`, { method: 'PATCH', body: patch });
   },
-  async deleteFolder(id: string) {
-    return request<any>(`/folders/${id}`, { method: 'DELETE' });
+  async deleteFolder(id: string, batchDocIds?: string[]) {
+    return request<any>(`/folders/${id}`, { method: 'DELETE', body: batchDocIds?.length ? { batchDocIds } : undefined });
   },
 
   // Documents
+  async getDocument(id: string) {
+    return request<any>(`/documents/${id}`);
+  },
   async createDocument(payload: any) {
     return request<any>(`/documents`, { method: 'POST', body: payload });
   },
   async patchDocument(id: string, patch: any) {
     return request<any>(`/documents/${id}`, { method: 'PATCH', body: patch });
   },
-  async deleteDocument(id: string) {
-    return request<any>(`/documents/${id}`, { method: 'DELETE' });
+  async deleteDocument(id: string, batchDocIds?: string[]) {
+    return request<any>(`/documents/${id}`, { method: 'DELETE', body: batchDocIds?.length ? { batchDocIds } : undefined });
   },
   async updateSrt(id: string, srtText: string) {
     return request<any>(`/documents/${id}/srt`, { method: 'PATCH', body: { srtText } });
@@ -153,11 +156,20 @@ async listProjects() {
   },
 
   // Media
- async uploadMedia(file: File, onProgress?: (pct: number) => void) {
+  async checkMediaDuplicate(name: string, size: number): Promise<{ exists: boolean; document?: any }> {
+    return request<{ exists: boolean; document?: any }>(`/media/check-duplicate?name=${encodeURIComponent(name)}&size=${size}`);
+  },
+
+  async createMediaRef(targetDocId: string, parentId: string | null): Promise<any> {
+    return request<any>(`/documents/${targetDocId}/ref`, { method: 'POST', body: { parentId } });
+  },
+
+ async uploadMedia(file: File, onProgress?: (pct: number) => void, parentId?: string | null) {
   const token = getToken(); // tu helper actual
 
   const fd = new FormData();
   fd.append('file', file);
+  if (parentId) fd.append('parentId', parentId);
 
   return await new Promise<{ document: any; duplicated?: boolean }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -275,11 +287,11 @@ async listProjects() {
 async restoreDocument(id: string) {
   return request(`/documents/${id}/restore`, { method: 'PATCH' });
 },
-async purgeFolder(id: string) {
-  return request(`/folders/${id}/purge`, { method: 'DELETE' });
+async purgeFolder(id: string, batchDocIds?: string[]) {
+  return request(`/folders/${id}/purge`, { method: 'DELETE', body: batchDocIds?.length ? { batchDocIds } : undefined });
 },
-async purgeDocument(id: string) {
-  return request(`/documents/${id}/purge`, { method: 'DELETE' });
+async purgeDocument(id: string, batchDocIds?: string[]) {
+  return request(`/documents/${id}/purge`, { method: 'DELETE', body: batchDocIds?.length ? { batchDocIds } : undefined });
 },
 
   // ─── Guión de proyecto ───────────────────────────────────────────────────

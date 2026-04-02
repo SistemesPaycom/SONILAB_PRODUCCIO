@@ -86,10 +86,23 @@ const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [nameColWidth, setNameColWidth] = useState(200);
   const [formatColWidth, setFormatColWidth] = useState(100);
   const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
+  const [duplicateNotice, setDuplicateNotice] = useState<{ fileName: string; existingName: string; existingDocId: string; folderPath: string; file: File; targetParentId: string | null; tentative?: boolean } | null>(null);
+  const [clipboard, setClipboard] = useState<{ itemIds: string[]; mode: 'copy' | 'cut' } | null>(null);
+  const [pasteError, setPasteError] = useState<string | null>(null);
+  const [uploadBlockError, setUploadBlockError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [srtModeModalOpen, setSrtModeModalOpen] = useState(false);
   const [srtModeDocId, setSrtModeDocId] = useState<string | null>(null);
   const [srtModeHasGuion, setSrtModeHasGuion] = useState(false);
+
+  // True si qualsevol element seleccionat és un asset de media canònica (media poblat, no és un LNK).
+  // S'usa per ocultar Copiar/Retallar sobre media i evitar duplicació de binaris via clipboard clàssic.
+  const selectionHasCanonicalMedia = Array.from(selectedIds).some(id => {
+    const d = state.documents.find(d2 => d2.id === id);
+    return !!(d && (d as any).media && !(d as any).refTargetId);
+  });
 
   const goLibrary = () => {
   dispatch({ type: 'SET_VIEW', payload: 'library' });
@@ -99,6 +112,7 @@ const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
 
 const goMedia = () => {
   dispatch({ type: 'SET_VIEW', payload: 'library' });
+  dispatch({ type: 'SET_CURRENT_FOLDER', payload: null });
   setIsCollapsed(false);
   setPage('media');
 };
@@ -199,6 +213,13 @@ const goTrash = () => {
       const ext = originalName.toLowerCase().split('.').pop();
       let content = '', csvContent = '', sourceType = ext || 'unknown';
 
+      // Guard simètric: des de la pestanya Media no s'accepten documents clàssics.
+      // La separació de dominis s'aplica en les dues direccions.
+      if (page === 'media' && ['pdf', 'docx', 'srt'].includes(ext || '')) {
+        setUploadBlockError('Des de la pestanya Media, només es pot afegir vídeo o àudio.');
+        return;
+      }
+
       if (ext === 'pdf') {
         content = await importPdfFile(file, DEFAULT_IMPORT_OPTIONS);
         sourceType = 'slsf';
@@ -209,6 +230,13 @@ const goTrash = () => {
         content = await file.text();
         sourceType = 'srt';
       } else if (['mp4', 'wav', 'mov', 'webm', 'ogg', 'mp3'].includes(ext || '')) {
+        // Guard: media no pot entrar a Arxius pel flux genèric d'importació.
+        // L'usuari ha de fer-ho des de la pestanya Media.
+        // Un LNK no passa per aquest flux (no s'importa un fitxer per crear LNK).
+        if (page !== 'media') {
+          setUploadBlockError('Per afegir vídeo o àudio, usa la pestanya Media.');
+          return;
+        }
         content = '';
         sourceType = ext || 'video';
       } else return;
@@ -223,15 +251,50 @@ const goTrash = () => {
       
      if (useBackend) {
   if (['mp4', 'wav', 'mov', 'webm', 'ogg', 'mp3', 'm4a'].includes(ext || '')) {
-    setUploadProgress({ name: file.name, pct: 0 });
 
-await api.uploadMedia(file, (pct) => {
-  setUploadProgress({ name: file.name, pct });
-});
+    // ── Precheck ligero: nombre + tamaño (sin cargar el archivo en RAM) ──
+    const precheck = await api.checkMediaDuplicate(file.name, file.size);
 
-await reloadTree(); // o tu flujo actual
+    if (precheck.exists) {
+      // Probable duplicate found — show modal WITHOUT uploading
+      const existingDoc = precheck.document;
+      const pathParts: string[] = [];
+      let pid: string | null = existingDoc.parentId ?? null;
+      while (pid) {
+        const folder = state.folders.find(f => f.id === pid);
+        if (!folder) break;
+        pathParts.unshift(folder.name);
+        pid = folder.parentId ?? null;
+      }
+      const folderPath = pathParts.length > 0 ? pathParts.join(' / ') : 'Arrel';
+      setDuplicateNotice({ fileName: file.name, existingName: existingDoc.name, existingDocId: existingDoc.id || existingDoc._id, folderPath, file, targetParentId: null, tentative: true });
+    } else {
+      // No probable match — proceed with normal upload
+      setUploadProgress({ name: file.name, pct: 0 });
 
-setUploadProgress(null);
+      const uploadResult = await api.uploadMedia(file, (pct) => {
+        setUploadProgress({ name: file.name, pct });
+      }, null);
+
+      setUploadProgress(null);
+
+      if (uploadResult.duplicated) {
+        // Backend confirmed real duplicate by SHA-256
+        const existingDoc = uploadResult.document;
+        const pathParts: string[] = [];
+        let pid: string | null = existingDoc.parentId ?? null;
+        while (pid) {
+          const folder = state.folders.find(f => f.id === pid);
+          if (!folder) break;
+          pathParts.unshift(folder.name);
+          pid = folder.parentId ?? null;
+        }
+        const folderPath = pathParts.length > 0 ? pathParts.join(' / ') : 'Arrel';
+        setDuplicateNotice({ fileName: file.name, existingName: existingDoc.name, existingDocId: existingDoc.id || existingDoc._id, folderPath, file, targetParentId: null });
+      } else {
+        await reloadTree();
+      }
+    }
   } else {
     await createDocumentRemote({
       name: finalName,
@@ -259,8 +322,74 @@ setUploadProgress(null);
     } catch (error) { console.error(`Error important arxiu ${file.name}:`, error); }
   };
 
+  const handleContinueUpload = async () => {
+    if (!duplicateNotice) return;
+    const { file, targetParentId } = duplicateNotice;
+    const savedNotice = duplicateNotice; // snapshot for error recovery
+    // Close modal — progress bar takes over during upload
+    setDuplicateNotice(null);
+    try {
+      setUploadProgress({ name: file.name, pct: 0 });
+      const uploadResult = await api.uploadMedia(file, (pct) => setUploadProgress({ name: file.name, pct }), targetParentId);
+      setUploadProgress(null);
+      if (uploadResult.duplicated) {
+        // Backend confirmed real duplicate by SHA-256 — show definitive modal (no tentative)
+        const existingDoc = uploadResult.document;
+        const pathParts: string[] = [];
+        let pid: string | null = existingDoc.parentId ?? null;
+        while (pid) {
+          const folder = state.folders.find(f => f.id === pid);
+          if (!folder) break;
+          pathParts.unshift(folder.name);
+          pid = folder.parentId ?? null;
+        }
+        const folderPath = pathParts.length > 0 ? pathParts.join(' / ') : 'Arrel';
+        setDuplicateNotice({ fileName: file.name, existingName: existingDoc.name, existingDocId: existingDoc.id || existingDoc._id, folderPath, file, targetParentId: null });
+      } else {
+        await reloadTree();
+      }
+    } catch (err) {
+      setUploadProgress(null);
+      console.error('Error en continue upload:', err);
+      // Restore modal with error so user doesn't lose context silently
+      setDuplicateNotice(savedNotice);
+    }
+  };
+
+  const handleCreateRef = async () => {
+    if (!duplicateNotice) return;
+    const { existingDocId, targetParentId } = duplicateNotice;
+    if (!existingDocId) return;
+    try {
+      await api.createMediaRef(existingDocId, targetParentId);
+      setDuplicateNotice(null);
+      await reloadTree();
+    } catch (err) {
+      console.error('Error creant accés directe:', err);
+    }
+  };
+
+  const itemsToRender = page === 'media'
+    ? state.documents.filter(
+        (doc) => !doc.isDeleted && MEDIA_EXTS.includes((doc.sourceType || '').toLowerCase()) && !!(doc as any).media && !(doc as any).refTargetId
+      )
+    : currentItems.filter((item) => {
+        if (view === 'trash') return true;
+        // Media canònica pertany exclusivament a la pestanya Media: no ha d'aparèixer a library/projects.
+        // Un LNK (refTargetId poblat, media null) no és media canònica i sí pertany a Arxius.
+        // També s'exclouen documents amb sourceType de media sense camp media (documents legacy).
+        if (item.type === 'document' && !(item as any).refTargetId && (
+          !!(item as any).media || MEDIA_EXTS.includes((item.sourceType || '').toLowerCase())
+        )) return false;
+        if (page === 'library') return true;
+        if (page === 'projects' && state.currentFolderId === null) {
+          return item.type === 'folder' && projectFolderIds.has(item.id);
+        }
+        return true;
+      });
+
   const handleSelectAll = () => {
-    dispatch({ type: 'TOGGLE_SELECT_ALL', payload: { itemIds: currentItems.map((item) => item.id) } });
+    dispatch({ type: 'TOGGLE_SELECT_ALL', payload: { itemIds: itemsToRender.map((item) => item.id) } });
   };
 
   const handleLibraryClick = () => {
@@ -297,12 +426,49 @@ setUploadProgress(null);
     const folderIds = ids.filter((id) => state.folders.some((f) => f.id === id));
     const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
 
-    await Promise.all([
-      ...folderIds.map((id) => api.deleteFolder(id)),
-      ...docIds.map((id) => api.deleteDocument(id)),
-    ]);
+    // Conjunt total efectiu de doc IDs que seran esborrats:
+    // docs seleccionats directament + docs dins carpetes seleccionades (i descendents).
+    const allEffectiveDocIds = new Set<string>(docIds);
+    const allFolderIds = new Set<string>();
+    const folderQueue = [...folderIds];
+    while (folderQueue.length) {
+      const fid = folderQueue.shift()!;
+      allFolderIds.add(fid);
+      for (const f of state.folders.filter(f => f.parentId === fid && !f.isDeleted)) {
+        folderQueue.push(f.id);
+      }
+    }
+    for (const d of state.documents.filter(d => !d.isDeleted && d.parentId && allFolderIds.has(d.parentId))) {
+      allEffectiveDocIds.add(d.id);
+    }
+    const batchDocIds = Array.from(allEffectiveDocIds);
 
-    await reloadTree();
+    // Pre-validació local: comprova tots els media canònics del conjunt efectiu.
+    // Només bloqueja si queda algun LNK actiu FORA del conjunt total de borrat.
+    for (const id of allEffectiveDocIds) {
+      const doc = state.documents.find(d => d.id === id);
+      if (doc && (doc as any).media && !(doc as any).refTargetId) {
+        const hasExternalLnk = state.documents.some(d =>
+          !d.isDeleted &&
+          (d as any).refTargetId === id &&
+          !allEffectiveDocIds.has(d.id),
+        );
+        if (hasExternalLnk) {
+          setDeleteError(`No es pot esborrar "${doc.name}": té referències actives externes. Esborra primer les referències.`);
+          return;
+        }
+      }
+    }
+
+    try {
+      // Execució seqüencial + batchDocIds perquè cada endpoint vegi el conjunt total.
+      for (const id of folderIds) await api.deleteFolder(id, batchDocIds);
+      for (const id of docIds) await api.deleteDocument(id, batchDocIds);
+      await reloadTree();
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Error en esborrar');
+      await reloadTree();
+    }
   })();
 };
   const handleRestoreSelected = () => {
@@ -350,24 +516,133 @@ setUploadProgress(null);
   void (async () => {
     const folderIds = ids.filter((id) => state.folders.some((f) => f.id === id));
     const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
-    console.log('[purge] folderIds:', folderIds, 'docIds:', docIds);
+
+    // Conjunt total efectiu de doc IDs del lot de purge (mateixa lògica que delete normal).
+    const allEffectiveDocIds = new Set<string>(docIds);
+    const allFolderIds = new Set<string>();
+    const folderQueue = [...folderIds];
+    while (folderQueue.length) {
+      const fid = folderQueue.shift()!;
+      allFolderIds.add(fid);
+      for (const f of state.folders.filter(f => f.parentId === fid)) {
+        folderQueue.push(f.id);
+      }
+    }
+    for (const d of state.documents.filter(d => d.parentId && allFolderIds.has(d.parentId))) {
+      allEffectiveDocIds.add(d.id);
+    }
+    const batchDocIds = Array.from(allEffectiveDocIds);
+
+    // Pre-validació local: comprova tots els media canònics del conjunt efectiu.
+    for (const id of allEffectiveDocIds) {
+      const doc = state.documents.find(d => d.id === id);
+      if (doc && (doc as any).media && !(doc as any).refTargetId) {
+        const hasExternalLnk = state.documents.some(d =>
+          !d.isDeleted &&
+          (d as any).refTargetId === id &&
+          !allEffectiveDocIds.has(d.id),
+        );
+        if (hasExternalLnk) {
+          setDeleteError(`No es pot eliminar permanentment "${doc.name}": té referències actives externes. Esborra primer les referències.`);
+          return;
+        }
+      }
+    }
 
     try {
-      await Promise.all([
-        ...folderIds.map((id) => api.purgeFolder(id)),
-        ...docIds.map((id) => api.purgeDocument(id)),
-      ]);
-      console.log('[purge] API calls succeeded, reloading tree');
+      // Execució seqüencial + batchDocIds perquè el backend vegi el conjunt total.
+      for (const id of folderIds) await api.purgeFolder(id, batchDocIds);
+      for (const id of docIds) await api.purgeDocument(id, batchDocIds);
       await reloadTree();
       dispatch({ type: 'SET_VIEW', payload: 'trash' });
-    } catch (err) {
-      console.error('[purge] error during purge:', err);
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Error en eliminar permanentment');
+      await reloadTree();
     }
   })();
 };
+  // Copiar: only accepts document IDs (folders not supported)
+  const handleClipboardCopy = (ids: string[]) => {
+    const docIds = ids.filter(id => state.documents.some(d => d.id === id));
+    if (docIds.length === 0) return;
+    setPasteError(null);
+    setClipboard({ itemIds: docIds, mode: 'copy' });
+  };
+  const handleClipboardCut = (ids: string[]) => {
+    setPasteError(null);
+    setClipboard({ itemIds: ids, mode: 'cut' });
+  };
+  const handleClipboardPaste = async () => {
+    if (!clipboard) return;
+    setPasteError(null);
+    try {
+      if (clipboard.mode === 'cut') {
+        // Guard atòmic: si el lot conté algun document de media canònica, s'avorta tot.
+        // Un LNK (refTargetId poblat) no és media canònica i no queda blocat.
+        // Les carpetes no poden ser media canònica, no cal comprovar-les.
+        const cutBatchHasCanonicalMedia = clipboard.itemIds.some(id => {
+          const doc = state.documents.find(d => d.id === id);
+          return !!(doc && (doc as any).media && !(doc as any).refTargetId);
+        });
+        if (cutBatchHasCanonicalMedia) {
+          setPasteError('No es pot moure un asset de media canònica per clipboard. Usa «Crear referència» per vincular-lo.');
+          setClipboard(null);
+          return;
+        }
+        dispatch({ type: 'MOVE_ITEMS', payload: { itemIds: clipboard.itemIds, destinationFolderId: state.currentFolderId } });
+        if (useBackend) {
+          for (const id of clipboard.itemIds) {
+            const isFolder = state.folders.some(f => f.id === id);
+            if (isFolder) await api.patchFolder(id, { parentId: state.currentFolderId });
+            else await api.patchDocument(id, { parentId: state.currentFolderId });
+          }
+          await reloadTree();
+        }
+      } else if (clipboard.mode === 'copy') {
+        // clipboard.itemIds guaranteed to contain only document IDs (filtered at source)
+        if (!useBackend) { setClipboard(null); return; }
+        // Prefetch de tot el lot ABANS de crear res.
+        // Permet inspecció atòmica: si algun document és media canònica, s'avorta el lot sencer
+        // sense haver creat cap còpia parcial.
+        const fullDocs = await Promise.all(clipboard.itemIds.map(id => api.getDocument(id)));
+        const batchHasCanonicalMedia = fullDocs.some(d => d.media && !d.refTargetId);
+        if (batchHasCanonicalMedia) {
+          setPasteError('No es pot copiar un asset de media canònica. Usa «Crear referència» per vincular-lo.');
+          setClipboard(null);
+          return;
+        }
+        // Tot el lot és net: procedir amb les còpies.
+        for (const fullDoc of fullDocs) {
+          const origName: string = fullDoc.name || '';
+          const dotIdx = origName.lastIndexOf('.');
+          const copyName = dotIdx > 0
+            ? origName.substring(0, dotIdx).replace(/ \(còpia\)$/, '') + ' (còpia)' + origName.substring(dotIdx)
+            : origName.replace(/ \(còpia\)$/, '') + ' (còpia)';
+          await api.createDocument({
+            name: copyName,
+            parentId: state.currentFolderId,
+            sourceType: fullDoc.sourceType,
+            contentByLang: fullDoc.contentByLang ?? {},
+            csvContentByLang: fullDoc.csvContentByLang ?? {},
+            sourceLang: fullDoc.sourceLang ?? null,
+            media: fullDoc.media ?? null,
+            refTargetId: fullDoc.refTargetId ?? null,
+          });
+        }
+        await reloadTree();
+      }
+    } catch (err: any) {
+      const msg = err?.message || 'Error desconegut';
+      setPasteError(`Error en enganxar: ${msg}`);
+      return; // keep clipboard so user can retry
+    }
+    setClipboard(null);
+  };
+
   const breadcrumbs = React.useMemo(() => {
+    const rootName = page === 'projects' ? 'Projectes' : page === 'media' ? 'Media' : 'Files';
     if (view === 'trash') {
-        return [{ id: null, name: 'Llibreria' }, { id: 'trash', name: 'Paperera' }];
+        return [{ id: null, name: rootName }, { id: 'trash', name: 'Paperera' }];
     }
     const path: { id: string | null; name: string }[] = [];
     let current = currentFolder;
@@ -375,8 +650,8 @@ setUploadProgress(null);
       path.unshift({ id: current.id, name: current.name });
       current = folders.find(f => f.id === current.parentId);
     }
-    return [{ id: null, name: 'Llibreria' }, ...path];
-  }, [currentFolder, folders, view]);
+    return [{ id: null, name: rootName }, ...path];
+  }, [currentFolder, folders, view, page]);
 
   const handleGoBack = () => { 
     if (view === 'trash') {
@@ -417,15 +692,18 @@ setUploadProgress(null);
 
  const handlePreviewDocument = useCallback((docId: string) => {
   const doc = state.documents.find(d => d.id === docId);
-  const isSrt = doc && ((doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt'));
+  // Resolve ref to its target so media always loads correctly
+  const effectiveDocId = doc?.refTargetId || docId;
+  const effectiveDoc = state.documents.find(d => d.id === effectiveDocId) || doc;
+  const isSrt = effectiveDoc && ((effectiveDoc.sourceType || '').toLowerCase() === 'srt' || effectiveDoc.name.toLowerCase().endsWith('.srt'));
   if (isSrt) {
-    onOpenDocument(docId, 'editor-srt-standalone' as any, false);
+    onOpenDocument(effectiveDocId, 'editor-srt-standalone' as any, false);
     return;
   }
-  onOpenDocument(docId, 'editor', false);
+  onOpenDocument(effectiveDocId, 'editor', false);
 }, [onOpenDocument, state.documents]);
 
-  const isAllSelected = currentItems.length > 0 && selectedIds.size === currentItems.length;
+  const isAllSelected = itemsToRender.length > 0 && selectedIds.size === itemsToRender.length;
   const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null;
 const selectedItem =
   singleSelectedId
@@ -437,7 +715,7 @@ const selectedItem =
     <div className="text-center py-20 min-w-full flex flex-col items-center">
       <div className="mx-auto h-16 w-16 text-gray-600"><Icons.Folder className="w-16 h-16" /></div>
       <h3 className="mt-2 text-lg font-medium text-gray-400">
-        {view === 'library' ? (currentFolder ? 'Aquesta carpeta és buida' : 'La llibreria és buida') : 'La paperera és buida'}
+        {view === 'library' ? (currentFolder ? 'Aquesta carpeta és buida' : 'Files és buit') : 'La paperera és buida'}
       </h3>
       <p className="mt-1 text-sm text-gray-500">
         {view === 'library' ? 'Crea una carpeta o importa un recurs.' : 'Els elements esborrats apareixeran aquí.'}
@@ -449,25 +727,6 @@ const selectedItem =
  const activeTasksCount =
   translationTasks.filter(t => t.status === 'processing').length +
   state.transcriptionTasks.filter(t => t.status === 'queued' || t.status === 'processing').length;
-const itemsToRender = currentItems.filter((item) => {
-  // Si estás en Trash, no filtramos por página (o podrías filtrar también si quieres)
-  if (view === 'trash') return true;
-
-  if (page === 'library') return true;
-
-  if (page === 'media') {
-    return (
-      item.type === 'document' &&
-      MEDIA_EXTS.includes(((item as any).sourceType || '').toLowerCase())
-    );
-  }
-
-  if (page === 'projects' && state.currentFolderId === null) {
-    return item.type === 'folder' && projectFolderIds.has(item.id);
-  }
-
-  return true;
-});
   return (
     <div className={`rounded-none shadow-sm h-full flex flex-col overflow-hidden relative ${isCollapsed ? 'p-1.5' : 'p-4 sm:p-6'}`} style={{ backgroundColor: 'var(--th-bg-primary)' }}>
       <style>{`
@@ -480,46 +739,46 @@ const itemsToRender = currentItems.filter((item) => {
         <div className={`flex items-center ${isCollapsed ? 'flex-col gap-3' : 'gap-2'}`}>
   <button
     onClick={goLibrary}
-    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
+    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'library') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
-      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
-    title="Llibreria"
+      ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    title="Files"
+    aria-label="Files"
   >
-    <Icons.Library className={isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} />
-    <span className={isCollapsed ? 'hidden' : 'inline'}>Llibreria</span>
-  </button>
-
-  <button
-    onClick={goMedia}
-    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
-      ${(view === 'library' && page === 'media') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
-      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
-    title="Media"
-  >
-    <span className={isCollapsed ? '' : ''}>🎞️</span>
-    <span className={isCollapsed ? 'hidden' : 'inline'}>Media</span>
+    <Icons.Folder className="w-4 h-4" />
   </button>
 
   <button
     onClick={goProjects}
-    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
+    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'projects') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
-      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
+      ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
     title="Projectes"
+    aria-label="Projectes"
   >
     <span>📌</span>
-    <span className={isCollapsed ? 'hidden' : 'inline'}>Projectes</span>
+  </button>
+
+  <button
+    onClick={goMedia}
+    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
+      ${(view === 'library' && page === 'media') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
+      ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    title="Media"
+    aria-label="Media"
+  >
+    <span>🎞️</span>
   </button>
 
   <button
     onClick={goTrash}
-    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
+    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
       ${view === 'trash' ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
-      ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
+      ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
     title="Paperera"
+    aria-label="Paperera"
   >
-    <Icons.Trash className={isCollapsed ? 'w-5 h-5' : 'w-4 h-4'} />
-    <span className={isCollapsed ? 'hidden' : 'inline'}>Paperera</span>
+    <Icons.Trash className="w-4 h-4" />
   </button>
 </div>
 
@@ -533,23 +792,49 @@ const itemsToRender = currentItems.filter((item) => {
       setRenameValue(selectedItem.name);
       setRenameModalOpen(true);
     }}
-    className="px-3 py-1.5 hover:brightness-125 text-white rounded-lg text-sm font-semibold flex items-center gap-2"
+    className="px-2.5 py-1.5 hover:brightness-125 text-white rounded-lg text-sm font-semibold flex items-center justify-center"
     style={{ backgroundColor: 'var(--th-bg-tertiary)' }}
     title="Renombrar"
+    aria-label="Renombrar"
   >
     <Icons.Pencil />
-    <span>Renombrar</span>
   </button>
 )}
                             {view === 'library' && (
-                                <button onClick={handleDeleteSelected} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Mou a paperera">
-                                    <Icons.Trash /><span>{`Esborrar (${selectedIds.size})`}</span>
+                                <button onClick={handleDeleteSelected} className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center" title={`Esborrar (${selectedIds.size})`} aria-label={`Esborrar ${selectedIds.size} elements`}>
+                                    <Icons.Trash />
                                 </button>
+                            )}
+                            {view === 'library' && (
+                              <div className="relative">
+                                <button
+                                  onClick={() => setToolbarMenuOpen(v => !v)}
+                                  className="px-2.5 py-1.5 hover:brightness-125 text-white rounded-lg text-sm font-bold flex items-center justify-center"
+                                  style={{ backgroundColor: 'var(--th-bg-tertiary)' }}
+                                  title="Més accions"
+                                  aria-label="Més accions"
+                                >⋯</button>
+                                {toolbarMenuOpen && (
+                                  <>
+                                    <div className="fixed inset-0 z-[400]" onClick={() => setToolbarMenuOpen(false)} />
+                                    <div className="absolute right-0 top-full mt-1 z-[401] rounded-lg shadow-xl py-1 min-w-[140px]" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}>
+                                      {selectedIds.size > 0 && !selectionHasCanonicalMedia && Array.from(selectedIds).every(id => state.documents.some(d => d.id === id)) && (
+                                        <button onClick={() => { handleClipboardCopy(Array.from(selectedIds)); setToolbarMenuOpen(false); }} className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:brightness-125" style={{ color: 'var(--th-text-secondary)' }}>
+                                          <span>📋</span><span>Copiar</span></button>
+                                      )}
+                                      {!selectionHasCanonicalMedia && (
+                                        <button onClick={() => { handleClipboardCut(Array.from(selectedIds)); setToolbarMenuOpen(false); }} className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:brightness-125" style={{ color: 'var(--th-text-secondary)' }}>
+                                          <span>✂️</span><span>Retallar</span></button>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             )}
                             {view === 'trash' && (
                                 <>
-                                    <button onClick={handleRestoreSelected} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Restaurar">
-                                        <Icons.Restore /><span>{`Restaurar (${selectedIds.size})`}</span>
+                                    <button onClick={handleRestoreSelected} className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center" title={`Restaurar (${selectedIds.size})`} aria-label={`Restaurar ${selectedIds.size} elements`}>
+                                        <Icons.Restore />
                                     </button>
                                     <button onClick={() => setShowPermanentDeleteConfirm(true)} className="px-3 py-1.5 bg-red-800 hover:bg-red-900 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Esborrar permanentment">
                                         <Icons.Trash />
@@ -559,6 +844,20 @@ const itemsToRender = currentItems.filter((item) => {
                         </>
                     ) : (
                         <>
+                            {view === 'library' && clipboard && clipboard.itemIds.length > 0 && (
+                              <div className="flex flex-col items-end gap-1">
+                                <button onClick={handleClipboardPaste} className="px-2.5 py-1.5 hover:brightness-125 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5" style={{ backgroundColor: 'var(--th-accent)' }} title={`Enganxar ${clipboard.itemIds.length} element(s) aquí (${clipboard.mode === 'cut' ? 'moure' : 'copiar'})`} aria-label="Enganxar">
+                                  📌 <span className="text-xs">Enganxar ({clipboard.itemIds.length})</span>
+                                </button>
+                                {pasteError && (
+                                  <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md" style={{ backgroundColor: 'var(--th-bg-surface)', color: '#f87171', border: '1px solid #f87171' }}>
+                                    <span>⚠</span>
+                                    <span>{pasteError}</span>
+                                    <button onClick={() => setPasteError(null)} className="ml-1 opacity-60 hover:opacity-100" aria-label="Tancar error">✕</button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                             {view === 'library' && (
                                  <>
                                     <button onClick={() => setCreateFolderModalOpen(true)} className="px-3 py-2 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} title="Crear carpeta"><Icons.FolderPlus /></button>
@@ -566,9 +865,9 @@ const itemsToRender = currentItems.filter((item) => {
                                     <button
     onClick={() => setIsCreateProjectOpen(true)}
     className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
-    title="Crear proyecto"
+    title="Crear projecte"
   >
-    Crear proyecto
+    Crear projecte
   </button>
                                  </>
                             )}
@@ -641,27 +940,30 @@ const itemsToRender = currentItems.filter((item) => {
               <div className="divide-y divide-[var(--th-border)] mx-2">
                 {itemsToRender.length > 0 ? (
                   itemsToRender.map((item) => (
-                    <FileItem key={item.id} item={item} isSelected={selectedIds.has(item.id)} isDragging={isDragging} setIsDragging={setIsDragging} dropTargetId={dropTargetId} setDropTargetId={setDropTargetId} onPreviewDocument={handlePreviewDocument} onDoubleClickOpen={(docId) => {
+                    <FileItem key={item.id} item={item} isSelected={selectedIds.has(item.id)} isDragging={isDragging} setIsDragging={setIsDragging} dropTargetId={dropTargetId} setDropTargetId={setDropTargetId} isProject={item.type === 'folder' && projectFolderIds.has(item.id)} onPreviewDocument={handlePreviewDocument} onDoubleClickOpen={(docId) => {
     const doc = state.documents.find(d => d.id === docId);
-    const isSrt = doc && ((doc.sourceType || '').toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt'));
+    // If this is a reference/shortcut, open the target document instead
+    const effectiveDocId = doc?.refTargetId || docId;
+    const effectiveDoc = state.documents.find(d => d.id === effectiveDocId) || doc;
+    const isSrt = effectiveDoc && ((effectiveDoc.sourceType || '').toLowerCase() === 'srt' || effectiveDoc.name.toLowerCase().endsWith('.srt'));
     if (isSrt) {
       // Comprova si hi ha preferència guardada
       const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SRT_EDITOR_MODE);
       if (saved === 'editor-video-subs' || saved === 'editor-srt-standalone') {
-        window.open(`${window.location.origin}${window.location.pathname}#/editor/${saved}/${docId}`, '_blank');
+        window.open(`${window.location.origin}${window.location.pathname}#/editor/${saved}/${effectiveDocId}`, '_blank');
       } else {
         // Mostrar modal de selecció; consultar si el projecte té guió
-        setSrtModeDocId(docId);
+        setSrtModeDocId(effectiveDocId);
         setSrtModeHasGuion(false); // default; actualitzem async
         setSrtModeModalOpen(true);
-        api.getProjectBySrt(docId)
+        api.getProjectBySrt(effectiveDocId)
           .then(p => setSrtModeHasGuion(Boolean(p?.guionDocumentId)))
           .catch(() => {});
       }
     } else {
-      setOpenWithDocId(docId);
+      setOpenWithDocId(effectiveDocId);
     }
-  }} gridColumns={gridColumns} />
+  }} gridColumns={gridColumns} onCopy={handleClipboardCopy} onCut={handleClipboardCut} isCut={clipboard?.mode === 'cut' && clipboard.itemIds.includes(item.id)} />
                   ))
                 ) : (
                   renderEmptyState()
@@ -733,6 +1035,20 @@ const itemsToRender = currentItems.filter((item) => {
     </div>
   </div>
 )}
+{uploadBlockError && (
+  <div className="fixed bottom-4 left-4 z-[600] px-4 py-3 rounded-xl shadow-xl flex items-center gap-2" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid #f87171', color: '#f87171' }}>
+    <span>⚠</span>
+    <span className="text-sm">{uploadBlockError}</span>
+    <button onClick={() => setUploadBlockError(null)} className="ml-2 opacity-60 hover:opacity-100 text-xs" aria-label="Tancar">✕</button>
+  </div>
+)}
+{deleteError && (
+  <div className="fixed bottom-4 left-4 z-[600] px-4 py-3 rounded-xl shadow-xl flex items-center gap-2" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid #f87171', color: '#f87171' }}>
+    <span>⚠</span>
+    <span className="text-sm">{deleteError}</span>
+    <button onClick={() => setDeleteError(null)} className="ml-2 opacity-60 hover:opacity-100 text-xs" aria-label="Tancar">✕</button>
+  </div>
+)}
 {uploadProgress && (
   <div className="fixed bottom-4 left-4 z-[600] text-gray-100 px-4 py-3 rounded-xl shadow-xl" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}>
     <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--th-text-muted)' }}>Upload</div>
@@ -764,8 +1080,95 @@ const itemsToRender = currentItems.filter((item) => {
         onClose={() => { setSrtModeModalOpen(false); setSrtModeDocId(null); }}
       />
       {isImportModalOpen && <ImportFilesModal isOpen={isImportModalOpen} onClose={() => setImportModalOpen(false)} onFilesSelect={handleFilesUpload} accept=".pdf,.docx,.srt,.mp4,.wav,.mov,.webm,.ogg" title="Importar Fitxers" description="Selecciona o arrossega guions (PDF, DOCX), subtítols (SRT) o vídeo/àudio." />}
-    
-    
+
+      {duplicateNotice && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[500] backdrop-blur-sm p-6"
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-lg shadow-2xl"
+            style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 mx-auto text-2xl flex-shrink-0" style={{ backgroundColor: 'var(--th-bg-tertiary)' }}>
+              ⚠️
+            </div>
+            <h3 className="text-lg font-bold text-white text-center mb-3">
+              {duplicateNotice.tentative ? 'Possible arxiu duplicat' : 'Arxiu ja existent'}
+            </h3>
+
+            {/* Filename: break-all only on the filename span, prose wraps naturally */}
+            <p className="text-center text-sm mb-3" style={{ color: 'var(--th-text-secondary)' }}>
+              <span className="font-semibold text-white" style={{ wordBreak: 'break-all' }}>{duplicateNotice.fileName}</span>
+              {duplicateNotice.tentative
+                ? <span> coincideix en nom i mida amb un arxiu ja existent a la biblioteca.</span>
+                : <span> ja existeix a la biblioteca i no s&apos;ha tornat a importar.</span>
+              }
+            </p>
+
+            {/* Location box */}
+            <div className="rounded-lg px-4 py-3 mb-5 text-xs" style={{ backgroundColor: 'var(--th-bg-tertiary)', color: 'var(--th-text-secondary)', overflowWrap: 'anywhere' }}>
+              <span style={{ color: 'var(--th-text-muted)' }}>Ubicació: </span>
+              <span className="font-semibold text-white">{duplicateNotice.folderPath}</span>
+              {duplicateNotice.existingName !== duplicateNotice.fileName && (
+                <>
+                  <br />
+                  <span style={{ color: 'var(--th-text-muted)' }}>Nom guardat: </span>
+                  <span className="font-semibold text-white">{duplicateNotice.existingName}</span>
+                </>
+              )}
+            </div>
+
+            {/* Buttons */}
+            {duplicateNotice.tentative ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setDuplicateNotice(null); }}
+                    className="flex-1 py-2.5 font-bold rounded-xl text-xs uppercase tracking-widest transition-all hover:brightness-125"
+                    style={{ backgroundColor: 'var(--th-bg-tertiary)', color: 'var(--th-text-secondary)' }}
+                  >
+                    Tancar
+                  </button>
+                  <button
+                    onClick={handleContinueUpload}
+                    className="flex-1 py-2.5 text-white font-bold rounded-xl text-xs uppercase tracking-widest transition-all hover:brightness-125"
+                    style={{ backgroundColor: 'var(--th-accent)' }}
+                  >
+                    Continuar i verificar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setDuplicateNotice(null); }}
+                    className="flex-1 py-2.5 font-bold rounded-xl text-xs uppercase tracking-widest transition-all hover:brightness-125"
+                    style={{ backgroundColor: 'var(--th-bg-tertiary)', color: 'var(--th-text-secondary)', border: '1px solid var(--th-border)' }}
+                  >
+                    Cancel·lar
+                  </button>
+                  <button
+                    onClick={handleCreateRef}
+                    className="flex-1 py-2.5 font-bold rounded-xl text-xs uppercase tracking-widest transition-all hover:brightness-125"
+                    style={{ backgroundColor: 'var(--th-accent)', color: 'white' }}
+                  >
+                    ↗ Crear accés directe
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setDuplicateNotice(null); }}
+                  className="w-full py-2.5 font-bold rounded-xl text-xs uppercase tracking-widest transition-all hover:brightness-125"
+                  style={{ backgroundColor: 'var(--th-bg-tertiary)', color: 'var(--th-text-secondary)', border: '1px solid var(--th-border)' }}
+                >
+                  Usar asset existent
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
