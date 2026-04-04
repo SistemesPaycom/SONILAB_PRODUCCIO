@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { useLibrary } from '../../context/Library/LibraryContext';
 import * as Icons from '../icons';
-import { convertSrtToSlsf } from '../../utils/SubtitlesEditor/srtToSlsf';
+import { convertSrtToSnlbpro } from '../../utils/SubtitlesEditor/srtToSnlbpro';
 import { convertSrtToSsrtlsf } from '../../utils/SubtitlesEditor/srtToSsrtlsf';
 
-type OpenMode = 'editor' | 'lector' | 'editor-video' | 'editor-video-subs' | 'editor-ssrtlsf' | 'editor-srt-standalone';
+type OpenMode = 'editor' | 'editor-video' | 'editor-video-subs' | 'editor-ssrtlsf' | 'editor-srt-standalone';
 
 interface OpenWithModalProps {
   docId: string;
@@ -25,24 +25,24 @@ const OpenWithModal: React.FC<OpenWithModalProps> = ({ docId, onClose, onOpen })
     }
   };
 
- const handleConvertToSlsf = () => {
+ const handleConvertToSnlbpro = () => {
   void (async () => {
     if (!doc) return;
 
     const srtContent =
       doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';
-    const slsfContent = convertSrtToSlsf(srtContent);
-    if (!slsfContent) return;
+    const snlbproContent = convertSrtToSnlbpro(srtContent);
+    if (!snlbproContent) return;
 
-    // Nou format de nom: .txt (el sourceType segueix sent 'slsf' per a detecció interna)
+    // Nou format de nom: .txt (el sourceType és 'snlbpro' per a detecció interna)
     const newName = doc.name.replace(/\.srt$/i, '') + '.txt';
 
     if (useBackend) {
       await createDocumentRemote({
         name: newName,
         parentId: doc.parentId,
-        content: slsfContent,
-        sourceType: 'slsf',
+        content: snlbproContent,
+        sourceType: 'snlbpro',
       });
     } else {
       dispatch({
@@ -50,8 +50,8 @@ const OpenWithModal: React.FC<OpenWithModalProps> = ({ docId, onClose, onOpen })
         payload: {
           name: newName,
           parentId: doc.parentId,
-          content: slsfContent,
-          sourceType: 'slsf',
+          content: snlbproContent,
+          sourceType: 'snlbpro',
         },
       });
     }
@@ -105,8 +105,8 @@ const handleConvertToSsrtlsf = () => {
 
   const isSrt = doc.sourceType?.toLowerCase() === 'srt' || doc.name.toLowerCase().endsWith('.srt');
   const isSsrtlsf = doc.sourceType?.toLowerCase() === 'ssrtlsf' || doc.name.toLowerCase().endsWith('.ssrtlsf');
-  // Compatibilitat: detecta tant .slsf (legacy) com .txt amb sourceType='slsf' (nous guions)
-  const isSlsf = doc.sourceType?.toLowerCase() === 'slsf' || doc.name.toLowerCase().endsWith('.slsf');
+  // Compatibilitat: detecta snlbpro (nou) i slsf (legacy)
+  const isSnlbpro = doc.sourceType?.toLowerCase() === 'snlbpro' || doc.sourceType?.toLowerCase() === 'slsf' || doc.name.toLowerCase().endsWith('.slsf');
 
   if (isSsrtlsf) {
     return (
@@ -187,7 +187,7 @@ const handleConvertToSsrtlsf = () => {
                 </button>
               </li>
 
-              {isSlsf && (
+              {isSnlbpro && (
                   <li>
                     <button
                     onClick={() => openInNewTab('editor-video-subs')}
@@ -202,18 +202,6 @@ const handleConvertToSsrtlsf = () => {
                 </li>
               )}
 
-              <li>
-                <button
-                  onClick={() => onOpen(doc.id, 'lector', false)}
-                  className="w-full group flex items-center gap-4 p-4 rounded-xl bg-gray-900/50 hover:bg-green-600/20 hover:border-green-500/50 border border-transparent transition-all text-left"
-                >
-                  <Icons.ScriptReaderIcon className="w-8 h-8 text-green-400 flex-shrink-0" />
-                  <div>
-                    <p className="font-bold text-gray-100 text-sm">Lector de guió (Notes)</p>
-                    <p className="text-xs text-gray-400">Mode revisió amb anotacions de direcció.</p>
-                  </div>
-                </button>
-              </li>
             </>
           )}
         </ul>

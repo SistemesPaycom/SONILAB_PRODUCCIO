@@ -4,7 +4,7 @@ import { OverlayConfig } from '../../types';
 import SegmentItem from './SegmentItem';
 import { EyeIcon, EyeOffIcon, EarIcon, Languages } from '../icons';
 import { LinkIcon, LinkOffIcon } from '../VideoEditor/PlayerIcons';
-import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
+import { SubtitleEditorProvider, useSubtitleEditor } from '../../context/SubtitleEditorContext';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface PendingCorrectionEntry {

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { OpenMode } from '../types';
 
 export interface HashRoute {
-  view: 'home' | 'editor' | 'script-view';
+  view: 'home' | 'editor' | 'script-view' | 'loading-preview';
   mode?: OpenMode;
   docId?: string;
 }
@@ -23,6 +23,9 @@ function parseHash(): HashRoute {
     if (VALID_MODES.includes(mode) && docId) {
       return { view: 'editor', mode, docId };
     }
+  }
+  if (parts[0] === 'loading-preview') {
+    return { view: 'loading-preview' };
   }
   if (parts[0] === 'script-view' && parts.length >= 2) {
     const docId = parts.slice(1).join('/');

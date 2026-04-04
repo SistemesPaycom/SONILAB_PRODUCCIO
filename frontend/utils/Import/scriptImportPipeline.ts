@@ -48,11 +48,8 @@ export interface ImportedStructuredScript {
    * Format: TAKE | PERSONATGE | TEXT (separador ' | ')
    */
   csvContent: string;
-  /**
-   * Tipus intern per a la biblioteca (compat. legacy .slsf).
-   * El nom visible és .txt però sourceType manté 'slsf' per a detecció.
-   */
-  sourceType: 'slsf';
+  /** Tipus intern per a la biblioteca. El nom visible és .txt. */
+  sourceType: 'snlbpro';
 }
 
 /**
@@ -103,6 +100,6 @@ export async function importStructuredScriptFromFile(
     baseName,
     content,
     csvContent,
-    sourceType: 'slsf',
+    sourceType: 'snlbpro',
   };
 }

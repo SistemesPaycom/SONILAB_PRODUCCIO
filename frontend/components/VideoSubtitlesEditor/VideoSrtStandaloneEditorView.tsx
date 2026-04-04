@@ -16,7 +16,7 @@ import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import { api } from '../../services/api';
-import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
+import { SubtitleEditorProvider, useSubtitleEditor } from '../../context/SubtitleEditorContext';
 import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
 
 interface VideoSrtStandaloneEditorViewProps {

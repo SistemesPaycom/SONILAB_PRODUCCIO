@@ -222,10 +222,10 @@ const goTrash = () => {
 
       if (ext === 'pdf') {
         content = await importPdfFile(file, DEFAULT_IMPORT_OPTIONS);
-        sourceType = 'slsf';
+        sourceType = 'snlbpro';
       } else if (ext === 'docx') {
         content = await importDocxFile(file, DEFAULT_IMPORT_OPTIONS);
-        sourceType = 'slsf';
+        sourceType = 'snlbpro';
       } else if (ext === 'srt') {
         content = await file.text();
         sourceType = 'srt';

@@ -28,7 +28,6 @@ export interface Shortcut {
 export interface AppShortcuts {
   general: Shortcut[];
   scriptEditor: Shortcut[];
-  lector: Shortcut[];
   videoEditor: Shortcut[];
   subtitlesEditor: Shortcut[];
 }
@@ -126,7 +125,7 @@ export type Id = string | number;
 
 export type TimelineViewMode = 'waveform' | 'segments' | 'both' | 'hidden';
 
-export type OpenMode = 'editor' | 'lector' | 'editor-video' | 'editor-video-subs' | 'editor-ssrtlsf' | 'editor-srt-standalone';
+export type OpenMode = 'editor' | 'editor-video' | 'editor-video-subs' | 'editor-ssrtlsf' | 'editor-srt-standalone';
 
 export interface TranscriptionTask {
   id: string;                 // jobId

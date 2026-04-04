@@ -7,7 +7,7 @@ export interface DocumentVersion {
   meta?: string;
 }
 
-const STORAGE_PREFIX = 'slsf_versions_';
+const STORAGE_PREFIX = 'snlbpro_versions_';
 const MAX_VERSIONS_PER_DOC = 50;
 
 /**

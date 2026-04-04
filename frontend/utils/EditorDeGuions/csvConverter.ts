@@ -85,9 +85,9 @@ export function scriptToCsv(takes: TakeBlock[]): string {
 
 
 /**
- * Converteix una cadena de text CSV a format de guió .slsf.
+ * Converteix una cadena de text CSV a format de guió SNLBPRO.
  */
-export function csvToSlsf(csvContent: string): string {
+export function csvToSnlbpro(csvContent: string): string {
   if (!csvContent.trim()) return '';
 
   const rows = csvContent.split('\n').map(line => {
@@ -120,7 +120,7 @@ export function csvToSlsf(csvContent: string): string {
     }
   });
   
-  const slsfParts = takeOrder.map(takeLabel => {
+  const snlbproParts = takeOrder.map(takeLabel => {
     const takeData = takes.get(takeLabel) || { lines: [] };
     let takeScript = `${takeLabel}\n`;
 
@@ -166,12 +166,8 @@ export function csvToSlsf(csvContent: string): string {
     return takeScript;
   });
 
-  return slsfParts.join('\n------------------------------------------------------------------------------------\n');
+  return snlbproParts.join('\n------------------------------------------------------------------------------------\n');
 }
 
-/**
- * Àlies de csvToSlsf amb nomenclatura actualitzada.
- * Els nous guions s'anomenen .txt internament però el format és el mateix.
- * Mantenim csvToSlsf per compatibilitat amb imports existents.
- */
-export const csvToScriptTxt = csvToSlsf;
+/** Àlies de csvToSnlbpro amb nomenclatura descriptiva. */
+export const csvToScriptTxt = csvToSnlbpro;

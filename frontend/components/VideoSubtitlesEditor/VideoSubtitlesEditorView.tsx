@@ -15,7 +15,7 @@ import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { useHorizontalPanelResize } from '../../hooks/usePanelResize';
-import { SubtitleEditorProvider, useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
+import { SubtitleEditorProvider, useSubtitleEditor } from '../../context/SubtitleEditorContext';
 import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
 import { ScriptViewPanel } from './ScriptViewPanel';
 import TranscriptCorrectionModal, { ChangeRecord as CorrectionChangeRecord, CorrectionResult } from './TranscriptCorrectionModal';
@@ -903,7 +903,7 @@ const handleSave = useCallback(() => {
     const srtContent = serializeSrt(segments);
     const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${currentDoc.name.replace(/\.slsf$/, '')}.srt`;
+    const a = document.createElement('a'); a.href = url; a.download = `${currentDoc.name.replace(/\.(snlbpro|slsf)$/, '')}.srt`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }, [segments, currentDoc.name]);
 

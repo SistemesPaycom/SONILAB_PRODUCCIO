@@ -7,7 +7,9 @@ declare const jspdf: any;
 
 function getBaseFilename(doc: Document | null): string {
   if (!doc) return 'script';
-  return doc.name.endsWith('.slsf') ? doc.name.slice(0, -5) : doc.name;
+  if (doc.name.endsWith('.snlbpro')) return doc.name.slice(0, -8);
+  if (doc.name.endsWith('.slsf')) return doc.name.slice(0, -5); // legacy
+  return doc.name;
 }
 
 /**

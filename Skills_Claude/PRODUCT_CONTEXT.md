@@ -48,18 +48,18 @@ La biblioteca es la superficie donde conviven organización, acceso y operacione
 No es un único modelo homogéneo. Funcionalmente contiene varios dominios distintos:
 
 - **Media**
-- **Arxius**
+- **Files** (antes "Arxius")
 - **LNK**
 - **Projectes**
 
 ### Media
 Repositorio canónico de vídeo/audio.
 
-### Arxius
+### Files (antes "Arxius")
 Sistema clásico de trabajo para documentos como `txt`, `srt`, `pdf`, `docx` y similares.
 
 ### LNK
-Referencia desde Arxius hacia un asset real de Media, sin duplicar binario.
+Referencia desde Files hacia un asset real de Media, sin duplicar binario.
 
 ### Projectes
 Capa especial que agrupa carpeta, media, srt, guion y estado de trabajo.

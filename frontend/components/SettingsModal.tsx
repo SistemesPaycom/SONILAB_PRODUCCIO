@@ -175,12 +175,11 @@ const ShortcutsTab: React.FC = () => {
     const appLabels: Record<ShortcutApp, string> = {
         general: 'General',
         scriptEditor: 'Editor Guions',
-        lector: 'Lector',
         videoEditor: 'Reproductor Vídeo',
         subtitlesEditor: 'Subtítols SRT'
     };
 
-    const sortedApps: ShortcutApp[] = ['general', 'scriptEditor', 'lector', 'videoEditor', 'subtitlesEditor'];
+    const sortedApps: ShortcutApp[] = ['general', 'scriptEditor', 'videoEditor', 'subtitlesEditor'];
 
     // Ensure all default shortcuts exist (merge with defaults for missing ids)
     const merged = useMemo(() => mergeShortcuts(DEFAULT_SHORTCUTS, shortcuts), [shortcuts]);

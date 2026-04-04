@@ -1,25 +1,25 @@
 import { AppShortcuts, Shortcut } from './types';
 
 export const LOCAL_STORAGE_KEYS = {
-  SHORTCUTS: 'slsf_shortcuts',
-  EDITOR_STYLES: 'slsf_editor_styles',
-  LIBRARY_WIDTH: 'slsf_library_width',
-  TAKE_MARGIN: 'slsf_take_margin',
-  TAKE_START_MARGIN: 'slsf_take_start_margin',
-  MAX_LINES_SUBS: 'slsf_max_lines_subs',
-  SUB_GRID_OPACITY: 'slsf_sub_grid_opacity',
-  WAVEFORM_HOLD_MS: 'slsf_waveform_hold_ms',
-  AUTOSAVE_SRT: 'slsf_autosave_srt',
-  TASKS_TRANSLATION: 'slsf_tasks_translation',
-  TASKS_TRANSCRIPTION: 'slsf_tasks_transcription',
+  SHORTCUTS: 'snlbpro_shortcuts',
+  EDITOR_STYLES: 'snlbpro_editor_styles',
+  LIBRARY_WIDTH: 'snlbpro_library_width',
+  TAKE_MARGIN: 'snlbpro_take_margin',
+  TAKE_START_MARGIN: 'snlbpro_take_start_margin',
+  MAX_LINES_SUBS: 'snlbpro_max_lines_subs',
+  SUB_GRID_OPACITY: 'snlbpro_sub_grid_opacity',
+  WAVEFORM_HOLD_MS: 'snlbpro_waveform_hold_ms',
+  AUTOSAVE_SRT: 'snlbpro_autosave_srt',
+  TASKS_TRANSLATION: 'snlbpro_tasks_translation',
+  TASKS_TRANSCRIPTION: 'snlbpro_tasks_transcription',
   /** Preferència d'editor per als SRT: 'editor-video-subs' | 'editor-srt-standalone' */
-  SRT_EDITOR_MODE: 'slsf_srt_editor_mode',
+  SRT_EDITOR_MODE: 'snlbpro_srt_editor_mode',
   /** Marge mínim entre subtítols a l'editor (ms). Preferència d'usuari, independent del projecte. */
-  EDITOR_MIN_GAP_MS: 'slsf_editor_min_gap_ms',
+  EDITOR_MIN_GAP_MS: 'snlbpro_editor_min_gap_ms',
   /** Tema de color de la interfície */
-  THEME: 'slsf_theme',
+  THEME: 'snlbpro_theme',
   /** Tokens del tema personalitzat (fallback local) */
-  CUSTOM_THEME_TOKENS: 'slsf_custom_theme_tokens',
+  CUSTOM_THEME_TOKENS: 'snlbpro_custom_theme_tokens',
 };
 
 export const A4_WIDTH_PX = 794;
@@ -62,10 +62,6 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
   ],
   scriptEditor: [
     { id: 'se_mode_csv', action: 'MODE_CSV', label: 'Canviar a mode Dades', combo: 'Ctrl+M' },
-  ],
-  lector: [
-    { id: 'l_zoom_in', action: 'ZOOM_IN', label: 'Zoom In', combo: 'Ctrl+Plus' },
-    { id: 'l_zoom_out', action: 'ZOOM_OUT', label: 'Zoom Out', combo: 'Ctrl+Minus' },
   ],
   videoEditor: [
     { id: 've_play', action: 'TOGGLE_PLAY', label: 'Reproduir / Pausa', combo: 'Ctrl+Space' },

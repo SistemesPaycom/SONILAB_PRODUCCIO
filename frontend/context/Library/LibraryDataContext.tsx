@@ -51,7 +51,7 @@ export type LibraryDataAction =
   | { type: 'TRIGGER_SYNC_REQUEST'; payload: { docId: string; type: 'media' | 'subtitles' } }
   | { type: 'CLEAR_SYNC_REQUEST' };
 
-const LOCAL_STORAGE_KEY = 'slsf_library_v3';
+const LOCAL_STORAGE_KEY = 'snlbpro_library_v3';
 
 const initialState: LibraryDataState = {
   folders: [],
@@ -410,8 +410,8 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (sortBy === SortByKey.Name) { valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); }
       else if (sortBy === SortByKey.Date) { valA = a.updatedAt; valB = b.updatedAt; }
       else if (sortBy === SortByKey.Format) {
-        valA = (a.type === 'folder' ? 'Carpeta' : (a as Document).sourceType || 'slsf').toLowerCase();
-        valB = (b.type === 'folder' ? 'Carpeta' : (b as Document).sourceType || 'slsf').toLowerCase();
+        valA = (a.type === 'folder' ? 'Carpeta' : (a as Document).sourceType || 'snlbpro').toLowerCase();
+        valB = (b.type === 'folder' ? 'Carpeta' : (b as Document).sourceType || 'snlbpro').toLowerCase();
       }
       if (valA < valB) return sortOrder === SortOrder.Asc ? -1 : 1;
       if (valA > valB) return sortOrder === SortOrder.Asc ? 1 : -1;

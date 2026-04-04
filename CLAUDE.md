@@ -166,3 +166,68 @@ Iniciada. Contrato funcional cerrado y primer bloque implementado.
 - `backend_nest_mvp/src/modules/projects/`
 
 Lee el `CLAUDE.md` local antes de tocar cualquiera de estas zonas.
+
+## 9. Documentación en Skills_Claude/
+
+Los archivos de contexto del proyecto están en `Skills_Claude/`:
+
+| Archivo | Contenido |
+|---------|-----------|
+| `PRODUCT_CONTEXT.md` | Contexto de producto, módulos y principios funcionales |
+| `PROJECT_HISTORY.md` | Decisiones históricas, Fase 1 y Fase 2, qué no reabrir |
+| `README.md` | Descripción del monorepo y arranque rápido |
+| `Logs/` | Logs de sesiones de trabajo anteriores con Claude |
+
+Los archivos de dominio de cada subsistema se crean aquí progresivamente cuando un área crece lo suficiente para justificarlo. Se pueden organizar en subcarpetas `frontend/` y `backend/` si el volumen lo requiere.
+
+## 10. Coherencia entre subsistemas
+
+Muchos componentes de Sonilab comparten recursos indirectos.
+Dos partes de la app pueden no estar conectadas directamente pero depender del mismo contrato compartido.
+
+Ejemplo: añadir un nuevo `sourceType` afecta a `FileItem.tsx` (icono/formato), `LibraryView.tsx` (clasificación), `OpenWithModal.tsx` (detección y apertura), `exportUtils.ts` (extensión del nombre) y posiblemente al backend. Sin consultar todos los afectados, el cambio queda a medias.
+
+### Regla obligatoria
+
+Antes de dar por terminada cualquier modificación, Claude debe preguntarse:
+
+> "¿Este cambio afecta a algún recurso compartido que otros subsistemas también consumen?"
+
+Si la respuesta es sí, consultar el archivo de dominio correspondiente en `Skills_Claude/` y aplicar todos los pasos indicados.
+
+### Dominios registrados
+
+Cada dominio tiene (o tendrá) un archivo `.md` en `Skills_Claude/` que explica qué archivos involucra, qué hacer cuando se añade/modifica/elimina algo, y qué relaciones indirectas existen.
+
+| Condición de activación | Dominio | Archivo |
+|------------------------|---------|---------|
+| Se añade, modifica o elimina un valor de `sourceType` | Clasificación de documentos | `Skills_Claude/domain-source-types.md` |
+| Se añade o renombra una clave en `LOCAL_STORAGE_KEYS` | Persistencia local | `Skills_Claude/domain-localstorage.md` |
+| Se modifica `isCanonicalMedia`, `isLnk` o la lógica de tab (Files/Media/Projectes) | Modelo de biblioteca | `Skills_Claude/domain-library-model.md` |
+| Se modifica el formato `snlbpro` o su pipeline de import/export/apertura | Formato de guion | `Skills_Claude/domain-snlbpro-format.md` |
+| Se toca `projectFolderIds` o cualquier lógica del módulo Projectes | Proyectos | `Skills_Claude/domain-projectes.md` |
+| Se modifica el modelo de segmento, `SubtitleEditorContext` o el editor de subtítulos | Editor de subtítulos | `Skills_Claude/domain-subtitles.md` |
+| Se modifica el flujo de subida de media o la lógica de deduplicación SHA-256 | Upload de media | `Skills_Claude/domain-media-upload.md` |
+| Se toca sincronización de tiempo entre media, subtítulos o waveform | Timeline / Waveform | `Skills_Claude/domain-timeline.md` |
+| Se añade una ruta nueva en frontend o un endpoint nuevo en backend | Navegación y routing | `Skills_Claude/domain-routing.md` |
+
+### Cómo crece esta tabla
+
+Cuando se cree un nuevo subsistema con recursos compartidos:
+1. Crear `Skills_Claude/domain-<nombre>.md` explicando el subsistema
+2. Añadir las condiciones de activación a la tabla de arriba
+
+No hace falta documentar subsistemas que no tienen relaciones indirectas con otros.
+
+### Regla de auto-documentación (sin bucles)
+
+Al terminar cualquier modificación, comprobar UNA VEZ:
+
+1. ¿Lo que acabo de hacer introduce un recurso compartido nuevo no documentado en ningún dominio?
+   → Sí: crear `Skills_Claude/domain-<nombre>.md` y añadir condiciones a la tabla.
+2. ¿Lo que acabo de hacer añade funcionalidad a un dominio existente que su `.md` actual no cubre?
+   → Sí: actualizar el `.md` del dominio con los archivos/pasos nuevos.
+
+**STOP: actualizar documentación de dominio NO activa otra ronda de revisión.**
+La revisión de coherencia se hace sobre los cambios funcionales, no sobre cambios en docs.
+Actualizar un `.md` es el último paso, no el inicio de uno nuevo.

@@ -4,12 +4,12 @@ import { ViewType, SortByKey, SortOrder, OpenMode, Layout, EditorStyles, Transla
 import { LibraryView } from './components/Library/LibraryView';
 import { VideoEditorView } from './components/VideoEditor/VideoEditorView';
 import { VideoSubtitlesEditorView } from './components/VideoSubtitlesEditor/VideoSubtitlesEditorView';
-import { LectorView } from './components/LectorDeGuions/LectorView';
 import { SsrtlsfEditorView } from './components/SsrtlsfEditor/SsrtlsfEditorView';
 import { VideoSrtStandaloneEditorView } from './components/VideoSubtitlesEditor/VideoSrtStandaloneEditorView';
 import SrtPreviewView from './components/VideoSubtitlesEditor/SrtPreviewView';
 import { MediaPreviewView } from './components/VideoEditor/MediaPreviewView';
 import ScriptExternalView from './components/ScriptExternalView';
+import LoadingPreviewView from './components/LoadingPreviewView';
 import Toolbar from './components/EditorDeGuions/Toolbar';
 import Editor from './components/EditorDeGuions/Editor';
 import { ColumnView } from './components/EditorDeGuions/ColumnView';
@@ -17,7 +17,7 @@ import { CsvView } from './components/EditorDeGuions/CsvView';
 import { useDocumentHistory } from './hooks/useDocumentHistory';
 import { DirtyGuardModal } from './components/DirtyGuardModal';
 import { translateScript } from './utils/EditorDeGuions/translator';
-import { csvToSlsf, scriptToCsv } from './utils/EditorDeGuions/csvConverter';
+import { csvToSnlbpro, scriptToCsv } from './utils/EditorDeGuions/csvConverter';
 import { parseScript } from './utils/EditorDeGuions/scriptParser';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useHashRoute } from './hooks/useHashRoute';
@@ -453,7 +453,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
     if (!currentDoc || !isEditing || !effectiveLang) return;
     if (sourceView === 'csv') {
       // newText és contingut CSV de CsvView; el convertim a format canònic de guió
-      const canonicalContent = csvToSlsf(newText);
+      const canonicalContent = csvToSnlbpro(newText);
       history.updateDraft(canonicalContent);
       history.commit(canonicalContent);
       dispatch({
@@ -504,8 +504,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
       );
     }
 
-    if (openMode === 'lector') return <LectorView documentId={currentDoc.id} onClose={() => handleOpenDocument(null, null, false)} onNavigateDocument={(id) => handleOpenDocument(id, 'lector', false)} editorStyles={editorStyles} col1Width={200} />;
-    if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
+if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
     if (openMode === 'editor-video-subs') return <VideoSubtitlesEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
     if (openMode === 'editor-ssrtlsf') return <SsrtlsfEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={() => handleOpenDocument(null, null, false)} onUpdateContent={(txt) => handleTextChange(txt, 'script')} />;
     if (openMode === 'editor-srt-standalone') {
@@ -802,7 +801,7 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
   const handleTextChange = (newText: string, sourceView: 'script' | 'csv' | 'mono') => {
     if (!currentDoc || !isEditing || !effectiveLang) return;
     if (sourceView === 'csv') {
-      const canonicalContent = csvToSlsf(newText);
+      const canonicalContent = csvToSnlbpro(newText);
       history.updateDraft(canonicalContent);
       history.commit(canonicalContent);
       dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang: effectiveLang, content: canonicalContent, csvContent: newText } });
@@ -954,6 +953,10 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
 const AuthedGate: React.FC = () => {
   const { authed, reason, markAuthed } = useAuth();
   const route = useHashRoute();
+
+  if (route.view === 'loading-preview') {
+    return <LoadingPreviewView />;
+  }
 
   return (
     <>

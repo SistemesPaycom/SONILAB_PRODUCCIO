@@ -1,6 +1,6 @@
 
 import { parseSrt } from './srtParser';
-import { csvToSlsf } from '../EditorDeGuions/csvConverter';
+import { csvToSnlbpro } from '../EditorDeGuions/csvConverter';
 
 const MAX_LINES_PER_TAKE = 16;
 const MAX_TAKE_DURATION_SECONDS = 90; // 1:30 minuts
@@ -26,11 +26,11 @@ const getSmartTimeLabel = (currentTime: number, takeStartTime: number): string =
 };
 
 /**
- * Converteix contingut SRT a SLSF (via format intermedi de graella/CSV)
+ * Converteix contingut SRT a format SNLBPRO (via format intermedi de graella/CSV)
  * Segueix el format professional on el personatge per defecte és "P"
  * i la primera línia de cada take conté el codi de temps inicial.
  */
-export function convertSrtToSlsf(srtContent: string): string {
+export function convertSrtToSnlbpro(srtContent: string): string {
   const segments = parseSrt(srtContent);
   if (segments.length === 0) return '';
 
@@ -54,7 +54,7 @@ export function convertSrtToSlsf(srtContent: string): string {
       }
       takeStartTime = seg.startTime;
       const takeLabel = `TAKE #${currentTakeNum}`;
-      
+
       // Línia de capçalera del TAKE (PERSONATGE buit, TEXT amb codi de temps absolut HH:MM:SS)
       csvRows.push([takeLabel, '', formatSeconds(takeStartTime)].join(SEPARATOR));
     }
@@ -62,19 +62,15 @@ export function convertSrtToSlsf(srtContent: string): string {
     const takeLabel = `TAKE #${currentTakeNum}`;
     const timeLabel = getSmartTimeLabel(seg.startTime, takeStartTime);
     const cleanText = seg.originalText.replace(/\n/g, ' '); // Aplanem el text del subtítol
-    
+
     // Línia de diàleg (PERSONATGE "P", TEXT amb prefix de temps intel·ligent)
     csvRows.push([takeLabel, 'P', `${timeLabel} ${cleanText}`].join(SEPARATOR));
-    
+
     linesInTake++;
   });
 
-  // Convertim la graella generada a SLSF utilitzant el conversor existent del sistema
-  return csvToSlsf(csvRows.join('\n'));
+  return csvToSnlbpro(csvRows.join('\n'));
 }
 
-/**
- * Àlies de convertSrtToSlsf amb nomenclatura actualitzada (.txt en comptes de .slsf).
- * Mantenim convertSrtToSlsf per compatibilitat amb imports existents.
- */
-export const convertSrtToScriptTxt = convertSrtToSlsf;
+/** Àlies de convertSrtToSnlbpro amb nomenclatura descriptiva. */
+export const convertSrtToScriptTxt = convertSrtToSnlbpro;

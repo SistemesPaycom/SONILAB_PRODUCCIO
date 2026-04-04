@@ -5,7 +5,7 @@ import * as RichText from '../../utils/SubtitlesEditor/richTextHelpers';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { TimecodeInput } from './TimecodeInput';
-import { useSubtitleEditor } from '../../contexts/SubtitleEditorContext';
+import { useSubtitleEditor } from '../../context/SubtitleEditorContext';
 
 interface SegmentItemProps {
   segment: Segment;
