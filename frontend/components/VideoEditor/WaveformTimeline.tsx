@@ -949,6 +949,20 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           />
         </div>
 
+        {/* Loading overlay — visible mentre s'extreu l'àudio */}
+        {waveStatus === 'loading' && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+            <video
+              src="/assets/loading.webm"
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-12 h-12"
+            />
+          </div>
+        )}
+
         {/* Empty state */}
         {!videoFile && (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500 pointer-events-none">

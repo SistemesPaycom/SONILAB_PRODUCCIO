@@ -28,6 +28,7 @@ interface VideoSrtStandaloneEditorViewProps {
 const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewProps> = ({ currentDoc, isEditing, onClose }) => {
   const { splitPayloadRef } = useSubtitleEditor();
   const { state, dispatch, useBackend, getMediaFile, ensureMediaFile } = useLibrary();
+  const { syncRequest } = state;
 
   const [maxLinesSubs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.MAX_LINES_SUBS, 2);
   const [autosave, setAutosave] = useLocalStorage<boolean>(LOCAL_STORAGE_KEYS.AUTOSAVE_SRT, false);
@@ -52,6 +53,8 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [mediaDocId, setMediaDocId] = useState<string | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [isMediaFetching, setIsMediaFetching] = useState(false);
+  const videoSrcRef = useRef<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -288,41 +291,56 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
 
   const handleSyncMedia = useCallback((doc: Document) => {
     void (async () => {
-      let file = getMediaFile(doc.id);
-      if (!file) file = await ensureMediaFile(doc.id, doc.name);
-
-      if (file) {
-        if (videoSrc) URL.revokeObjectURL(videoSrc);
-        setVideoFile(file);
-        setMediaDocId(doc.id);
-        setVideoSrc(URL.createObjectURL(file));
-        setIsPlaying(false);
-        setCurrentTime(0);
-        setDuration(0);
-      }
-    })().catch(e => console.error('handleSyncMedia failed', e));
-  }, [getMediaFile, ensureMediaFile, videoSrc]);
-
-  // ✅ Auto-cargar vídeo si el SRT pertenece a un proyecto
-  useEffect(() => {
-    if (!useBackend) return;
-    let cancelled = false;
-
-    void (async () => {
+      setIsMediaFetching(true);
       try {
-        const proj = await api.getProjectBySrt(currentDoc.id);
-        const mediaId = proj?.mediaDocumentId;
-        if (!mediaId || cancelled) return;
+        let file = getMediaFile(doc.id);
+        if (!file) file = await ensureMediaFile(doc.id, doc.name);
 
-        const mediaDoc = state.documents.find(d => d.id === mediaId);
-        if (mediaDoc) handleSyncMedia(mediaDoc);
-      } catch {
-        // No vinculado -> queda manual
+        if (file) {
+          if (videoSrcRef.current) URL.revokeObjectURL(videoSrcRef.current);
+          const newSrc = URL.createObjectURL(file);
+          videoSrcRef.current = newSrc;
+          setVideoFile(file);
+          setMediaDocId(doc.id);
+          setVideoSrc(newSrc);
+          setIsPlaying(false);
+          setCurrentTime(0);
+          setDuration(0);
+          // Persisteix el vincle SRT→media al backend
+          if (useBackend) void api.linkMediaToSrt(currentDoc.id, doc.id).catch(() => {});
+        }
+      } catch (e) {
+        console.error('handleSyncMedia failed', e);
+      } finally {
+        setIsMediaFetching(false);
       }
     })();
+  }, [getMediaFile, ensureMediaFile, useBackend, currentDoc.id]); // videoSrc eliminat: usem ref per revocar
 
-    return () => { cancelled = true; };
-  }, [useBackend, currentDoc.id, state.documents, handleSyncMedia]);
+  // Consumidor de syncRequest (EditorTabContent ja fa TRIGGER_SYNC_REQUEST en carregar)
+  useEffect(() => {
+    if (!syncRequest) return;
+    const doc = state.documents.find(d => d.id === syncRequest.docId);
+    if (!doc) return;
+    if (syncRequest.type === 'media') handleSyncMedia(doc);
+    dispatch({ type: 'CLEAR_SYNC_REQUEST' });
+  }, [syncRequest, dispatch, state.documents, handleSyncMedia]);
+
+  // Auto-restauració del vincle media: llegeix linkedMediaId del document (camp guardat al backend)
+  const autoLoadAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadAttemptedRef.current) return;
+    if (!useBackend) return;
+    const linkedId = (currentDoc as any).linkedMediaId as string | null | undefined;
+    if (!linkedId) return;
+    autoLoadAttemptedRef.current = true;
+
+    const mediaDoc = state.documents.find(d => d.id === linkedId);
+    if (!mediaDoc) return;
+
+    handleSyncMedia(mediaDoc);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.documents]);
 
   const handleSegmentChange = (updated: Segment) => {
     if (!isEditing) return;
@@ -442,8 +460,14 @@ useEffect(() => {
 
         {/* ── PANELL DRET: Vídeo (flex-grow) + Toolbar (fix) ───────────────── */}
         <div className="flex flex-col flex-grow min-h-0 overflow-hidden">
-          <div className="flex-grow min-h-0 bg-black overflow-hidden">
+          <div className="flex-grow min-h-0 bg-black overflow-hidden relative">
             <VideoPlaybackArea {...playerProps} />
+            {/* Overlay mentre es descarrega el fitxer de media (abans que src estigui disponible) */}
+            {isMediaFetching && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 pointer-events-none">
+                <video src="/assets/loading.webm" autoPlay loop muted playsInline className="w-20 h-20" />
+              </div>
+            )}
           </div>
           <div className="flex-shrink-0 border-t border-gray-700/50" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
             <VideoSubtitlesToolbar

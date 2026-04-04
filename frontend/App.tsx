@@ -366,7 +366,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
   useEffect(() => {
   if (!useBackend) return;
-  if (openMode !== 'editor-video-subs') return;
+  if (openMode !== 'editor-video-subs' && openMode !== 'editor-srt-standalone') return;
   if (!openDocId) return;
 
   const doc = state.documents.find((d) => d.id === openDocId);

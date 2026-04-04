@@ -1,4 +1,4 @@
-import { IsBoolean, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsObject, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 
 export class UpdateDocumentDto {
   @IsOptional()
@@ -25,4 +25,10 @@ export class UpdateDocumentDto {
   @IsOptional()
   @IsBoolean()
   isLocked?: boolean;
+
+  /** SRT editor: ID del document de media vinculat manualment per l'usuari. Null per desvincular. */
+  @ValidateIf((o) => o.linkedMediaId !== null)
+  @IsOptional()
+  @IsString()
+  linkedMediaId?: string | null;
 }

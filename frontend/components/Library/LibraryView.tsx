@@ -213,9 +213,9 @@ const goTrash = () => {
       const ext = originalName.toLowerCase().split('.').pop();
       let content = '', csvContent = '', sourceType = ext || 'unknown';
 
-      // Guard simètric: des de la pestanya Media no s'accepten documents clàssics.
-      // La separació de dominis s'aplica en les dues direccions.
-      if (page === 'media' && ['pdf', 'docx', 'srt'].includes(ext || '')) {
+      // Guard: des de la pestanya Media no s'accepten guions ni PDFs.
+      // Els subtítols (.srt) sí s'accepten des de qualsevol pestanya — s'importen a l'arrel de Files.
+      if (page === 'media' && ['pdf', 'docx'].includes(ext || '')) {
         setUploadBlockError('Des de la pestanya Media, només es pot afegir vídeo o àudio.');
         return;
       }
@@ -319,7 +319,10 @@ const goTrash = () => {
     },
   });
 }
-    } catch (error) { console.error(`Error important arxiu ${file.name}:`, error); }
+    } catch (error) {
+      console.error(`Error important arxiu ${file.name}:`, error);
+      setUploadBlockError(`Error important ${file.name}: ${(error as any)?.message || 'error desconegut'}`);
+    }
   };
 
   const handleContinueUpload = async () => {

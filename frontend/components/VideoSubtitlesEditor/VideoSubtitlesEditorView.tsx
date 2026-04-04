@@ -125,10 +125,13 @@ const VideoSubtitlesEditorViewInner: React.FC<VideoSubtitlesEditorViewProps> = (
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [mediaDocId, setMediaDocId] = useState<string | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [isMediaFetching, setIsMediaFetching] = useState(false);
+  const videoSrcRef = useRef<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 const [autosave, setAutosave] = useLocalStorage<boolean>(LOCAL_STORAGE_KEYS.AUTOSAVE_SRT, false);
 const autosaveTimer = useRef<any>(null);
 const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '');
+const autoLoadAttemptedRef = useRef(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [aiMode, setAiMode] = useState<'whisper' | 'translate' | 'revision'>('whisper');
@@ -386,28 +389,31 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
 
 const handleSyncMedia = useCallback((doc: Document) => {
   void (async () => {
-    let file = getMediaFile(doc.id);
+    setIsMediaFetching(true);
+    try {
+      let file = getMediaFile(doc.id);
+      if (!file) file = await ensureMediaFile(doc.id, doc.name);
 
-    if (!file) {
-      try {
-        file = await ensureMediaFile(doc.id, doc.name);
-      } catch (e) {
-        console.error('ensureMediaFile failed', e);
-        return;
+      if (file) {
+        if (videoSrcRef.current) URL.revokeObjectURL(videoSrcRef.current);
+        const newSrc = URL.createObjectURL(file);
+        videoSrcRef.current = newSrc;
+        setVideoFile(file);
+        setMediaDocId(doc.id);
+        setVideoSrc(newSrc);
+        setIsPlaying(false);
+        setCurrentTime(0);
+        setDuration(0);
+        // Persisteix el vincle SRT→media al backend
+        if (useBackend) void api.linkMediaToSrt(currentDoc.id, doc.id).catch(() => {});
       }
-    }
-
-    if (file) {
-      if (videoSrc) URL.revokeObjectURL(videoSrc);
-      setVideoFile(file);
-      setMediaDocId(doc.id);
-      setVideoSrc(URL.createObjectURL(file));
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
+    } catch (e) {
+      console.error('ensureMediaFile failed', e);
+    } finally {
+      setIsMediaFetching(false);
     }
   })();
-}, [getMediaFile, ensureMediaFile, videoSrc]);
+}, [getMediaFile, ensureMediaFile, useBackend, currentDoc.id]); // videoSrc eliminat: usem ref per revocar
 
   const handleSyncSubtitles = useCallback((doc: Document) => {
     const srtText = doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';
@@ -430,6 +436,19 @@ const handleSyncMedia = useCallback((doc: Document) => {
       }
       dispatch({ type: 'CLEAR_SYNC_REQUEST' });
   }, [syncRequest, dispatch, state.documents, handleSyncMedia, handleSyncSubtitles]);
+
+  // ── Auto-carrega el media vinculat manualment (linkedMediaId) ─────────────
+  useEffect(() => {
+    if (autoLoadAttemptedRef.current) return;
+    if (!useBackend) return;
+    const linkedId = (currentDoc as any).linkedMediaId as string | null | undefined;
+    if (!linkedId) return;
+    autoLoadAttemptedRef.current = true;
+    const mediaDoc = state.documents.find(d => d.id === linkedId);
+    if (!mediaDoc) return;
+    handleSyncMedia(mediaDoc);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.documents]);
 
   // ── Carrega el guió vinculat al projecte (si n'hi ha) ─────────────────────
   useEffect(() => {
@@ -1012,8 +1031,14 @@ const handleSave = useCallback(() => {
 
         {/* ── PANELL DRET: Vídeo (flex-grow) + Toolbar (fix) ───────────────── */}
         <div className="flex flex-col flex-grow min-h-0 overflow-hidden">
-          <div className="flex-grow min-h-0 bg-black overflow-hidden">
+          <div className="flex-grow min-h-0 bg-black overflow-hidden relative">
             <VideoPlaybackArea {...playerProps} />
+            {/* Overlay mentre es descarrega el fitxer de media (abans que src estigui disponible) */}
+            {isMediaFetching && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 pointer-events-none">
+                <video src="/assets/loading.webm" autoPlay loop muted playsInline className="w-20 h-20" />
+              </div>
+            )}
           </div>
           <div className="flex-shrink-0 border-t border-gray-700/50" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
             <VideoSubtitlesToolbar

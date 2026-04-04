@@ -71,6 +71,7 @@ export interface Document {
   originalName?: string;
   sourceType?: string;
   refTargetId?: string | null;
+  linkedMediaId?: string | null;
   characters: any[];
   takes: any[];
   layers: any[];

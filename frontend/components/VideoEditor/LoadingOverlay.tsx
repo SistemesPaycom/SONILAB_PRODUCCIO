@@ -15,7 +15,7 @@ import React from 'react';
  *   - Lottie JSON         → si és vectorial (requereix lottie-web)
  *   - NO usar .mov        → no és suportat nativament pels navegadors
  */
-const LOADING_SRC: string | null = null; // TODO: canviar a '/assets/loading.webm'
+const LOADING_SRC: string | null = '/assets/loading.webm'; // TODO: canviar a '/assets/loading.webm'
 
 const LoadingOverlay: React.FC = () => (
   <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 pointer-events-none">

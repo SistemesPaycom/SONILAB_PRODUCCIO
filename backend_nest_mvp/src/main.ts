@@ -6,9 +6,14 @@ import { AppModule } from './app.module';
 import * as helmet from 'helmet';
 import { requestIdMiddleware } from './common/middleware/request-id.middleware';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Augmentem el límit del body per suportar SRTs grans (~2000+ subtítols)
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 8000);

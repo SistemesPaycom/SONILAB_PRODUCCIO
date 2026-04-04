@@ -66,6 +66,10 @@ sourceLang: string | null;
   /** If set, this document is a reference/shortcut to the document with this ID. */
   @Prop({ type: String, default: null })
   refTargetId: string | null;
+
+  /** SRT editor: ID del document de media vinculat manualment per l'usuari. */
+  @Prop({ type: String, default: null })
+  linkedMediaId: string | null;
 }
 
 export const DocumentSchema = SchemaFactory.createForClass(Document);

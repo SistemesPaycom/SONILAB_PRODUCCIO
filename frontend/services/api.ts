@@ -131,6 +131,9 @@ async listProjects() {
   async updateSrt(id: string, srtText: string) {
     return request<any>(`/documents/${id}/srt`, { method: 'PATCH', body: { srtText } });
   },
+  async linkMediaToSrt(srtDocId: string, mediaDocId: string | null) {
+    return request<any>(`/documents/${srtDocId}`, { method: 'PATCH', body: { linkedMediaId: mediaDocId } });
+  },
 
   // ── Edit lock ──────────────────────────────────────────────────────────
   async acquireLock(docId: string, userName?: string) {
