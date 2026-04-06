@@ -6,6 +6,7 @@ import useLocalStorage from '../hooks/useLocalStorage';
 import { useAuth } from '../context/Auth/AuthContext';
 import { useTheme } from '../context/Theme/ThemeContext';
 import { CUSTOM_THEME_ID, PRESET_THEMES, TOKEN_GROUPS, buildCustomTheme } from '../context/Theme/themes';
+import { StylesTab } from './Settings/UserStyles/StylesTab';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -13,7 +14,7 @@ interface SettingsModalProps {
   onStylesChange: (styles: EditorStyles) => void;
 }
 
-type ActiveTab = 'general' | 'editor' | 'shortcuts' | 'reader' | 'theme';
+type ActiveTab = 'general' | 'estils' | 'shortcuts' | 'reader' | 'theme';
 type ShortcutApp = keyof AppShortcuts;
 
 const FONT_FACES = ['sans-serif', 'serif', 'monospace', 'Arial', 'Verdana', 'Times New Roman'];
@@ -436,7 +437,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, on
         <div className="flex" style={{ backgroundColor: 'var(--th-bg-primary)', borderBottom: '1px solid var(--th-border)' }}>
            <TabButton tabId="general" label="General" />
            <TabButton tabId="theme" label="Tema" />
-           <TabButton tabId="editor" label="Estils Editor" />
+           <TabButton tabId="estils" label="Estils" />
            <TabButton tabId="shortcuts" label="Dreceres" />
            <TabButton tabId="reader" label="Lector" />
         </div>
@@ -640,15 +641,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, on
                 )}
              </div>
            ) :
-           activeTab === 'editor' ? (
-             <div className="space-y-2">
-                <StyleControlGroup label="Takes" styleKey="take" styles={editorStyles} onChange={onStylesChange} />
-                <StyleControlGroup label="Noms" styleKey="speaker" styles={editorStyles} onChange={onStylesChange} />
-                <StyleControlGroup label="Codi de temps" styleKey="timecode" styles={editorStyles} onChange={onStylesChange} />
-                <StyleControlGroup label="Text" styleKey="dialogue" styles={editorStyles} onChange={onStylesChange} />
-                <StyleControlGroup label="Text (parèntesis)" styleKey="dialogueParentheses" styles={editorStyles} onChange={onStylesChange} />
-                <StyleControlGroup label="TC/Núm. (parèntesis)" styleKey="dialogueTimecodeParentheses" styles={editorStyles} onChange={onStylesChange} />
-             </div>
+           activeTab === 'estils' ? (
+             <StylesTab />
            ) : activeTab === 'general' ? (
              <div className="space-y-6">
                 <div className="p-6 rounded-2xl" style={{ backgroundColor: 'var(--th-bg-secondary)', border: '1px solid var(--th-border)' }}>
