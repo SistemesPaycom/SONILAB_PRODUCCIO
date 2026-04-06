@@ -115,8 +115,22 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
   const debounceRef = useRef<number | null>(null);
 
-  // Aplica al DOM en cada canvi.
+  /**
+   * Set d'userIds que ja han passat per `loadOrMigrate` en aquesta sessió.
+   * Evita re-executar la migració cada cop que l'objecte `me` canvia
+   * d'identitat (cosa que passa en qualsevol mutació de AuthContext i
+   * pisaria les edicions recents de l'usuari).
+   */
+  const migratedUserIds = useRef<Set<string>>(new Set());
+
+  // Aplica al DOM només quan el contingut serialitzat canvia.
+  // Defensa addicional: si React ens dona un payload nou per referencia pero
+  // amb el mateix contingut, no tornem a escriure les CSS vars.
+  const lastAppliedPayloadRef = useRef<string>('');
   useEffect(() => {
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastAppliedPayloadRef.current) return;
+    lastAppliedPayloadRef.current = serialized;
     applyUserStylesToDOM(payload);
   }, [payload]);
 
@@ -140,9 +154,15 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return () => window.removeEventListener('storage', onStorage);
   }, [me?.id]);
 
-  // Càrrega inicial / migració quan entra el perfil.
+  // Càrrega inicial / migració — només una vegada per userId i per sessió.
+  // Si `me` canvia d'identitat (qualsevol mutació a AuthContext) però el userId
+  // ja ha estat migrat, no fem res: l'estat actual del payload ja és la font
+  // de veritat fins que l'usuari faci logout o recarregui la pàgina.
   useEffect(() => {
-    if (!me) return;
+    if (!me?.id) return;
+    if (migratedUserIds.current.has(me.id)) return;
+    migratedUserIds.current.add(me.id);
+
     const remote: UserStylesPayload | null = (me as any)?.preferences?.userStyles ?? null;
     const scopedLocal = readScopedLocal(me.id);
     const legacy = readLegacyEditorStyles();
@@ -151,6 +171,12 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (result.needsPush && USE_BACKEND) {
       api.updateMe({ preferences: { userStyles: result.payload } }).catch(() => {});
     }
+  }, [me?.id]);
+
+  // Quan l'usuari fa logout, netegem el set de migracions perquè un login
+  // posterior amb el mateix userId torni a llegir el backend.
+  useEffect(() => {
+    if (me === null) migratedUserIds.current.clear();
   }, [me]);
 
   // Debounced push al backend.
