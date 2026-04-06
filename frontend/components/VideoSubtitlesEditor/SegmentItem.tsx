@@ -473,7 +473,16 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             <div style={gridCellStyle} className="flex items-center px-2 gap-1">
               {i === 0 && (
                 <>
-                  <span className="font-black text-[10px] truncate" style={{ color: 'var(--th-accent-text)' }}>
+                  <span
+                    className="truncate"
+                    style={{
+                      fontFamily: 'var(--us-sub-takelabel-family)',
+                      fontSize:   'var(--us-sub-takelabel-size)',
+                      color:      'var(--us-sub-takelabel-color)',
+                      fontWeight: 'var(--us-sub-takelabel-weight)' as any,
+                      fontStyle:  'var(--us-sub-takelabel-style)',
+                    }}
+                  >
                     {segment.primaryTakeNum ? `TK${segment.primaryTakeNum}` : ''}
                   </span>
                   {segment.hasDiff && (
@@ -491,9 +500,26 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             {/* Columna 2: #Índex i CPS (a sota) */}
             <div style={gridCellStyle} className="flex items-center px-2">
               {i === 0 ? (
-                <span className="font-black text-[11px]" style={{ color: 'var(--th-editor-meta)' }}>#{segment.id}</span>
+                <span
+                  style={{
+                    fontFamily: 'var(--us-sub-idcps-family)',
+                    fontSize:   'var(--us-sub-idcps-size)',
+                    color:      'var(--us-sub-idcps-color)',
+                    fontWeight: 'var(--us-sub-idcps-weight)' as any,
+                    fontStyle:  'var(--us-sub-idcps-style)',
+                  }}
+                >#{segment.id}</span>
               ) : i === 1 ? (
-                <span className={`font-black text-[11px] whitespace-nowrap ${cpsValue > 20 ? 'text-red-500 animate-pulse' : ''}`} style={cpsValue <= 20 ? { color: 'var(--th-editor-text-muted)' } : undefined}>
+                <span
+                  className={`whitespace-nowrap ${cpsValue > 20 ? 'animate-pulse' : ''}`}
+                  style={{
+                    fontFamily: 'var(--us-sub-idcps-family)',
+                    fontSize:   'var(--us-sub-idcps-size)',
+                    color:      cpsValue > 20 ? '#ef4444' : 'var(--us-sub-idcps-color)',
+                    fontWeight: 'var(--us-sub-idcps-weight)' as any,
+                    fontStyle:  'var(--us-sub-idcps-style)',
+                  }}
+                >
                   {cpsValue.toFixed(1)} <span className="text-[8px] opacity-60 font-normal">CPS</span>
                 </span>
               ) : null}
@@ -526,11 +552,17 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
 
             {/* Columna 4: Caràcters */}
             <div
-              style={gridCellStyle}
-              className={`flex items-center px-2 justify-end font-black text-[11px] ${
-                charsPerLine[i] > maxCharsPerLine ? 'text-red-500 bg-red-500/10' : ''
+              className={`flex items-center px-2 justify-end ${
+                charsPerLine[i] > maxCharsPerLine ? 'bg-red-500/10' : ''
               }`}
-              style={charsPerLine[i] <= maxCharsPerLine ? { color: 'var(--th-editor-text-muted)' } : undefined}
+              style={{
+                ...gridCellStyle,
+                fontFamily: 'var(--us-sub-charcounter-family)',
+                fontSize:   'var(--us-sub-charcounter-size)',
+                color:      charsPerLine[i] > maxCharsPerLine ? '#ef4444' : 'var(--us-sub-charcounter-color)',
+                fontWeight: 'var(--us-sub-charcounter-weight)' as any,
+                fontStyle:  'var(--us-sub-charcounter-style)',
+              }}
             >
               {charsPerLine[i] > 0 && `${charsPerLine[i]}c`}
             </div>
@@ -554,12 +586,15 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
                 }}
                 data-segment-id={segment.id}
-                className={`outline-none whitespace-nowrap text-[14.5px] transition-colors ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:ring-1 rounded-sm' : ''}`}
+                className={`outline-none whitespace-nowrap transition-colors ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:ring-1 rounded-sm' : ''}`}
                 style={{
-                  fontFamily: "'Courier Prime', monospace",
+                  fontFamily: 'var(--us-sub-content-family)',
+                  fontSize:   'var(--us-sub-content-size)',
+                  fontWeight: 'var(--us-sub-content-weight)' as any,
+                  fontStyle:  'var(--us-sub-content-style)',
                   lineHeight: ROW_HEIGHT,
                   minHeight: ROW_HEIGHT,
-                  color: isActive ? 'var(--th-editor-text-active)' : 'var(--th-editor-text)',
+                  color: isActive ? 'var(--th-editor-text-active)' : 'var(--us-sub-content-color)',
                   caretColor: 'var(--th-editor-caret)',
                   '--tw-ring-color': 'var(--th-focus-ring)',
                 } as any}
@@ -619,7 +654,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         >
           {onInsertBefore && (
             <button
-              className="px-1.5 py-0.5 rounded text-[9px] hover:bg-white/5 transition-colors" style={{ color: 'var(--th-editor-meta)' }}
+              className="px-1.5 py-0.5 rounded hover:bg-white/5 transition-colors"
+              style={{
+                fontFamily: 'var(--us-sub-actionbuttons-family)',
+                fontSize:   'var(--us-sub-actionbuttons-size)',
+                color:      'var(--us-sub-actionbuttons-color)',
+                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                fontStyle:  'var(--us-sub-actionbuttons-style)',
+              }}
               onClick={() => onInsertBefore(segment.id)}
               title="Insertar subtítol abans (Alt+↑)"
             >
@@ -628,7 +670,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           )}
           {onInsertAfter && (
             <button
-              className="px-1.5 py-0.5 rounded text-[9px] hover:bg-white/5 transition-colors" style={{ color: 'var(--th-editor-meta)' }}
+              className="px-1.5 py-0.5 rounded hover:bg-white/5 transition-colors"
+              style={{
+                fontFamily: 'var(--us-sub-actionbuttons-family)',
+                fontSize:   'var(--us-sub-actionbuttons-size)',
+                color:      'var(--us-sub-actionbuttons-color)',
+                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                fontStyle:  'var(--us-sub-actionbuttons-style)',
+              }}
               onClick={() => onInsertAfter(segment.id)}
               title="Insertar subtítol després (Alt+↓)"
             >
@@ -638,7 +687,13 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           {(onInsertBefore || onInsertAfter) && <div className="w-px h-3 mx-0.5 flex-shrink-0" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />}
           {onSplit && (
             <button
-              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-amber-300 hover:bg-amber-600/10 transition-colors font-mono"
+              className="px-1.5 py-0.5 rounded font-mono text-gray-500 hover:text-amber-300 hover:bg-amber-600/10 transition-colors"
+              style={{
+                fontFamily: 'var(--us-sub-actionbuttons-family)',
+                fontSize:   'var(--us-sub-actionbuttons-size)',
+                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                fontStyle:  'var(--us-sub-actionbuttons-style)',
+              }}
               onClick={() => onSplit(segment.id)}
               title="Dividir en dos (Ctrl+K)"
             >
@@ -647,7 +702,13 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           )}
           {onModifyMerge && (
             <button
-              className="px-1.5 py-0.5 rounded text-[9px] text-gray-500 hover:text-emerald-300 hover:bg-emerald-600/10 transition-colors font-mono"
+              className="px-1.5 py-0.5 rounded font-mono text-gray-500 hover:text-emerald-300 hover:bg-emerald-600/10 transition-colors"
+              style={{
+                fontFamily: 'var(--us-sub-actionbuttons-family)',
+                fontSize:   'var(--us-sub-actionbuttons-size)',
+                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                fontStyle:  'var(--us-sub-actionbuttons-style)',
+              }}
               onClick={() => onModifyMerge(segment.id)}
               title="Fusionar amb el següent"
             >
