@@ -2,6 +2,11 @@ import { AppShortcuts, Shortcut } from './appTypes';
 
 export const LOCAL_STORAGE_KEYS = {
   SHORTCUTS: 'snlbpro_shortcuts',
+  /**
+   * @deprecated Substituït per `snlbpro_user_styles_<userId>` (UserStylesContext).
+   * Es manté perquè la migració legacy pugui llegir-lo en el primer arrencada amb
+   * la versió nova. No escriure mai més en aquesta clau.
+   */
   EDITOR_STYLES: 'snlbpro_editor_styles',
   LIBRARY_WIDTH: 'snlbpro_library_width',
   TAKE_MARGIN: 'snlbpro_take_margin',

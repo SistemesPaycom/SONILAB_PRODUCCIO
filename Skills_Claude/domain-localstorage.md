@@ -12,7 +12,7 @@ El prefijo anterior era `slsf_`. Las claves antiguas en browsers de desarrollo s
 // frontend/constants.ts
 export const LOCAL_STORAGE_KEYS = {
   SHORTCUTS:            'snlbpro_shortcuts',
-  EDITOR_STYLES:        'snlbpro_editor_styles',
+  EDITOR_STYLES:        'snlbpro_editor_styles',  // DEPRECATED — solo lectura para migración legacy
   LIBRARY_WIDTH:        'snlbpro_library_width',
   TAKE_MARGIN:          'snlbpro_take_margin',
   TAKE_START_MARGIN:    'snlbpro_take_start_margin',
@@ -29,7 +29,7 @@ export const LOCAL_STORAGE_KEYS = {
 };
 ```
 
-Además, `LibraryDataContext.tsx` y `versionStore.ts` tienen sus propias claves:
+Además, `LibraryDataContext.tsx`, `versionStore.ts` y `UserStylesContext.tsx` tienen sus propias claves:
 
 ```ts
 // frontend/context/Library/LibraryDataContext.tsx
@@ -37,7 +37,14 @@ const LOCAL_STORAGE_KEY = 'snlbpro_library_v3';
 
 // frontend/utils/history/versionStore.ts
 const STORAGE_PREFIX = 'snlbpro_versions_';  // prefijo + docId
+
+// frontend/context/UserStyles/userStylesMigration.ts
+const USER_STYLES_LOCAL_STORAGE_PREFIX = 'snlbpro_user_styles_';  // prefijo + userId (scoped per user)
 ```
+
+## Estilos del usuario (snlbpro_user_styles_<userId>)
+
+Cada usuario tiene su propio JSON de presets de estilos tipográficos en una clave scoped por userId. Lo gestiona `UserStylesContext`. La clave antigua `snlbpro_editor_styles` está marcada como `@deprecated` en `constants.ts` — solo se lee como fuente para la migración inicial cuando un usuario nuevo arranca con la versión nueva. Ver `domain-user-styles.md`.
 
 ## Qué hacer si se añade o renombra una clave
 

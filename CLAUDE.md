@@ -211,6 +211,7 @@ Cada dominio tiene (o tendrá) un archivo `.md` en `Skills_Claude/` que explica 
 | Se toca sincronización de tiempo entre media, subtítulos o waveform | Timeline / Waveform | `Skills_Claude/domain-timeline.md` |
 | Se añade una ruta nueva en frontend o un endpoint nuevo en backend | Navegación y routing | `Skills_Claude/domain-routing.md` |
 | Se modifica `exportToPdf` del editor de guion, el flujo de impresión a PDF o los anchors `[data-page-break-anchor]` | Export del guion a PDF | `Skills_Claude/domain-script-pdf-export.md` |
+| Se modifica el sistema de presets de estilos del usuario, las CSS vars `--us-*` o cualquier componente de `frontend/components/Settings/UserStyles/` | User styles | `Skills_Claude/domain-user-styles.md` |
 
 ### Cómo crece esta tabla
 
