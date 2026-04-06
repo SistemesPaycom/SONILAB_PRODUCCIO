@@ -9,21 +9,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useLibrary } from '../context/Library/SonilabLibraryContext';
 import { api } from '../services/api';
 import { ColumnView } from './EditorDeGuions/ColumnView';
-import { LOCAL_STORAGE_KEYS } from '../constants';
-import useLocalStorage from '../hooks/useLocalStorage';
+import { UserStylesProvider } from '../context/UserStyles/UserStylesContext';
 import { buildTakeRangesFromScript, TakeRange } from '../utils/EditorDeGuions/takeRanges';
 import { importStructuredScriptFromFile } from '../utils/Import/scriptImportPipeline';
-import type { EditorStyles } from '../appTypes';
-
-// ── Estils per defecte (mateixos que App.tsx) ────────────────────────────────
-const DEFAULT_STYLES: EditorStyles = {
-  take: { fontFamily: 'Courier Prime, monospace', fontSize: 16, color: '#000000', bold: true, italic: false },
-  speaker: { fontFamily: 'Courier Prime, monospace', fontSize: 14, color: '#000000', bold: true, italic: false },
-  timecode: { fontFamily: 'Courier Prime, monospace', fontSize: 13, color: '#666666', bold: false, italic: false },
-  dialogue: { fontFamily: 'Courier Prime, monospace', fontSize: 14, color: '#000000', bold: false, italic: false },
-  dialogueParentheses: { fontFamily: 'Courier Prime, monospace', fontSize: 14, color: '#555555', bold: false, italic: true },
-  dialogueTimecodeParentheses: { fontFamily: 'Courier Prime, monospace', fontSize: 13, color: '#0055aa', bold: true, italic: false },
-};
 
 function channelName(docId: string) {
   return `sonilab-script-sync:${docId}`;
@@ -55,8 +43,6 @@ const ScriptExternalView: React.FC<ScriptExternalViewProps> = ({ docId }) => {
   const [uploadErr, setUploadErr] = useState<string | null>(null);
 
   const currentDoc = state.documents.find((d) => d.id === docId);
-
-  const [editorStyles] = useLocalStorage<EditorStyles>(LOCAL_STORAGE_KEYS.EDITOR_STYLES, DEFAULT_STYLES);
 
   // ── Refs per sincronització ────────────────────────────────────────────────
   const scrollRef = useRef<HTMLElement>(null);
@@ -280,6 +266,7 @@ const ScriptExternalView: React.FC<ScriptExternalViewProps> = ({ docId }) => {
   const canLink = Boolean(projectId || docId);
 
   return (
+    <UserStylesProvider>
     <div className="h-screen w-screen text-gray-200 flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--th-bg-primary)' }}>
       {/* Header */}
       <header className="flex-shrink-0 border-b border-gray-700/50 px-4 py-3 flex items-center gap-3" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
@@ -401,7 +388,6 @@ const ScriptExternalView: React.FC<ScriptExternalViewProps> = ({ docId }) => {
               setContent={() => {}}
               isEditable={false}
               col1Width={200}
-              editorStyles={editorStyles}
               onTakeLayout={handleTakeLayout}
               onTakeClick={handleTakeClick}
             />
@@ -409,6 +395,7 @@ const ScriptExternalView: React.FC<ScriptExternalViewProps> = ({ docId }) => {
         )}
       </main>
     </div>
+    </UserStylesProvider>
   );
 };
 
