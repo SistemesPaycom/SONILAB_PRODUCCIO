@@ -56,7 +56,7 @@ export interface ScopeState<S extends StyleScope> {
 }
 
 export interface UserStylesPayload {
-  version: 1;
+  version: 2;
   scriptEditor:    ScopeState<'scriptEditor'>;
   subtitleEditor:  ScopeState<'subtitleEditor'>;
   home:            ScopeState<'home'>;

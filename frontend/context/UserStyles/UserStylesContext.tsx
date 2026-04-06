@@ -147,7 +147,7 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (e.key !== key || !e.newValue) return;
       try {
         const parsed: UserStylesPayload = JSON.parse(e.newValue);
-        if (parsed?.version === 1) setPayload(parsed);
+        if ((parsed as any)?.version === 2) setPayload(parsed);
       } catch { /* noop */ }
     };
     window.addEventListener('storage', onStorage);
