@@ -38,15 +38,38 @@ const TAKE_MARGIN_BOTTOM_PX = 6;
 const TAKE_HEADER_MARGIN_BOTTOM_PX = 12;
 
 /* =============== HELPERS =============== */
+type ScriptElementKey =
+  | 'take'
+  | 'speaker'
+  | 'timecode'
+  | 'dialogue'
+  | 'dialogueparen'
+  | 'dialoguetcparen';
+
+/** Mapea una clave de EditorStyles a la clave usada en las CSS vars --us-script-*. */
+const scriptKeyOf = (k: keyof EditorStyles): ScriptElementKey => {
+  switch (k) {
+    case 'dialogueParentheses':         return 'dialogueparen';
+    case 'dialogueTimecodeParentheses': return 'dialoguetcparen';
+    default:                            return k;
+  }
+};
+
+/**
+ * `style` és ignorat: ara tot ve de CSS variables `--us-script-*`.
+ * Es manté el primer paràmetre per backward-compat amb els call sites
+ * existents; s'eliminarà a Task 25 quan es retiri la prop editorStyles.
+ */
 const getInlineStyle = (
-  style: EditorStyle,
-  highlightStyle?: React.CSSProperties
+  _style: EditorStyle,
+  highlightStyle?: React.CSSProperties,
+  element: ScriptElementKey = 'dialogue',
 ): React.CSSProperties => ({
-  fontFamily: style.fontFamily,
-  fontSize: `${style.fontSize}px`,
-  color: style.color,
-  fontWeight: style.bold ? 'bold' : 'normal',
-  fontStyle: style.italic ? 'italic' : 'normal',
+  fontFamily: `var(--us-script-${element}-family)`,
+  fontSize:   `var(--us-script-${element}-size)`,
+  color:      `var(--us-script-${element}-color)`,
+  fontWeight: `var(--us-script-${element}-weight)` as any,
+  fontStyle:  `var(--us-script-${element}-style)`,
   lineHeight: '1.4',
   backgroundColor: highlightStyle?.backgroundColor,
   borderRadius: highlightStyle ? '2px' : undefined,
@@ -78,7 +101,11 @@ const renderDialogueText = (
           return (
             <span
               key={index}
-              style={getInlineStyle(styleToApply, highlightStyle)}
+              style={getInlineStyle(
+                styleToApply,
+                highlightStyle,
+                styleToApply === styles.dialogueTimecodeParentheses ? 'dialoguetcparen' : 'dialogueparen',
+              )}
             >
               {part}
             </span>
@@ -88,7 +115,7 @@ const renderDialogueText = (
         return (
           <span
             key={index}
-            style={getInlineStyle(styles.dialogue, highlightStyle)}
+            style={getInlineStyle(styles.dialogue, highlightStyle, 'dialogue')}
           >
             {part}
           </span>
@@ -442,7 +469,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
           return (
             <span
               key={start}
-              style={getInlineStyle(editorStyles[styleKey], highlightStyle)}
+              style={getInlineStyle(editorStyles[styleKey], highlightStyle, scriptKeyOf(styleKey))}
             >
               {segmentText}
             </span>
@@ -528,7 +555,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
             >
               <h2
                 className={`uppercase tracking-wide ${editableClasses}`}
-                style={getInlineStyle(editorStyles.take)}
+                style={getInlineStyle(editorStyles.take, undefined, 'take')}
                 contentEditable={isEditable}
                 suppressContentEditableWarning={true}
                 onBlur={(e) =>
@@ -550,7 +577,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
               {take.timecode && (
                 <span
                   className={`${editableClasses}`}
-                  style={getInlineStyle(editorStyles.timecode)}
+                  style={getInlineStyle(editorStyles.timecode, undefined, 'timecode')}
                   contentEditable={isEditable}
                   suppressContentEditableWarning={true}
                   onBlur={(e) =>
@@ -647,7 +674,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
                   <React.Fragment key={idx}>
                     <div
                       className={`pr-4 whitespace-pre-line text-right self-baseline ${editableClasses}`}
-                      style={getInlineStyle(editorStyles.speaker)}
+                      style={getInlineStyle(editorStyles.speaker, undefined, 'speaker')}
                       contentEditable={isEditable}
                       suppressContentEditableWarning={true}
                       onBlur={(e) =>
@@ -701,7 +728,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
               <div className="flex justify-end mt-2">
                 <span
                   className={`${editableClasses}`}
-                  style={getInlineStyle(editorStyles.timecode)}
+                  style={getInlineStyle(editorStyles.timecode, undefined, 'timecode')}
                   contentEditable={isEditable}
                   suppressContentEditableWarning={true}
                   onBlur={(e) =>
