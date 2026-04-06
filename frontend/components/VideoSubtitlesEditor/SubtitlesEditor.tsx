@@ -5,6 +5,7 @@ import SegmentItem from './SegmentItem';
 import { EyeIcon, EyeOffIcon, EarIcon, Languages } from '../icons';
 import { LinkIcon, LinkOffIcon } from '../VideoEditor/PlayerIcons';
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../context/SubtitleEditorContext';
+import { useUserStyles } from '../../context/UserStyles/UserStylesContext';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface PendingCorrectionEntry {
@@ -150,12 +151,18 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   // ── Virtual scroll ──
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const { subtitleRowEstimate } = useUserStyles();
+
   const virtualizer = useVirtualizer({
     count: segments.length,
     getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 90, // ~90px per segment row
+    estimateSize: () => subtitleRowEstimate,
     overscan: 5,
   });
+
+  useEffect(() => {
+    virtualizer.measure();
+  }, [subtitleRowEstimate]);
 
   const virtualContainerRef = useRef<HTMLDivElement>(null);
 
