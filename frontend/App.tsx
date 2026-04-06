@@ -29,6 +29,7 @@ import { AuthModal } from './components/Auth/AuthModal';
 
 import { AuthProvider, useAuth } from './context/Auth/AuthContext';
 import { ThemeProvider } from './context/Theme/ThemeContext';
+import { UserStylesProvider } from './context/UserStyles/UserStylesContext';
 import { api } from './services/api';
 import TasksIAPanel, { JobRecord } from './components/TasksIA/TasksIAPanel';
 
@@ -984,7 +985,9 @@ const App: React.FC = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AuthedGate />
+        <UserStylesProvider>
+          <AuthedGate />
+        </UserStylesProvider>
       </AuthProvider>
     </ThemeProvider>
   );
