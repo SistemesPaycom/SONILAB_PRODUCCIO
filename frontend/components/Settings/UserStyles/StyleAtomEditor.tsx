@@ -12,13 +12,20 @@ interface Props {
   minSize?: number;
   /** Tamaño máximo permitido (px). Por defecto 32. */
   maxSize?: number;
+  /**
+   * Oculta el selector de color. Útil per elements on el color està lligat al
+   * tema admin o a un estat (actiu/inactiu) i no pot ser personalitzat pel
+   * preset d'usuari — exposar el color picker confondria l'usuari perquè els
+   * canvis no es reflectirien a la UI real.
+   */
+  hideColor?: boolean;
 }
 
-export const StyleAtomEditor: React.FC<Props> = ({ label, atom, onChange, minSize = 8, maxSize = 32 }) => {
+export const StyleAtomEditor: React.FC<Props> = ({ label, atom, onChange, minSize = 8, maxSize = 32, hideColor = false }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-[150px_1fr] items-center gap-4 py-3 border-b last:border-b-0" style={{ borderColor: 'var(--th-border)' }}>
       <h4 className="font-semibold md:text-right" style={{ color: 'var(--th-text-primary)' }}>{label}</h4>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+      <div className={`grid grid-cols-2 ${hideColor ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-3 items-end`}>
         <div>
           <label className="block text-xs mb-1" style={{ color: 'var(--th-text-muted)' }}>Tipografia</label>
           <select
@@ -49,15 +56,17 @@ export const StyleAtomEditor: React.FC<Props> = ({ label, atom, onChange, minSiz
             style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)', color: 'var(--th-text-primary)' }}
           />
         </div>
-        <div>
-          <label className="block text-xs mb-1" style={{ color: 'var(--th-text-muted)' }}>Color</label>
-          <input
-            type="color"
-            value={atom.color}
-            onChange={e => onChange({ color: e.target.value })}
-            className="w-full h-8 p-0 bg-transparent border-none rounded-md cursor-pointer"
-          />
-        </div>
+        {!hideColor && (
+          <div>
+            <label className="block text-xs mb-1" style={{ color: 'var(--th-text-muted)' }}>Color</label>
+            <input
+              type="color"
+              value={atom.color}
+              onChange={e => onChange({ color: e.target.value })}
+              className="w-full h-8 p-0 bg-transparent border-none rounded-md cursor-pointer"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-3 pb-1">
           <label className="flex items-center gap-1.5 text-sm cursor-pointer" style={{ color: 'var(--th-text-secondary)' }}>
             <input type="checkbox" checked={atom.bold}   onChange={e => onChange({ bold:   e.target.checked })} className="w-4 h-4 rounded" />
