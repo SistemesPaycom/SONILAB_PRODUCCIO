@@ -742,9 +742,15 @@ const selectedItem =
         <div className={`flex items-center ${isCollapsed ? 'flex-col gap-3' : 'gap-2'}`}>
   <button
     onClick={goLibrary}
-    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
+    className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'library') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Files"
     aria-label="Files"
   >
@@ -753,9 +759,15 @@ const selectedItem =
 
   <button
     onClick={goProjects}
-    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
+    className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'projects') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Projectes"
     aria-label="Projectes"
   >
@@ -764,9 +776,15 @@ const selectedItem =
 
   <button
     onClick={goMedia}
-    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
+    className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'media') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Media"
     aria-label="Media"
   >
@@ -775,9 +793,15 @@ const selectedItem =
 
   <button
     onClick={goTrash}
-    className={`px-2.5 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center
+    className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${view === 'trash' ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Paperera"
     aria-label="Paperera"
   >
@@ -882,7 +906,17 @@ const selectedItem =
         </div>
         
         {!isCollapsed && (
-            <div className="flex items-center gap-2 px-4 py-2 text-sm mb-2 mx-2 h-10" style={{ color: 'var(--th-text-secondary)', borderBottom: '1px solid var(--th-border)' }}>
+            <div
+              className="flex items-center gap-2 px-4 py-2 mb-2 mx-2 min-h-10"
+              style={{
+                color: 'var(--th-text-secondary)',
+                borderBottom: '1px solid var(--th-border)',
+                fontFamily: 'var(--us-home-breadcrumb-family)',
+                fontSize:   'var(--us-home-breadcrumb-size)',
+                fontWeight: 'var(--us-home-breadcrumb-weight)' as any,
+                fontStyle:  'var(--us-home-breadcrumb-style)',
+              }}
+            >
                 <button onClick={handleGoBack} disabled={view === 'library' && !currentFolder} className="p-1 rounded-full hover:bg-white/10 disabled:opacity-0 transition-opacity" title="Enrere"><Icons.ArrowLeft className="w-4 h-4" /></button>
                 <div className="flex items-center gap-1 truncate">
                     {breadcrumbs.map((crumb, index) => (
@@ -908,10 +942,18 @@ const selectedItem =
         {!isCollapsed && (
           <div className="flex-1 overflow-auto custom-scrollbar">
             <div className="min-w-max inline-block align-middle pb-8 w-full">
-              <header 
-                className="grid gap-0 items-center text-[10px] font-black uppercase tracking-widest sticky top-0 z-30 py-2.5 mx-2"
-                style={{ color: 'var(--th-text-muted)', backgroundColor: 'var(--th-bg-secondary)', borderBottom: '1px solid var(--th-border)' }}
-                style={{ gridTemplateColumns: gridColumns }}
+              <header
+                className="grid gap-0 items-center uppercase tracking-widest sticky top-0 z-30 py-2.5 mx-2"
+                style={{
+                  color: 'var(--th-text-muted)',
+                  backgroundColor: 'var(--th-bg-secondary)',
+                  borderBottom: '1px solid var(--th-border)',
+                  gridTemplateColumns: gridColumns,
+                  fontFamily: 'var(--us-home-tableheader-family)',
+                  fontSize:   'var(--us-home-tableheader-size)',
+                  fontWeight: 'var(--us-home-tableheader-weight)' as any,
+                  fontStyle:  'var(--us-home-tableheader-style)',
+                }}
               >
                 <div onClick={handleSelectAll} className="cursor-pointer h-full flex items-center justify-center border-r border-[var(--th-border)]" aria-label="Seleccionar tot">
                   <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isAllSelected ? '' : 'border-gray-600 hover:border-gray-500'}`} style={isAllSelected ? { backgroundColor: 'var(--th-accent)', borderColor: 'var(--th-accent)' } : undefined}>
