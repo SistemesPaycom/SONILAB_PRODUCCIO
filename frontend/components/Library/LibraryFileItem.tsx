@@ -331,16 +331,43 @@ export const FileItem: React.FC<FileItemProps> = ({
             >{isOrphanLnk ? '⚠' : '↗'}</span>
           )}
         </span>
-        <span className={`truncate text-gray-100 ${isLocked ? 'italic text-gray-400' : ''} ${isRef ? 'opacity-80' : ''} ${isOrphanLnk ? 'line-through text-gray-500' : ''}`}>{item.name}</span>
+        <span
+          className={`truncate ${isLocked ? 'italic' : ''} ${isRef ? 'opacity-80' : ''} ${isOrphanLnk ? 'line-through' : ''}`}
+          style={{
+            fontFamily: 'var(--us-home-filename-family)',
+            fontSize:   'var(--us-home-filename-size)',
+            color:      isOrphanLnk ? '#6b7280' : (isLocked ? '#9ca3af' : 'var(--us-home-filename-color)'),
+            fontWeight: 'var(--us-home-filename-weight)' as any,
+            fontStyle:  'var(--us-home-filename-style)',
+          }}
+        >{item.name}</span>
         {isLocked && <Icons.LockIcon size={12} className="animate-pulse flex-shrink-0" style={{ color: 'var(--th-accent-text)' }} />}
       </div>
 
-      <div className="flex items-center px-4 text-[10px] font-black uppercase text-gray-500 select-none truncate">
+      <div
+        className="flex items-center px-4 uppercase select-none truncate"
+        style={{
+          fontFamily: 'var(--us-home-format-family)',
+          fontSize:   'var(--us-home-format-size)',
+          color:      'var(--us-home-format-color)',
+          fontWeight: 'var(--us-home-format-weight)' as any,
+          fontStyle:  'var(--us-home-format-style)',
+        }}
+      >
         {formatLabel}
       </div>
 
-      <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono text-gray-400 select-none whitespace-nowrap px-4">
-        <span className="text-gray-200">{formattedDate}</span>
+      <div
+        className="hidden sm:flex items-center gap-2 select-none whitespace-nowrap px-4"
+        style={{
+          fontFamily: 'var(--us-home-datetime-family)',
+          fontSize:   'var(--us-home-datetime-size)',
+          color:      'var(--us-home-datetime-color)',
+          fontWeight: 'var(--us-home-datetime-weight)' as any,
+          fontStyle:  'var(--us-home-datetime-style)',
+        }}
+      >
+        <span>{formattedDate}</span>
         <span className="opacity-40">{formattedTime}</span>
       </div>
       
