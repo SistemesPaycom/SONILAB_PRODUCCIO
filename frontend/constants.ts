@@ -1,4 +1,4 @@
-import { AppShortcuts, Shortcut } from './types';
+import { AppShortcuts, Shortcut } from './appTypes';
 
 export const LOCAL_STORAGE_KEYS = {
   SHORTCUTS: 'snlbpro_shortcuts',
@@ -79,5 +79,8 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
 
     { id: 'sub_next_line', action: 'NAVIGATE_NEXT_LINE', label: 'Següent línia / subtítol', combo: 'Ctrl+Enter' },
     { id: 'sub_prev_line', action: 'NAVIGATE_PREV_LINE', label: 'Anterior línia / subtítol', combo: 'Ctrl+Shift+Enter' },
+
+    { id: 'sub_set_tc_in', action: 'SET_TC_IN', label: 'Marcar TC IN al playhead', combo: 'I' },
+    { id: 'sub_set_tc_out', action: 'SET_TC_OUT', label: 'Marcar TC OUT al playhead', combo: 'O' },
   ]
 };

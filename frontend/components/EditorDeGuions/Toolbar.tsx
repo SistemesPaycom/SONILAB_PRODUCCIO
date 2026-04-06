@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Document, TranslationTask } from '../../types';
+import { Layout, Document, TranslationTask } from '../../appTypes';
 import { A4_WIDTH_PX, SUPPORTED_LANGUAGES } from '../../constants';
 import * as Icons from '../icons';
-import { exportToPdf, exportToTxt, exportToXlsx, exportTakesCsv } from '../../utils/EditorDeGuions/exportUtils';
-import { useLibrary } from '../../context/Library/LibraryContext';
+import { exportToPdf, exportToTxt, exportToXlsx, exportNuendoCsv1, exportTakesCsv2 } from '../../utils/EditorDeGuions/exportUtils';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 
 type EditorView = 'script' | 'csv';
 
@@ -197,24 +197,41 @@ const Toolbar: React.FC<ToolbarProps> = (props) => {
   const [isExporting, setIsExporting] = useState(false);
   const [showWidthSlider, setShowWidthSlider] = useState(false);
   const [showTranslateModal, setShowTranslateModal] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setShowExportMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const isLocked = currentDoc?.isLocked;
   const sliderValue = parseInt(pageWidth, 10) || A4_WIDTH_PX;
 
   const handleFormat = (command: string) => !isLocked && document.execCommand(command, false);
 
-  const handleExport = async () => {
-    if (!currentDoc) return;
+  const runExport = async (fn: () => void | Promise<void>) => {
     setIsExporting(true);
+    setShowExportMenu(false);
     try {
-      if (editorView === 'csv') exportToXlsx(currentDoc, activeLang);
-      else if (layout === 'mono') exportToTxt(currentDoc, activeLang);
-      else await exportToPdf(currentDoc);
-    } catch (error) {
-      alert("Error en l'exportació.");
+      await fn();
+    } catch (err) {
+      console.error('[Export] Error:', err);
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      alert(`Error en l'exportació.\n\n${msg}`);
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleExport = () => {
+    if (!currentDoc) return;
+    if (editorView === 'csv') { setShowExportMenu(v => !v); return; }
+    if (layout === 'mono') runExport(() => exportToTxt(currentDoc, activeLang));
+    else runExport(() => exportToPdf(currentDoc));
   };
 
   const versionOptions = [];
@@ -284,9 +301,24 @@ const Toolbar: React.FC<ToolbarProps> = (props) => {
       </div>
 
       <div className="flex items-center gap-4">
-        <button onClick={handleExport} disabled={isExporting || !currentDoc} className="p-1 text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-40" title="Exportar">
-          {isExporting ? <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin"></div> : <Icons.Download className="w-4 h-4" />}
-        </button>
+        <div className="relative" ref={exportMenuRef}>
+          <button onClick={handleExport} disabled={isExporting || !currentDoc} className="p-1 text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-40" title="Exportar">
+            {isExporting ? <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin"></div> : <Icons.Download className="w-4 h-4" />}
+          </button>
+          {showExportMenu && editorView === 'csv' && currentDoc && (
+            <div className="absolute right-0 top-full mt-2 w-52 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+              <button onClick={() => runExport(() => exportToXlsx(currentDoc, activeLang))} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors flex items-center gap-2">
+                <span className="font-mono text-xs text-gray-500 w-10">.xlsx</span> Excel
+              </button>
+              <button onClick={() => runExport(() => exportNuendoCsv1(currentDoc, activeLang))} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors flex items-center gap-2">
+                <span className="font-mono text-xs text-gray-500 w-10">CSV1</span> Nuendo marcadors
+              </button>
+              <button onClick={() => runExport(() => exportTakesCsv2(currentDoc, activeLang))} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors flex items-center gap-2">
+                <span className="font-mono text-xs text-gray-500 w-10">CSV2</span> Takes + TC
+              </button>
+            </div>
+          )}
+        </div>
         <div className="relative">
           <button onClick={() => setShowWidthSlider(!showWidthSlider)} className={`w-10 h-10 flex items-center justify-center font-bold text-sm rounded-lg border transition-all ${showWidthSlider ? 'text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'}`} style={showWidthSlider ? { backgroundColor: 'var(--th-accent)', borderColor: 'var(--th-accent)' } : undefined} title="Ajustar amplada de pàgina">&lt;F&gt;</button>
           {showWidthSlider && <PageWidthSlider value={sliderValue} onChange={(v) => onPageWidthChange(`${v}px`)} onClose={() => setShowWidthSlider(false)} />}

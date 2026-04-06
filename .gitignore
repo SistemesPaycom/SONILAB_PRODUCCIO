@@ -15,6 +15,8 @@ Thumbs.db
 
 # Media / storage
 ./subtitleedit-main/
+./Software_padre/
+./Info_para_Claude/
 
 # Python
 **/__pycache__/

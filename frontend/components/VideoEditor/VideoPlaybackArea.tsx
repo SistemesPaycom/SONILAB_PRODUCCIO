@@ -1,6 +1,6 @@
 import React from 'react';
 import VideoPlayer from './VideoPlayer';
-import { Segment, OverlayConfig, Id } from '../../types';
+import { Segment, OverlayConfig, Id } from '../../appTypes';
 
 interface VideoPlaybackAreaProps {
     videoRef: React.RefObject<HTMLVideoElement>;

@@ -210,6 +210,7 @@ Cada dominio tiene (o tendrá) un archivo `.md` en `Skills_Claude/` que explica 
 | Se modifica el flujo de subida de media o la lógica de deduplicación SHA-256 | Upload de media | `Skills_Claude/domain-media-upload.md` |
 | Se toca sincronización de tiempo entre media, subtítulos o waveform | Timeline / Waveform | `Skills_Claude/domain-timeline.md` |
 | Se añade una ruta nueva en frontend o un endpoint nuevo en backend | Navegación y routing | `Skills_Claude/domain-routing.md` |
+| Se modifica `exportToPdf` del editor de guion, el flujo de impresión a PDF o los anchors `[data-page-break-anchor]` | Export del guion a PDF | `Skills_Claude/domain-script-pdf-export.md` |
 
 ### Cómo crece esta tabla
 
@@ -231,3 +232,106 @@ Al terminar cualquier modificación, comprobar UNA VEZ:
 **STOP: actualizar documentación de dominio NO activa otra ronda de revisión.**
 La revisión de coherencia se hace sobre los cambios funcionales, no sobre cambios en docs.
 Actualizar un `.md` es el último paso, no el inicio de uno nuevo.
+
+## 11. Estrategia de integración con aplicaciones externas
+
+### Contexto
+
+Este repositorio está diseñado para absorber en el futuro la lógica de otras aplicaciones relacionadas — en particular, un lector de guiones para doblaje (`script-reader-for-dubbing`) que actúa como aplicación "padre". Esa app comparte origen conceptual con Sonilab pero tiene arquitectura independiente y archivos con los mismos nombres.
+
+Para que la integración futura no destruya código, se ha aplicado una convención de naming preventiva en este repo. Cualquier Claude que trabaje aquí debe respetar esta convención y seguir el protocolo de integración descrito en este apartado.
+
+### Convención de naming anti-colisión
+
+Cuando un archivo de este repo tiene o tenía el mismo nombre que un archivo de una aplicación externa que se va a integrar, se renombra en **este** repo aplicando uno de estos prefijos:
+
+| Caso | Patrón aplicado | Ejemplo |
+|------|----------------|---------|
+| Componente de biblioteca compartido | prefijo `Sonilab` | `LibraryView.tsx` → `SonilabLibraryView.tsx` |
+| Contexto compartido | prefijo `Sonilab` | `LibraryContext.tsx` → `SonilabLibraryContext.tsx` |
+| Componente de fila de biblioteca | prefijo `Library` | `FileItem.tsx` → `LibraryFileItem.tsx` |
+| Tipos globales de la app | sufijo `app` | `types.ts` → `appTypes.ts` |
+| Carpeta de utils compartida | nombre descriptivo | `LectorDeGuions/` → `ScriptUtils/` |
+
+**Archivos que NO se pueden renombrar** porque son puntos de entrada del tooling:
+
+| Archivo | Razón |
+|---------|-------|
+| `App.tsx` | Entry point de React — Vite lo espera por convención |
+| `index.html` | Entry point HTML |
+| `index.tsx` | Entry point React DOM |
+| `package.json` | Requerido por npm/Node tal cual |
+| `tsconfig.json` | Requerido por TypeScript |
+| `vite.config.ts` | Requerido por Vite |
+
+Estos se fusionan **manualmente** en el momento de la integración — no se renombran.
+
+### Qué hace la aplicación padre (script-reader-for-dubbing)
+
+- Framework: React + Vite + react-router-dom (web, no React Native)
+- Sin backend propio — todo en localStorage/AsyncStorage local
+- Funcionalidad principal: lector de guiones de doblaje con anotaciones, búsqueda por personaje/take, y visualización de capas de anotación
+- Los archivos de lógica pura que sí son reutilizables (y ya están integrados aquí) son:
+  - `utils/ScriptUtils/indexers.ts` — indexación de personajes y takes
+  - `utils/ScriptUtils/search.ts` — búsqueda de matches en texto
+  - `utils/ScriptUtils/takes.ts` — rangos de takes
+
+### Archivos de la app padre que NO se integrarán como código
+
+Estos archivos existen en la app padre pero su lógica está implementada de forma distinta en Sonilab y **no deben mezclarse**:
+
+| Archivo padre | Por qué no se porta |
+|--------------|---------------------|
+| `LibraryContext.tsx` | Usa AsyncStorage local; Sonilab usa backend NestJS |
+| `LibraryView.tsx` | React Native; Sonilab usa React web con Tailwind |
+| `FileItem.tsx` | React Native; Sonilab usa React web con Tailwind |
+| `types.ts` (biblioteca) | Subconjunto mínimo; Sonilab tiene supertipo completo en `appTypes.ts` |
+| `App.tsx` | Usa react-router-dom; Sonilab usa hash routing propio |
+
+### Lo que sí se portará cuando llegue la integración
+
+Los componentes propios del lector que no existen en Sonilab:
+
+| Archivo padre | Descripción | Dónde irá en Sonilab |
+|--------------|-------------|----------------------|
+| `components/AnnotationCanvas.tsx` | Lienzo de anotaciones sobre el guion | `components/LectorDeGuions/` |
+| `components/LayerPanel.tsx` | Panel de capas de anotación | `components/LectorDeGuions/` |
+| `components/TakesByCharacterPanel.tsx` | Panel de takes por personaje | `components/LectorDeGuions/` |
+| `components/HighlightedScript.tsx` | Vista de guion con highlights | `components/LectorDeGuions/` |
+| `components/ConfirmTextModal.tsx` | Modal de confirmación de texto | `components/LectorDeGuions/` |
+| `app/index.tsx` (EditorPage) | Página principal del lector | Adaptado como nueva vista en Sonilab |
+| `app/library-manager.tsx` | Gestión de biblioteca del lector | Sustituido por la biblioteca de Sonilab |
+| `types/annotation.ts` | Tipos de anotación | `types/LectorDeGuions/` |
+
+### Protocolo de integración (cuando llegue el momento)
+
+Seguir estos pasos en orden. No mezclar pasos.
+
+**Paso 1 — Verificar que no hay nuevas colisiones de nombres**
+Antes de portar cualquier archivo nuevo, comprobar que su nombre no coincide con ningún archivo existente en Sonilab. Si coincide, aplicar la convención de naming de la sección anterior.
+
+**Paso 2 — Portar únicamente lógica pura (utils y types)**
+Copiar los archivos de lógica sin UI a sus carpetas destino. No modificar los existentes en Sonilab. Verificar que los imports son correctos.
+
+**Paso 3 — Portar componentes UI como módulo aislado**
+Colocar los componentes del lector en `components/LectorDeGuions/`. No importar desde ellos hacia componentes de Sonilab ni al revés, salvo a través de una interfaz explícita.
+
+**Paso 4 — Añadir la nueva vista al router**
+Añadir el nuevo `OpenMode` para el lector en `appTypes.ts`. Añadir la rama de render en `App.tsx`. Añadir la ruta al hash router en `useHashRoute.ts`. Ver `domain-routing.md`.
+
+**Paso 5 — Añadir el botón de apertura en OpenWithModal**
+Solo si el documento es un tipo reconocible por el lector. Seguir el patrón existente de `isSnlbpro` para la detección.
+
+**Paso 6 — Fusionar package.json**
+Añadir solo las dependencias nuevas que el lector necesite y que no estén ya en Sonilab. No sobrescribir versiones existentes sin verificar compatibilidad.
+
+**Paso 7 — Verificar no regresión**
+Comprobar que Files, Media, Projectes, editor de subtítulos y editor de guion siguen funcionando exactamente igual que antes.
+
+### Regla general
+
+Cuando se porta código de otra aplicación a este repo:
+1. Primero verificar nombres — aplicar convención si colisionan.
+2. Portar como módulo aislado — no mezclar lógica interna.
+3. Conectar por interfaz explícita (OpenMode, router, OpenWithModal) — no por imports directos entre módulos.
+4. No tocar lo que ya funciona en Sonilab como efecto lateral del port.

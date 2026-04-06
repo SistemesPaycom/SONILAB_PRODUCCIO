@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Document } from '../../types';
+import { Document } from '../../appTypes';
 import * as Icons from '../icons';
 import { parseSsrtlsf, serializeSsrtlsf, SsrtListRow } from '../../utils/SubtitlesEditor/srtToSsrtlsf';
 

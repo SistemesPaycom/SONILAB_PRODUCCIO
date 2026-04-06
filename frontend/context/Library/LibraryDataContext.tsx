@@ -6,10 +6,10 @@ import React, {
   useEffect,
   useMemo,
 } from 'react';
-import type { Folder, Document } from '../../types';
-import { ViewType, SortByKey, SortOrder, LibraryItem } from '../../types';
-import { indexCharacters } from '../../utils/LectorDeGuions/indexers';
-import { findTakesWithRanges } from '../../utils/LectorDeGuions/takes';
+import type { Folder, Document } from '../../appTypes';
+import { ViewType, SortByKey, SortOrder, LibraryItem } from '../../appTypes';
+import { indexCharacters } from '../../utils/ScriptUtils/indexers';
+import { findTakesWithRanges } from '../../utils/ScriptUtils/takes';
 import { api } from '../../services/api';
 
 // Session-only registry for binary media files (not persisted to localStorage)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
-import { OverlayConfig } from '../../types';
+import { OverlayConfig } from '../../appTypes';
 import SegmentItem from './SegmentItem';
 import { EyeIcon, EyeOffIcon, EarIcon, Languages } from '../icons';
 import { LinkIcon, LinkOffIcon } from '../VideoEditor/PlayerIcons';

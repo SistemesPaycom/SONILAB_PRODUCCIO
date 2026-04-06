@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../services/api';
-import { useLibrary } from '../../context/Library/LibraryContext';
-import type { Document, OpenMode } from '../../types';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
+import type { Document, OpenMode } from '../../appTypes';
 import { importStructuredScriptFromFile } from '../../utils/Import/scriptImportPipeline';
 
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];

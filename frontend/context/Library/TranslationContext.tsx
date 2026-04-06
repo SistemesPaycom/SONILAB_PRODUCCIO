@@ -1,7 +1,7 @@
 // context/Library/TranslationContext.tsx
 import { LOCAL_STORAGE_KEYS } from '@/constants';
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import type { TranslationTask } from '../../types';
+import type { TranslationTask } from '../../appTypes';
 
 interface TranslationState {
   translationTasks: TranslationTask[];

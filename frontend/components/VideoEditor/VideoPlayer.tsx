@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Segment, OverlayConfig } from '../../types';
+import { Segment, OverlayConfig } from '../../appTypes';
 import { Timecode, formatTime } from './Timecode';
 import { plainToRich } from '../../utils/SubtitlesEditor/richTextHelpers';
 import {

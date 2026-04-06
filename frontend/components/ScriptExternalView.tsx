@@ -6,14 +6,14 @@
 // Fase 7: controls de gestió del guió (vincular/canviar, corregir, estat local)
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useLibrary } from '../context/Library/LibraryContext';
+import { useLibrary } from '../context/Library/SonilabLibraryContext';
 import { api } from '../services/api';
 import { ColumnView } from './EditorDeGuions/ColumnView';
 import { LOCAL_STORAGE_KEYS } from '../constants';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { buildTakeRangesFromScript, TakeRange } from '../utils/EditorDeGuions/takeRanges';
 import { importStructuredScriptFromFile } from '../utils/Import/scriptImportPipeline';
-import type { EditorStyles } from '../types';
+import type { EditorStyles } from '../appTypes';
 
 // ── Estils per defecte (mateixos que App.tsx) ────────────────────────────────
 const DEFAULT_STYLES: EditorStyles = {

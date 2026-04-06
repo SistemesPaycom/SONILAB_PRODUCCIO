@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Layout, EditorStyles } from '../../types';
+import { Layout, EditorStyles } from '../../appTypes';
 import Editor from '../EditorDeGuions/Editor';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
 import { CsvView } from '../EditorDeGuions/CsvView';

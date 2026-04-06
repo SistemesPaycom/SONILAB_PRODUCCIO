@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { EditorStyles, EditorStyle, AppShortcuts, Shortcut } from '../types';
+import { EditorStyles, EditorStyle, AppShortcuts, Shortcut } from '../appTypes';
 import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS, mergeShortcuts } from '../constants';
 import { api } from '../services/api';
 import useLocalStorage from '../hooks/useLocalStorage';

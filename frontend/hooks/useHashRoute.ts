@@ -1,6 +1,6 @@
 // frontend/hooks/useHashRoute.ts
 import { useState, useEffect } from 'react';
-import { OpenMode } from '../types';
+import { OpenMode } from '../appTypes';
 
 export interface HashRoute {
   view: 'home' | 'editor' | 'script-view' | 'loading-preview';
@@ -9,7 +9,7 @@ export interface HashRoute {
 }
 
 const VALID_MODES: OpenMode[] = [
-  'editor', 'lector', 'editor-video', 'editor-video-subs',
+  'editor', 'editor-video', 'editor-video-subs',
   'editor-ssrtlsf', 'editor-srt-standalone',
 ];
 

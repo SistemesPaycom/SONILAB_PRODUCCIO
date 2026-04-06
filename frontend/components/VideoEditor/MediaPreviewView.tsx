@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Document } from '../../types';
-import { useLibrary } from '../../context/Library/LibraryContext';
+import { Document } from '../../appTypes';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import { VideoPlaybackArea } from './VideoPlaybackArea';
 import { PlayIcon, PauseIcon, PlusIcon, MinusIcon, CursorStationaryIcon, CursorPageIcon } from './PlayerIcons';
 import { Timecode } from './Timecode';

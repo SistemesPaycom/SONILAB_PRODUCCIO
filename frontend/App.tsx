@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useLibrary, LibraryProvider } from './context/Library/LibraryContext';
-import { ViewType, SortByKey, SortOrder, OpenMode, Layout, EditorStyles, TranslationTask, TranscriptionTask } from './types';
-import { LibraryView } from './components/Library/LibraryView';
+import { useLibrary, LibraryProvider } from './context/Library/SonilabLibraryContext';
+import { ViewType, SortByKey, SortOrder, OpenMode, Layout, EditorStyles, TranslationTask, TranscriptionTask } from './appTypes';
+import { LibraryView } from './components/Library/SonilabLibraryView';
 import { VideoEditorView } from './components/VideoEditor/VideoEditorView';
 import { VideoSubtitlesEditorView } from './components/VideoSubtitlesEditor/VideoSubtitlesEditorView';
 import { SsrtlsfEditorView } from './components/SsrtlsfEditor/SsrtlsfEditorView';
@@ -539,7 +539,7 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
       <div className="flex-1 flex flex-col min-h-0">
         <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
         <main className="flex-grow overflow-y-auto p-8 flex flex-col items-center custom-scrollbar" style={{ backgroundColor: 'var(--th-bg-app)' }}>
-           <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
+           <div id="page-content-area" className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
               {editorView === 'csv' ? (
                 <CsvView content={csvContentToShow} setContent={handleTextChange} isEditable={isEditing} pageWidth={pageWidth} />
               ) : layout === 'mono' ? (
@@ -879,7 +879,7 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
       <div className="flex-1 flex flex-col min-h-0">
         <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
         <main className="flex-grow overflow-y-auto p-8 flex flex-col items-center custom-scrollbar" style={{ backgroundColor: 'var(--th-bg-app)' }}>
-          <div className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
+          <div id="page-content-area" className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
             {editorView === 'csv' ? (
               <CsvView content={csvContentToShow} setContent={handleTextChange} isEditable={isEditing} pageWidth={pageWidth} />
             ) : layout === 'mono' ? (

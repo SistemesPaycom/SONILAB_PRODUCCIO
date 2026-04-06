@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Document } from '../../types';
+import { Document } from '../../appTypes';
 import { parseSrt, secondsToSrtTime } from '../../utils/SubtitlesEditor/srtParser';
-import { useLibrary } from '../../context/Library/LibraryContext';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import * as Icons from '../icons';
 
 interface SrtPreviewViewProps {

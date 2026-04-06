@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Layout, Document, EditorStyles, OverlayConfig, Id } from '../../types';
+import { Layout, Document, EditorStyles, OverlayConfig, Id } from '../../appTypes';
 import Editor from '../EditorDeGuions/Editor';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
 import { CsvView } from '../EditorDeGuions/CsvView';
@@ -9,7 +9,7 @@ import WaveformTimeline from '../VideoEditor/WaveformTimeline';
 import SubtitlesEditor from './SubtitlesEditor';
 import SyncLibraryModal from './SyncLibraryModal';
 import SubtitleAIOperationsModal from './SubtitleAIOperationsModal';
-import { useLibrary } from '../../context/Library/LibraryContext';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import useLocalStorage from '../../hooks/useLocalStorage';
@@ -837,6 +837,34 @@ const handleSave = useCallback(() => {
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
   }, [activeSegmentId, segments, isEditing, subsHistory]);
 
+  const handleSetTcIn = useCallback(() => {
+    if (!isEditing || !activeSegmentId) return;
+    const t = currentTimeRef.current;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const idx = segments.findIndex(s => s.id === activeSegmentId);
+    if (idx === -1) return;
+    const seg = segments[idx];
+    const prevSeg = idx > 0 ? segments[idx - 1] : null;
+    let startTime = t;
+    if (prevSeg && startTime < prevSeg.endTime + gap) startTime = prevSeg.endTime + gap;
+    if (startTime >= seg.endTime - MIN_SEG_DURATION) startTime = seg.endTime - MIN_SEG_DURATION;
+    subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, startTime } : s));
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory]);
+
+  const handleSetTcOut = useCallback(() => {
+    if (!isEditing || !activeSegmentId) return;
+    const t = currentTimeRef.current;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const idx = segments.findIndex(s => s.id === activeSegmentId);
+    if (idx === -1) return;
+    const seg = segments[idx];
+    const nextSeg = idx < segments.length - 1 ? segments[idx + 1] : null;
+    let endTime = t;
+    if (nextSeg && endTime > nextSeg.startTime - gap) endTime = nextSeg.startTime - gap;
+    if (endTime - seg.startTime < MIN_SEG_DURATION) endTime = seg.startTime + MIN_SEG_DURATION;
+    subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, endTime } : s));
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory]);
+
   useKeyboardShortcuts('subtitlesEditor', (action) => {
     switch (action) {
       case 'TOGGLE_PLAY_PAUSE': onTogglePlay(); break;
@@ -851,6 +879,8 @@ const handleSave = useCallback(() => {
       case 'SAVE': handleSave(); break;
       case 'SPLIT_SEGMENT': handleSplitSegmentAtCursor(); break;
       case 'MERGE_SEGMENT': handleMergeSegmentWithNext(); break;
+      case 'SET_TC_IN': handleSetTcIn(); break;
+      case 'SET_TC_OUT': handleSetTcOut(); break;
       case 'DELETE_ACTIVE_SEGMENT': {
         // Only fires if there is an active segment and focus is NOT inside an editable text field
         const active = document.activeElement as HTMLElement | null;

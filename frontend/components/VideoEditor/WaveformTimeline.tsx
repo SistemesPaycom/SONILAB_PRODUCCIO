@@ -3,7 +3,7 @@
 // Waveform extracted via Web Audio API. DOM playhead with diamond indicator.
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Segment, Id, TimelineViewMode } from '../../types';
+import { Segment, Id, TimelineViewMode } from '../../appTypes';
 import { useWaveformExtractor } from '../../hooks/useWaveformExtractor';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 import * as Icons from '../icons';

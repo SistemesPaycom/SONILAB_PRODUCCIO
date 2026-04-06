@@ -1,7 +1,7 @@
 // context/Library/TranscriptionContext.tsx
 import { LOCAL_STORAGE_KEYS } from '@/constants';
 import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
-import type { TranscriptionTask } from '../../types';
+import type { TranscriptionTask } from '../../appTypes';
 import { api } from '../../services/api';
 
 interface TranscriptionState {

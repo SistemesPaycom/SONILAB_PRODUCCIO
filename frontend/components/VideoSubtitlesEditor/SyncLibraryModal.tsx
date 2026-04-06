@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { useLibrary } from '../../context/Library/LibraryContext';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import * as Icons from '../icons';
-import { Document } from '../../types';
+import { Document } from '../../appTypes';
 
 interface SyncLibraryModalProps {
   isOpen: boolean;

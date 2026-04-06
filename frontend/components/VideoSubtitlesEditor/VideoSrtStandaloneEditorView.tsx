@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Document, OverlayConfig, Id } from '../../types';
+import { Document, OverlayConfig, Id } from '../../appTypes';
 import * as Icons from '../icons';
 import { VideoSubtitlesToolbar } from './VideoSubtitlesToolbar';
 import { VideoPlaybackArea } from '../VideoEditor/VideoPlaybackArea';
@@ -10,7 +10,7 @@ import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
 import SyncLibraryModal from './SyncLibraryModal';
 import SubtitleAIOperationsModal from './SubtitleAIOperationsModal';
-import { useLibrary } from '../../context/Library/LibraryContext';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';

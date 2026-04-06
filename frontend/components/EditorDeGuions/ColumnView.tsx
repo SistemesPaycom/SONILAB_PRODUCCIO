@@ -11,8 +11,8 @@ import {
   ScriptLine,
 } from '../../utils/EditorDeGuions/scriptParser';
 import { MAX_SPEAKER_CHARS_PER_LINE } from '../../constants';
-import { EditorStyles, EditorStyle } from '../../types';
-import type { Match } from '../../utils/LectorDeGuions/search';
+import { EditorStyles, EditorStyle } from '../../appTypes';
+import type { Match } from '../../utils/ScriptUtils/search';
 
 interface ColumnViewProps {
   content: string | undefined;              // pot arribar undefined
@@ -20,7 +20,6 @@ interface ColumnViewProps {
   isEditable: boolean;
   col1Width: number;
   editorStyles: EditorStyles;
-  // New optional props for LectorDeGuions
   matches?: Match[];
   activeIndex?: number;
   secondaryMatches?: Match[];
@@ -647,7 +646,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
                 return (
                   <React.Fragment key={idx}>
                     <div
-                      className={`pr-4 whitespace-pre-line text-right self-start ${editableClasses}`}
+                      className={`pr-4 whitespace-pre-line text-right self-baseline ${editableClasses}`}
                       style={getInlineStyle(editorStyles.speaker)}
                       contentEditable={isEditable}
                       suppressContentEditableWarning={true}
@@ -668,7 +667,7 @@ export const ColumnView: React.FC<ColumnViewProps> = ({
                       )}
                     </div>
                     <div
-                      className={`whitespace-pre-wrap ${editableClasses}`}
+                      className={`whitespace-pre-wrap self-baseline ${editableClasses}`}
                       contentEditable={isEditable}
                       suppressContentEditableWarning={true}
                       onBlur={(e) =>

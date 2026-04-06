@@ -1,6 +1,6 @@
 // frontend/hooks/useKeyboardShortcuts.ts
 import { useEffect, useCallback, useRef } from 'react';
-import { AppShortcuts } from '../types';
+import { AppShortcuts } from '../appTypes';
 import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS } from '../constants';
 
 type ActionHandler = (action: string) => void;

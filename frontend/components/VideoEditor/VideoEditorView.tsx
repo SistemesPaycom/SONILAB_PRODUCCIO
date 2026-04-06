@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Layout, Document, EditorStyles } from '../../types';
+import { Layout, Document, EditorStyles } from '../../appTypes';
 import Toolbar from '../EditorDeGuions/Toolbar';
 import Editor from '../EditorDeGuions/Editor';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
@@ -11,7 +11,7 @@ import ImportFilesModal from '../Import/ImportFilesModal';
 import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges';
 import { parseScript } from '../../utils/EditorDeGuions/scriptParser';
 import { scriptToCsv } from '../../utils/EditorDeGuions/csvConverter';
-import { useLibrary } from '../../context/Library/LibraryContext';
+import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { useVerticalPanelResize } from '../../hooks/usePanelResize';
