@@ -44,31 +44,33 @@ export const FACTORY_SCRIPT_STYLES: ScriptEditorStyleSet = {
 };
 
 /**
- * Reproduce el aspecto actual hardcoded del editor de subtítulos
- * (SegmentItem.tsx, TimecodeInput.tsx). Los colores que originalmente leían
- * var(--th-*) se resuelven a hex en el momento de la migración (ver
- * resolveSubtitleFactoryColors en userStylesMigration.ts).
+ * Colors per defecte que deleguen en les CSS vars del tema admin.
+ * D'aquesta manera, el factory es adaptable a qualsevol tema (sonilab,
+ * dark, light, midnight) sense hard-codar hex. L'usuari pot seguir
+ * personalitzant el color amb el color picker, i llavors el valor
+ * guardat sera un hex fix (override explicit).
  */
 export const FACTORY_SUBTITLE_STYLES: SubtitleEditorStyleSet = {
-  content:        courier(14, '#e5e7eb'),
-  timecode:       courier(10, '#9ca3af'),
+  content:        courier(14, 'var(--th-editor-text)'),
+  timecode:       courier(10, 'var(--th-editor-timecode)'),
   // idCps i charCounter usen `font-black` (900) en SegmentItem.tsx; bold (700) és la
   // millor aproximació amb el StyleAtom actual (que només té bold:boolean).
-  idCps:          mono(11,    '#9ca3af', true),
-  takeLabel:      sans(10,    '#ef4444', true),
-  charCounter:    mono(11,    '#9ca3af', true),
-  actionButtons:  sans(9,     '#9ca3af'),
+  idCps:          mono(11,    'var(--th-editor-text-muted)', true),
+  takeLabel:      sans(10,    'var(--th-accent-text)', true),
+  charCounter:    mono(11,    'var(--th-editor-text-muted)', true),
+  actionButtons:  sans(9,     'var(--th-editor-meta)'),
 };
 
 /**
  * Reproduce el aspecto actual del home/llibreria (SonilabLibraryView.tsx,
- * LibraryFileItem.tsx).
+ * LibraryFileItem.tsx). Igual que FACTORY_SUBTITLE_STYLES, els colors
+ * referencien les CSS vars del tema per adaptar-se a qualsevol tema actiu.
  */
 export const FACTORY_HOME_STYLES: HomeStyleSet = {
-  fileName:     sans(14, '#f3f4f6'),
-  formatLabel:  sans(10, '#6b7280', true),
-  dateTime:     mono(10, '#9ca3af'),
-  tableHeader:  sans(10, '#6b7280', true),
-  navTabs:      sans(14, '#ffffff', true),
-  breadcrumb:   sans(14, '#b8b8b8'),
+  fileName:     sans(14, 'var(--th-text-primary)'),
+  formatLabel:  sans(10, 'var(--th-text-muted)', true),
+  dateTime:     mono(10, 'var(--th-text-secondary)'),
+  tableHeader:  sans(10, 'var(--th-text-muted)', true),
+  navTabs:      sans(14, 'var(--th-text-primary)', true),
+  breadcrumb:   sans(14, 'var(--th-text-secondary)'),
 };
