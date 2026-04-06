@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { EditorStyles, EditorStyle, AppShortcuts, Shortcut } from '../appTypes';
+import { AppShortcuts, Shortcut } from '../appTypes';
 import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS, mergeShortcuts } from '../constants';
 import { api } from '../services/api';
 import useLocalStorage from '../hooks/useLocalStorage';
@@ -10,14 +10,10 @@ import { StylesTab } from './Settings/UserStyles/StylesTab';
 
 interface SettingsModalProps {
   onClose: () => void;
-  editorStyles: EditorStyles;
-  onStylesChange: (styles: EditorStyles) => void;
 }
 
 type ActiveTab = 'general' | 'estils' | 'shortcuts' | 'reader' | 'theme';
 type ShortcutApp = keyof AppShortcuts;
-
-const FONT_FACES = ['sans-serif', 'serif', 'monospace', 'Arial', 'Verdana', 'Times New Roman'];
 
 // ── Token editor row amb estat local per a escriptura fluida ──
 // L'input de text manté estat local per permetre escriptura lliure.
@@ -92,38 +88,6 @@ const TokenRow: React.FC<{
       />
     </div>
   );
-};
-
-const StyleControlGroup: React.FC<{ label: string; styleKey: keyof EditorStyles; styles: EditorStyles; onChange: (styles: EditorStyles) => void }> = ({ label, styleKey, styles, onChange }) => {
-    const currentStyle = styles[styleKey];
-    const handleStyleChange = (field: keyof EditorStyle, value: any) => {
-        onChange({ ...styles, [styleKey]: { ...styles[styleKey], [field]: value } });
-    };
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-[150px_1fr] items-center gap-4 py-4 border-b border-[var(--th-border)] last:border-b-0">
-            <h4 className="font-semibold text-gray-200 md:text-right">{label}</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-center">
-                <div>
-                    <label className="block text-xs text-gray-400 mb-1">Tipografia</label>
-                    <select value={currentStyle.fontFamily} onChange={(e) => handleStyleChange('fontFamily', e.target.value)} className="w-full rounded-md px-2 py-1 text-sm" style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)' }}>
-                        {FONT_FACES.map(font => <option key={font} value={font}>{font}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs text-gray-400 mb-1">Mida (px)</label>
-                    <input type="number" min="8" max="32" value={currentStyle.fontSize} onChange={(e) => handleStyleChange('fontSize', parseInt(e.target.value, 10))} className="w-full rounded-md px-2 py-1 text-sm" style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)' }} />
-                </div>
-                <div>
-                    <label className="block text-xs text-gray-400 mb-1">Color</label>
-                    <input type="color" value={currentStyle.color} onChange={(e) => handleStyleChange('color', e.target.value)} className="w-full h-8 p-0 bg-transparent border-none rounded-md cursor-pointer" />
-                </div>
-                <div className="flex items-center gap-4 pt-4">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={currentStyle.bold} onChange={(e) => handleStyleChange('bold', e.target.checked)} className="w-4 h-4 rounded" /> Negreta</label>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={currentStyle.italic} onChange={(e) => handleStyleChange('italic', e.target.checked)} className="w-4 h-4 rounded" /> Cursiva</label>
-                </div>
-            </div>
-        </div>
-    );
 };
 
 /** Build the combo string from a KeyboardEvent */
@@ -355,7 +319,7 @@ const ShortcutsTab: React.FC = () => {
     );
 };
 const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
-const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, editorStyles, onStylesChange }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { logout } = useAuth();
   const { theme, themeId, setThemeId, themes, customTokens, setCustomTokens, resetCustomTokensFromPreset } = useTheme();
   const [customEditorOpen, setCustomEditorOpen] = useState(false);

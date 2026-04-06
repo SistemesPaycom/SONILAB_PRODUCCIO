@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useLibrary, LibraryProvider } from './context/Library/SonilabLibraryContext';
-import { ViewType, SortByKey, SortOrder, OpenMode, Layout, EditorStyles, TranslationTask, TranscriptionTask } from './appTypes';
+import { ViewType, SortByKey, SortOrder, OpenMode, Layout, TranslationTask, TranscriptionTask } from './appTypes';
 import { LibraryView } from './components/Library/SonilabLibraryView';
 import { VideoEditorView } from './components/VideoEditor/VideoEditorView';
 import { VideoSubtitlesEditorView } from './components/VideoSubtitlesEditor/VideoSubtitlesEditorView';
@@ -32,15 +32,6 @@ import { ThemeProvider } from './context/Theme/ThemeContext';
 import { UserStylesProvider } from './context/UserStyles/UserStylesContext';
 import { api } from './services/api';
 import TasksIAPanel, { JobRecord } from './components/TasksIA/TasksIAPanel';
-
-const DEFAULT_STYLES: EditorStyles = {
-  take: { fontFamily: 'Courier Prime, monospace', fontSize: 16, color: '#000000', bold: true, italic: false },
-  speaker: { fontFamily: 'Courier Prime, monospace', fontSize: 14, color: '#000000', bold: true, italic: false },
-  timecode: { fontFamily: 'Courier Prime, monospace', fontSize: 13, color: '#666666', bold: false, italic: false },
-  dialogue: { fontFamily: 'Courier Prime, monospace', fontSize: 14, color: '#000000', bold: false, italic: false },
-  dialogueParentheses: { fontFamily: 'Courier Prime, monospace', fontSize: 14, color: '#555555', bold: false, italic: true },
-  dialogueTimecodeParentheses: { fontFamily: 'Courier Prime, monospace', fontSize: 13, color: '#0055aa', bold: true, italic: false },
-};
 
 const MIN_LIBRARY_WIDTH = 280;
 const COLLAPSED_WIDTH = 60; 
@@ -262,7 +253,6 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
   const [editorView, setEditorView] = useState<'script' | 'csv'>('script');
   const [tabSize, setTabSize] = useState(4);
   const [pageWidth, setPageWidth] = useState('794px');
-  const [editorStyles, setEditorStyles] = useLocalStorage<EditorStyles>(LOCAL_STORAGE_KEYS.EDITOR_STYLES, DEFAULT_STYLES);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -529,7 +519,6 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
                 setContent={(txt) => handleTextChange(txt, 'script')}
                 isEditable={false}
                 col1Width={200}
-                editorStyles={editorStyles}
               />
            </div>
         </main>
@@ -546,7 +535,7 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
               ) : layout === 'mono' ? (
                 <Editor content={history.present} setContent={(txt) => handleTextChange(txt, 'mono')} isEditable={isEditing} tabSize={tabSize} />
               ) : (
-                <ColumnView content={history.present} setContent={(txt) => handleTextChange(txt, 'script')} isEditable={isEditing} col1Width={200} editorStyles={editorStyles} />
+                <ColumnView content={history.present} setContent={(txt) => handleTextChange(txt, 'script')} isEditable={isEditing} col1Width={200} />
               )}
            </div>
         </main>
@@ -561,7 +550,7 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
     editorView, onEditorViewChange: setEditorView,
     activeLang: effectiveLang, onActiveLangChange: setActiveLang,
     onSetSourceLang: (lang: string) => dispatch({ type: 'SET_SOURCE_LANG', payload: { documentId: currentDoc?.id || '', lang } }),
-    onTranslate: handleTranslate, col1Width: 200, editorStyles
+    onTranslate: handleTranslate, col1Width: 200
   };
 
   return (
@@ -617,10 +606,8 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
       </section>
 
       {isSettingsOpen && (
-        <SettingsModal 
-            onClose={() => setIsSettingsOpen(false)} 
-            editorStyles={editorStyles} 
-            onStylesChange={setEditorStyles} 
+        <SettingsModal
+            onClose={() => setIsSettingsOpen(false)}
         />
       )}
 
@@ -681,7 +668,6 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
   const [editorView, setEditorView] = useState<'script' | 'csv'>('script');
   const [tabSize, setTabSize] = useState(4);
   const [pageWidth, setPageWidth] = useState('794px');
-  const [editorStyles, setEditorStyles] = useLocalStorage<EditorStyles>(LOCAL_STORAGE_KEYS.EDITOR_STYLES, DEFAULT_STYLES);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const effectiveLang = useMemo(() => {
@@ -846,7 +832,7 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
     editorView, onEditorViewChange: setEditorView,
     activeLang: effectiveLang, onActiveLangChange: setActiveLang,
     onSetSourceLang: (lang: string) => dispatch({ type: 'SET_SOURCE_LANG', payload: { documentId: currentDoc?.id || '', lang } }),
-    onTranslate: handleTranslate, col1Width: 200, editorStyles
+    onTranslate: handleTranslate, col1Width: 200
   };
 
   const handleGoHome = () => {
@@ -886,7 +872,7 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
             ) : layout === 'mono' ? (
               <Editor content={history.present} setContent={(txt) => handleTextChange(txt, 'mono')} isEditable={isEditing} tabSize={tabSize} />
             ) : (
-              <ColumnView content={history.present} setContent={(txt) => handleTextChange(txt, 'script')} isEditable={isEditing} col1Width={200} editorStyles={editorStyles} />
+              <ColumnView content={history.present} setContent={(txt) => handleTextChange(txt, 'script')} isEditable={isEditing} col1Width={200} />
             )}
           </div>
         </main>
@@ -945,7 +931,7 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
       </div>
 
       {isSettingsOpen && (
-        <SettingsModal onClose={() => setIsSettingsOpen(false)} editorStyles={editorStyles} onStylesChange={setEditorStyles} />
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
       )}
     </div>
   );
