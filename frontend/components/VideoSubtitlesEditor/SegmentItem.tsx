@@ -84,8 +84,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   }, [generalConfig.maxLinesPerSubtitle, contentLines.length]);
 
   const duration = segment.endTime - segment.startTime;
-  const ROW_HEIGHT = '24px';
-  
+
   const gridCellStyle: React.CSSProperties = {
     borderWidth: gridOpacity > 0 ? '1px' : '0px',
     borderStyle: 'dashed',
@@ -460,11 +459,10 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
       <div
         className="grid items-stretch"
         style={{
-          // REAJUSTAMENT: Amplades optimitzades per evitar solapaments (10ch per a TK, 12ch per a ID/CPS)
-          // La columna de text usa max-content per no comprimir-se mai — el scroll
-          // horitzontal global del panel s'encarrega del desbordament.
-          gridTemplateColumns: '10ch 12ch 21ch 5ch max-content',
-          gridTemplateRows: `repeat(${maxLines}, ${ROW_HEIGHT})`,
+          // Amplades de columna calculades dinàmicament per `applyUserStylesToDOM`
+          // segons les CSS vars `--us-sub-*` del preset actiu de subtítols.
+          gridTemplateColumns: 'var(--us-sub-grid-columns)',
+          gridTemplateRows: `repeat(${maxLines}, var(--us-sub-row-height))`,
         }}
       >
         {Array.from({ length: maxLines }).map((_, i) => (
@@ -592,8 +590,8 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                   fontSize:   'var(--us-sub-content-size)',
                   fontWeight: 'var(--us-sub-content-weight)' as any,
                   fontStyle:  'var(--us-sub-content-style)',
-                  lineHeight: ROW_HEIGHT,
-                  minHeight: ROW_HEIGHT,
+                  lineHeight: 'var(--us-sub-row-height)',
+                  minHeight: 'var(--us-sub-row-height)',
                   color: isActive ? 'var(--th-editor-text-active)' : 'var(--us-sub-content-color)',
                   caretColor: 'var(--th-editor-caret)',
                   '--tw-ring-color': 'var(--th-focus-ring)',
