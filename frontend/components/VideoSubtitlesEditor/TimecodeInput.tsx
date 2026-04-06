@@ -55,7 +55,17 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({ value, label, isEd
   };
 
   const labelEl = (
-    <span className="px-1 rounded text-[9px] flex-shrink-0 select-none" style={{ backgroundColor: 'var(--th-editor-label-bg)', color: 'var(--th-editor-meta)' }}>{label}</span>
+    <span
+      className="px-1 rounded flex-shrink-0 select-none"
+      style={{
+        backgroundColor: 'var(--th-editor-label-bg)',
+        fontFamily: 'var(--us-sub-timecode-family)',
+        fontSize:   'var(--us-sub-timecode-size)',
+        color:      'var(--us-sub-timecode-color)',
+        fontWeight: 'var(--us-sub-timecode-weight)' as any,
+        fontStyle:  'var(--us-sub-timecode-style)',
+      }}
+    >{label}</span>
   );
 
   if (editing) {
@@ -69,8 +79,15 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({ value, label, isEd
           onBlur={commit}
           onKeyDown={handleKeyDown}
           onClick={(e) => e.stopPropagation()}
-          className="font-mono text-[10px] text-yellow-300 border border-yellow-500/50 rounded px-0.5 w-[7.5ch] outline-none"
-          style={{ backgroundColor: 'var(--th-editor-label-bg)', caretColor: 'var(--th-editor-caret)', fontFamily: "'Courier Prime', monospace" }}
+          className="text-yellow-300 border border-yellow-500/50 rounded px-0.5 w-[7.5ch] outline-none"
+          style={{
+            backgroundColor: 'var(--th-editor-label-bg)',
+            caretColor: 'var(--th-editor-caret)',
+            fontFamily: 'var(--us-sub-timecode-family)',
+            fontSize:   'var(--us-sub-timecode-size)',
+            fontWeight: 'var(--us-sub-timecode-weight)' as any,
+            fontStyle:  'var(--us-sub-timecode-style)',
+          }}
           autoFocus
         />
       </div>
@@ -83,30 +100,56 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({ value, label, isEd
       {isEditable ? (
         <>
           <button
-            className="opacity-0 group-hover/tc:opacity-100 text-[8px] transition-opacity leading-none px-px select-none"
-            style={{ color: 'var(--th-editor-meta)' }}
+            className="opacity-0 group-hover/tc:opacity-100 transition-opacity leading-none px-px select-none"
+            style={{
+              fontFamily: 'var(--us-sub-timecode-family)',
+              fontSize:   'var(--us-sub-timecode-size)',
+              color:      'var(--us-sub-timecode-color)',
+              fontWeight: 'var(--us-sub-timecode-weight)' as any,
+              fontStyle:  'var(--us-sub-timecode-style)',
+            }}
             onMouseDown={handleAdjust(-1)}
             tabIndex={-1}
             title="-100ms  |  Shift -10ms  |  Ctrl -1s"
           >◀</button>
           <span
-            className="font-mono text-[10px] hover:text-yellow-600 hover:bg-yellow-500/10 rounded px-0.5 cursor-text transition-colors"
-            style={{ color: 'var(--th-editor-timecode)' }}
+            className="hover:text-yellow-600 hover:bg-yellow-500/10 rounded px-0.5 cursor-text transition-colors"
+            style={{
+              fontFamily: 'var(--us-sub-timecode-family)',
+              fontSize:   'var(--us-sub-timecode-size)',
+              color:      'var(--us-sub-timecode-color)',
+              fontWeight: 'var(--us-sub-timecode-weight)' as any,
+              fontStyle:  'var(--us-sub-timecode-style)',
+            }}
             onClick={startEdit}
             title="Clic per editar el timecode"
           >
             {secondsToSrtTime(value)}
           </span>
           <button
-            className="opacity-0 group-hover/tc:opacity-100 text-[8px] transition-opacity leading-none px-px select-none"
-            style={{ color: 'var(--th-editor-meta)' }}
+            className="opacity-0 group-hover/tc:opacity-100 transition-opacity leading-none px-px select-none"
+            style={{
+              fontFamily: 'var(--us-sub-timecode-family)',
+              fontSize:   'var(--us-sub-timecode-size)',
+              color:      'var(--us-sub-timecode-color)',
+              fontWeight: 'var(--us-sub-timecode-weight)' as any,
+              fontStyle:  'var(--us-sub-timecode-style)',
+            }}
             onMouseDown={handleAdjust(1)}
             tabIndex={-1}
             title="+100ms  |  Shift +10ms  |  Ctrl +1s"
           >▶</button>
         </>
       ) : (
-        <span className="font-mono text-[10px]" style={{ color: 'var(--th-editor-timecode)' }}>{secondsToSrtTime(value)}</span>
+        <span
+          style={{
+            fontFamily: 'var(--us-sub-timecode-family)',
+            fontSize:   'var(--us-sub-timecode-size)',
+            color:      'var(--us-sub-timecode-color)',
+            fontWeight: 'var(--us-sub-timecode-weight)' as any,
+            fontStyle:  'var(--us-sub-timecode-style)',
+          }}
+        >{secondsToSrtTime(value)}</span>
       )}
     </div>
   );
