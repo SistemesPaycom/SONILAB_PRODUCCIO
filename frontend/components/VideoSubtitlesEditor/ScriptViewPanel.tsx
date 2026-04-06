@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Layout, EditorStyles } from '../../appTypes';
+import { Layout } from '../../appTypes';
 import Editor from '../EditorDeGuions/Editor';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
 import { CsvView } from '../EditorDeGuions/CsvView';
@@ -14,7 +14,6 @@ interface ScriptViewPanelProps {
   layout: Layout;
   tabSize: number;
   col1Width: number;
-  editorStyles: EditorStyles;
   pageWidth: string;
   onTakeLayout: (num: number, y: number) => void;
   scrollRef: React.RefObject<HTMLElement>;
@@ -55,7 +54,6 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
   layout,
   tabSize,
   col1Width,
-  editorStyles,
   pageWidth,
   onTakeLayout,
   scrollRef,
@@ -337,7 +335,6 @@ export const ScriptViewPanel: React.FC<ScriptViewPanelProps> = ({
                 setContent={() => {}}
                 isEditable={false}
                 col1Width={col1Width}
-                editorStyles={editorStyles}
                 onTakeLayout={onTakeLayout}
               />
             )}

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Layout, Document, EditorStyles } from '../../appTypes';
+import { Layout, Document } from '../../appTypes';
 import Toolbar from '../EditorDeGuions/Toolbar';
 import Editor from '../EditorDeGuions/Editor';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
@@ -25,7 +25,6 @@ interface VideoEditorViewProps {
   tabSize: number;
   col1Width: number;
   pageWidth: string;
-  editorStyles: EditorStyles;
   editorView: EditorView;
   activeLang: string;
   onLayoutChange: (value: Layout) => void;
@@ -49,7 +48,6 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
     tabSize,
     col1Width,
     pageWidth,
-    editorStyles,
     editorView,
     activeLang,
     handleTextChange,
@@ -231,7 +229,7 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
             ) : layout === 'mono' ? (
               <Editor content={currentContent} setContent={(text) => handleTextChange(text, 'mono')} isEditable={isEditing} tabSize={tabSize} />
             ) : (
-              <ColumnView content={currentContent} setContent={(text) => handleTextChange(text, 'script')} isEditable={isEditing} col1Width={col1Width} editorStyles={editorStyles} onTakeLayout={handleTakeLayout} />
+              <ColumnView content={currentContent} setContent={(text) => handleTextChange(text, 'script')} isEditable={isEditing} col1Width={col1Width} onTakeLayout={handleTakeLayout} />
             )}
           </div>
         </main>

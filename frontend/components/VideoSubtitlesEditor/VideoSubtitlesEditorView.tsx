@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Layout, Document, EditorStyles, OverlayConfig, Id } from '../../appTypes';
+import { Layout, Document, OverlayConfig, Id } from '../../appTypes';
 import Editor from '../EditorDeGuions/Editor';
 import { ColumnView } from '../EditorDeGuions/ColumnView';
 import { CsvView } from '../EditorDeGuions/CsvView';
@@ -37,7 +37,6 @@ interface VideoSubtitlesEditorViewProps {
   tabSize: number;
   col1Width: number;
   pageWidth: string;
-  editorStyles: EditorStyles;
   editorView: EditorView;
   activeLang: string;
   onLayoutChange: (value: Layout) => void;
@@ -61,7 +60,6 @@ const VideoSubtitlesEditorViewInner: React.FC<VideoSubtitlesEditorViewProps> = (
     tabSize,
     col1Width,
     pageWidth,
-    editorStyles,
     editorView,
     activeLang,
     handleTextChange,
@@ -996,7 +994,6 @@ const handleSave = useCallback(() => {
               layout={layout}
               tabSize={tabSize}
               col1Width={col1Width}
-              editorStyles={editorStyles}
               pageWidth={pageWidth}
               onTakeLayout={handleTakeLayout}
               scrollRef={scriptScrollRef}

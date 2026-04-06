@@ -1,7 +1,7 @@
 // components/Library/LibraryView.tsx
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
-import { ViewType, SortByKey, SortOrder, LibraryItem, EditorStyles, TranslationTask, TranscriptionTask } from '../../appTypes';
+import { ViewType, SortByKey, SortOrder, LibraryItem, TranslationTask, TranscriptionTask } from '../../appTypes';
 import { importPdfFile } from '../../utils/Import/pdfImporter';
 import { importDocxFile } from '../../utils/Import/docxImporter';
 import { ImportOptions } from '../../utils/Import/importShared';
