@@ -52,9 +52,11 @@ export const FACTORY_SCRIPT_STYLES: ScriptEditorStyleSet = {
 export const FACTORY_SUBTITLE_STYLES: SubtitleEditorStyleSet = {
   content:        courier(14, '#e5e7eb'),
   timecode:       courier(10, '#9ca3af'),
-  idCps:          mono(11,    '#9ca3af'),
+  // idCps i charCounter usen `font-black` (900) en SegmentItem.tsx; bold (700) és la
+  // millor aproximació amb el StyleAtom actual (que només té bold:boolean).
+  idCps:          mono(11,    '#9ca3af', true),
   takeLabel:      sans(10,    '#ef4444', true),
-  charCounter:    mono(11,    '#9ca3af'),
+  charCounter:    mono(11,    '#9ca3af', true),
   actionButtons:  sans(9,     '#9ca3af'),
 };
 
