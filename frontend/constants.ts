@@ -9,6 +9,10 @@ export const LOCAL_STORAGE_KEYS = {
    */
   EDITOR_STYLES: 'snlbpro_editor_styles',
   LIBRARY_WIDTH: 'snlbpro_library_width',
+  /** Amplades de les 3 columnes resizable de la taula de Files (Nom/Format/Data i hora). En pixels. */
+  LIBRARY_NAME_COL_WIDTH: 'snlbpro_library_name_col_width',
+  LIBRARY_FORMAT_COL_WIDTH: 'snlbpro_library_format_col_width',
+  LIBRARY_DATE_COL_WIDTH: 'snlbpro_library_date_col_width',
   TAKE_MARGIN: 'snlbpro_take_margin',
   TAKE_START_MARGIN: 'snlbpro_take_start_margin',
   MAX_LINES_SUBS: 'snlbpro_max_lines_subs',
