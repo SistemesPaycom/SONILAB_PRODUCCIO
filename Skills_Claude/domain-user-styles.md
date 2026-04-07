@@ -31,7 +31,7 @@ Es **independiente** del sistema de temas (admin). Los temas controlan colores g
 
 ## Persistencia
 
-- **Backend**: `user.preferences.userStyles` (objeto JSON con `version: 1` y los 3 scopes). Se guarda con `PATCH /auth/me` debounced 1500ms.
+- **Backend**: `user.preferences.userStyles` (objeto JSON con `version: 2` y los 3 scopes). Se guarda con `PATCH /auth/me` debounced 1500ms. La migración de `version: 1` a `version: 2` se gestiona en `userStylesMigration.ts:loadOrMigrate` y mapea hex hardcoded antiguos a `var(--th-*)` del tema admin.
 - **Cache local**: `snlbpro_user_styles_<userId>` (scoped por usuario). Se reescribe en cada cambio para arranque inmediato y modo offline.
 - **Sync entre ventanas**: `UserStylesProvider` escucha el evento `storage` y reaplica el payload cuando otra ventana del mismo userId modifica la cache local. Esto es lo que mantiene sincronizada la `ScriptExternalView` (que vive en una ventana separada y monta su propio provider).
 
@@ -71,6 +71,7 @@ Es **independiente** del sistema de temas (admin). Los temas controlan colores g
 - **`snlbpro_editor_styles` no se borra del localStorage** — está marcada como `@deprecated` y solo se lee como fuente para la migración inicial.
 - **Cualquier cambio del shape requiere bumpear la `version`** del payload y añadir lógica de migración.
 - **Los componentes NUNCA deben recibir `editorStyles` como prop**. Esa prop legacy fue eliminada. Si necesitas estilos en un componente nuevo, lee directamente las CSS vars con `style={{ fontFamily: 'var(--us-...)', ... }}`.
+- **El preset del usuario prevalece sobre el tema admin para los colores**. La factory por defecto usa `var(--th-text-*)` para que se adapte al tema actual. En cuanto el usuario toca el color picker de un atom, el valor pasa a ser un hex fijo y deja de resolverse contra el tema. Para volver al color del tema, el usuario debe usar "Restablir" en `StylesPresetBar`. Esta regla aplica también a los 3 elementos del scope `home` (`navTabs`, `breadcrumb`, `tableHeader`) — desde 2026-04-07 son color-personalizables como el resto.
 
 ## Refactor de fragilidad del editor de subtítulos
 
