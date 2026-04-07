@@ -359,7 +359,7 @@ export const FileItem: React.FC<FileItemProps> = ({
       </div>
 
       <div
-        className="hidden sm:flex items-center gap-2 select-none whitespace-nowrap px-4"
+        className="hidden sm:flex items-center gap-2 select-none whitespace-nowrap px-4 min-w-0 overflow-hidden"
         style={{
           fontFamily: 'var(--us-home-datetime-family)',
           fontSize:   'var(--us-home-datetime-size)',
@@ -368,8 +368,8 @@ export const FileItem: React.FC<FileItemProps> = ({
           fontStyle:  'var(--us-home-datetime-style)',
         }}
       >
-        <span>{formattedDate}</span>
-        <span className="opacity-40">{formattedTime}</span>
+        <span className="truncate">{formattedDate}</span>
+        <span className="opacity-40 truncate">{formattedTime}</span>
       </div>
       
       <div className="z-10 flex items-center justify-center px-2 relative">
