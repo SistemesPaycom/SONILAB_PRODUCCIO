@@ -748,7 +748,7 @@ const selectedItem =
     </div>
   );
 
-  const gridColumns = `32px ${nameColWidth}px ${formatColWidth}px 140px 40px`;
+  const gridColumns = `32px ${nameColWidth}px ${formatColWidth}px ${dateColWidth}px 40px`;
  const activeTasksCount =
   translationTasks.filter(t => t.status === 'processing').length +
   state.transcriptionTasks.filter(t => t.status === 'queued' || t.status === 'processing').length;
@@ -1002,8 +1002,13 @@ const selectedItem =
                     <div className="h-full w-[1px] bg-white/10 group-hover/header:bg-white/20 mx-auto" />
                   </div>
                 </div>
-                <div onClick={() => handleSortChange(SortByKey.Date)} className="cursor-pointer whitespace-nowrap px-4 h-full flex items-center hover:bg-white/5 transition-colors border-r border-[var(--th-border)]">
-                  <span>Data i hora</span>
+                <div className="relative group/header flex items-center h-full border-r border-[var(--th-border)]">
+                  <div onClick={() => handleSortChange(SortByKey.Date)} className="flex-1 cursor-pointer whitespace-nowrap px-4 h-full flex items-center hover:bg-white/5 transition-colors">
+                    <span>Data i hora</span>
+                  </div>
+                  <div onMouseDown={handleResizeDateMouseDown} onClick={(e) => e.stopPropagation()} className="absolute -right-0.5 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 group-hover/header:bg-white/10 transition-colors z-40" title="Canviar amplada">
+                    <div className="h-full w-[1px] bg-white/10 group-hover/header:bg-white/20 mx-auto" />
+                  </div>
                 </div>
                 <div className="h-full" />
               </header>
