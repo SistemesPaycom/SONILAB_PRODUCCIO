@@ -89,7 +89,7 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
 
   const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
     useSubtitleAIOperations({
-      videoFile,
+      videoSrc,
       segments,
       onCommitSegments: (newSegs) => subsHistory.commit(newSegs),
       onCloseModal: () => setIsAIModalOpen(false),
@@ -285,21 +285,14 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   });
 
   const handleSyncMedia = useCallback((doc: Document) => {
-    void (async () => {
-      let file = getMediaFile(doc.id);
-      if (!file) file = await ensureMediaFile(doc.id, doc.name);
-
-      if (file) {
-        if (videoSrc) URL.revokeObjectURL(videoSrc);
-        setVideoFile(file);
-        setMediaDocId(doc.id);
-        setVideoSrc(URL.createObjectURL(file));
-        setIsPlaying(false);
-        setCurrentTime(0);
-        setDuration(0);
-      }
-    })().catch(e => console.error('handleSyncMedia failed', e));
-  }, [getMediaFile, ensureMediaFile, videoSrc]);
+    // Usar stream URL directamente — sin descargar el archivo completo
+    setVideoFile(null);
+    setMediaDocId(doc.id);
+    setVideoSrc(api.streamUrlWithToken(doc.id));
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, []);
 
   // ✅ Auto-cargar vídeo si el SRT pertenece a un proyecto
   useEffect(() => {

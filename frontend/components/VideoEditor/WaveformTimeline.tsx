@@ -141,7 +141,9 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const { extract, peaks, status: waveStatus } = useWaveformExtractor();
 
   useEffect(() => {
-    if (videoFile) extract(videoFile, mediaDocId ?? undefined);
+    if (mediaDocId || videoFile) {
+      extract(videoFile ?? null, mediaDocId ?? undefined);
+    }
   }, [videoFile, mediaDocId, extract]);
 
   // ── Viewport resize observer ──

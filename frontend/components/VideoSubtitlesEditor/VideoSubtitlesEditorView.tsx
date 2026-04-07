@@ -378,36 +378,21 @@ const lastSavedRef = useRef<string>(currentDoc.contentByLang['_unassigned'] || '
 
   const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
     useSubtitleAIOperations({
-      videoFile,
+      videoSrc,
       segments,
       onCommitSegments: (newSegs) => subsHistory.commit(newSegs),
       onCloseModal: () => setIsAIModalOpen(false),
     });
 
 const handleSyncMedia = useCallback((doc: Document) => {
-  void (async () => {
-    let file = getMediaFile(doc.id);
-
-    if (!file) {
-      try {
-        file = await ensureMediaFile(doc.id, doc.name);
-      } catch (e) {
-        console.error('ensureMediaFile failed', e);
-        return;
-      }
-    }
-
-    if (file) {
-      if (videoSrc) URL.revokeObjectURL(videoSrc);
-      setVideoFile(file);
-      setMediaDocId(doc.id);
-      setVideoSrc(URL.createObjectURL(file));
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
-    }
-  })();
-}, [getMediaFile, ensureMediaFile, videoSrc]);
+  // Usar stream URL directamente — sin descargar el archivo completo
+  setVideoFile(null);
+  setMediaDocId(doc.id);
+  setVideoSrc(api.streamUrlWithToken(doc.id));
+  setIsPlaying(false);
+  setCurrentTime(0);
+  setDuration(0);
+}, []);
 
   const handleSyncSubtitles = useCallback((doc: Document) => {
     const srtText = doc.contentByLang['_unassigned'] || Object.values(doc.contentByLang)[0] || '';

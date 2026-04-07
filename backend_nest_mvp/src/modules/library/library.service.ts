@@ -31,11 +31,11 @@ export class LibraryService {
   return doc ? { ...doc, id: doc._id.toString() } : null;
 }
 async softDeleteFolderTree(ownerId: string, rootFolderId: string) {
-  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+  const root = await this.folderModel.findOne({ _id: rootFolderId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
 
   const folders = await this.folderModel
-    .find({ ownerId, isDeleted: false }, { _id: 1, parentId: 1 })
+    .find({ isDeleted: false }, { _id: 1, parentId: 1 })
     .lean();
 
   const children = new Map<string, string[]>();
@@ -56,8 +56,8 @@ async softDeleteFolderTree(ownerId: string, rootFolderId: string) {
     for (const k of kids) queue.push(k);
   }
 
-  await this.folderModel.updateMany({ ownerId, _id: { $in: toDelete } }, { $set: { isDeleted: true } });
-  await this.docModel.updateMany({ ownerId, parentId: { $in: toDelete } }, { $set: { isDeleted: true } });
+  await this.folderModel.updateMany({ _id: { $in: toDelete } }, { $set: { isDeleted: true } });
+  await this.docModel.updateMany({ parentId: { $in: toDelete } }, { $set: { isDeleted: true } });
 
   return { deletedFolderIds: toDelete.length };
 }
@@ -103,11 +103,11 @@ async restoreFolderTree(ownerId: string, rootFolderId: string) {
 }
 
 async purgeFolderTree(ownerId: string, rootFolderId: string) {
-  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+  const root = await this.folderModel.findOne({ _id: rootFolderId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
 
   const folders = await this.folderModel
-    .find({ ownerId }, { _id: 1, parentId: 1 })
+    .find({}, { _id: 1, parentId: 1 })
     .lean();
 
   const children = new Map<string, string[]>();
@@ -129,8 +129,8 @@ async purgeFolderTree(ownerId: string, rootFolderId: string) {
   }
 
   // Borra docs del árbol y luego folders del árbol
-  await this.docModel.deleteMany({ ownerId, parentId: { $in: toDelete } });
-  const res = await this.folderModel.deleteMany({ ownerId, _id: { $in: toDelete } });
+  await this.docModel.deleteMany({ parentId: { $in: toDelete } });
+  const res = await this.folderModel.deleteMany({ _id: { $in: toDelete } });
 
   return { purgedFolderIds: res.deletedCount ?? toDelete.length };
 }
