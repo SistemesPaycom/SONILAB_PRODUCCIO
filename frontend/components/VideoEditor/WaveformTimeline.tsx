@@ -952,7 +952,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         </div>
 
         {/* Empty state */}
-        {!videoFile && (
+        {!videoFile && !mediaDocId && (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500 pointer-events-none">
             Sense àudio
           </div>
