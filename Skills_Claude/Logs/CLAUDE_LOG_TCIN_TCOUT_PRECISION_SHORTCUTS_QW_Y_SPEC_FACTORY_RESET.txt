@@ -1,0 +1,490 @@
+================================================================================
+CLAUDE LOG — PRECISIÓ TC IN/TC OUT, ATAJOS Q/W I SPEC DEL FACTORY RESET
+================================================================================
+Data/hora  : 2026-04-07
+Autor      : Claude (claude-opus-4-6) — sessió interactiva amb l'usuari
+Tasca      : Fix de precisió dels atajos TC IN/TC OUT del editor de subtítols
+             + canvi ergonòmic de defaults I/O → Q/W + disseny complet del
+             feature "Restablir configuració de fàbrica" a Settings → General,
+             amb revisió iterativa (ralph loop) i aplicació de tots els hallazgos
+================================================================================
+
+
+1. RESUM D'OBJECTIU
+───────────────────
+Aquesta sessió va començar amb dos objectius acoblats:
+
+  (a) Arreglar un bug de precisió: quan l'usuari pressiona l'atajo per marcar
+      TC IN o TC OUT del subtítol actiu mentre el vídeo es reprodueix, el
+      temps capturat queda ~250 ms per darrere de la posició visual del
+      playhead. El codi llegia de `currentTimeRef.current`, que s'actualitza
+      només dins del callback de `onTimeUpdate` nadiu del <video>, que els
+      navegadors disparen a 4-6 Hz (~150-250 ms entre ticks).
+
+  (b) Canviar els atajos per defecte de `I`/`O` a `Q`/`W` per ergonomia
+      (no requereix moure la mà).
+
+Mentre es revisava el canvi, l'usuari va identificar una conseqüència: els
+usuaris amb atajos personalitzats persistits a `localStorage` (key
+`snlbpro_shortcuts`) i/o al backend (`me.preferences.shortcuts`) NO veurien
+els nous defaults `Q`/`W` fins que fessin un reset manual.
+
+Això va obrir un segon objectiu, més gran:
+
+  (c) Dissenyar un feature "Restablir configuració de fàbrica" accessible des
+      de Settings → General, amb doble confirmació contra misclicks, que
+      permeti a l'usuari tornar la configuració a defaults en qualsevol
+      moment. El reset ha de ser "selectiu conservador": borra ajustos però
+      preserva creacions (presets d'estils, historials de versions de
+      documents, sessió activa).
+
+A petició de l'usuari, tot el disseny del feature es va passar per un cicle
+de revisió iterativa (plugin ralph-loop) que va descobrir 13 issues, 6 d'ells
+d'importància real. Tots 13 s'han integrat al spec.
+
+================================================================================
+
+
+2. FITXERS MODIFICATS / CREATS
+──────────────────────────────
+
+  ① frontend/constants.ts
+     Canvi de defaults d'atajos sub_set_tc_in i sub_set_tc_out de 'I'/'O' a 'Q'/'W'.
+
+  ② frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+     Les funcions handleSetTcIn i handleSetTcOut ara llegeixen el temps
+     directament de videoRef.current.currentTime (amb fallback al ref) per
+     precisió al microsegon. Comentari explicatiu afegit (i posteriorment
+     revisat per ser tècnicament precís — vegeu secció 5 sobre Issue 5).
+
+  ③ docs/superpowers/specs/2026-04-07-reporte-tcin-tcout.md
+     ← ja existia al inici de la sessió com a input de l'usuari (report
+     escrit per ell descrivint el bug). No modificat.
+
+  ④ docs/superpowers/specs/2026-04-07-reset-configuracio-frontend.md
+     ← FITXER NOU (654 línies). Spec complet del feature Factory Reset,
+     amb totes les decisions arquitectòniques i de UX, i amb els 13
+     issues del ralph loop ja integrats.
+
+  ⑤ docs/superpowers/specs/reviews/2026-04-07-ralph-findings.md
+     ← FITXER NOU. Informe complet del ralph loop de 8 iteracions amb
+     tots els hallazgos, classificats per severitat i angle de revisió.
+     Font de veritat sobre per què el spec té la forma que té.
+
+  ⑥ Skills_Claude/Logs/CLAUDE_LOG_TCIN_TCOUT_PRECISION_SHORTCUTS_QW_Y_SPEC_FACTORY_RESET.txt
+     ← aquest fitxer.
+
+================================================================================
+
+
+3. CANVIS DETALLATS — FASE A (CODI APLICAT)
+────────────────────────────────────────────
+
+① frontend/constants.ts — líneas 92-93
+
+   ABANS:
+     { id: 'sub_set_tc_in',  action: 'SET_TC_IN',  label: '...', combo: 'I' },
+     { id: 'sub_set_tc_out', action: 'SET_TC_OUT', label: '...', combo: 'O' },
+
+   DESPRÉS:
+     { id: 'sub_set_tc_in',  action: 'SET_TC_IN',  label: '...', combo: 'Q' },
+     { id: 'sub_set_tc_out', action: 'SET_TC_OUT', label: '...', combo: 'W' },
+
+   Verificat: no hi ha col·lisions amb altres combos 'Q' o 'W' a cap secció
+   de DEFAULT_SHORTCUTS (general, scriptEditor, videoEditor, subtitlesEditor).
+
+   Verificat: la protecció contra captura de tecles dins de inputs/textarea
+   a frontend/hooks/useKeyboardShortcuts.ts:58 ja cobreix Q i W idènticament
+   a com cobria I i O (la guarda és per longitud de keyName, no per valor
+   concret).
+
+② frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+   líneas 838-868
+
+   ABANS:
+     const handleSetTcIn = useCallback(() => {
+       if (!isEditing || !activeSegmentId) return;
+       const t = currentTimeRef.current;
+       // ...
+     }, [...]);
+
+     const handleSetTcOut = useCallback(() => {
+       if (!isEditing || !activeSegmentId) return;
+       const t = currentTimeRef.current;
+       // ...
+     }, [...]);
+
+   DESPRÉS (ambdues funcions):
+     const t = videoRef.current ? videoRef.current.currentTime : currentTimeRef.current;
+
+   Amb comentari tècnic precís (revisat al Issue 5 del ralph loop):
+     // Lectura directa del <video> per evitar el lag del ref: currentTimeRef
+     // només s'actualitza dins del callback d'onTimeUpdate, que els navegadors
+     // disparen a ~4-6 Hz (~150-250 ms entre ticks). En un keypress arbitrari
+     // això fa que el ref pugui estar fins a ~250 ms per darrere del playhead
+     // real. Llegint directament de l'element HTML5 obtenim el valor al
+     // microsegon. Fallback al ref si encara no hi ha vídeo muntat.
+
+   Deps de useCallback no modificades — els refs són estables per contracte
+   i no cal afegir-los. Patró consistent amb la resta del fitxer (onSeek a
+   línia 669-676 ja usa videoRef de la mateixa manera).
+
+   Verificat amb `tsc --noEmit` que els canvis no introdueixen errors de
+   tipus nous (els 6 errors que apareixen a la sortida són preexistents en
+   altres fitxers no tocats).
+
+================================================================================
+
+
+4. CANVIS DETALLATS — FASE B (SPEC DEL FACTORY RESET)
+──────────────────────────────────────────────────────
+
+El spec va néixer d'una sessió de brainstorming estructurada usant la skill
+superpowers:brainstorming. Es van fer 4 preguntes clau a l'usuari per
+tancar el disseny:
+
+  Q1. Abast del reset: (A) només cliente / (B) cliente + backend /
+      (C) cliente + backend + historials locals
+      → Triat: (B) amb sub-variant "selectiva conservadora" per preservar
+      presets d'estils tipogràfics de l'usuari.
+
+  Q2. Patró de doble confirmació: (α) dos modals encadenats /
+      (β) un modal amb checkbox bloquejant / (γ) confirmació tipogràfica
+      → Triat: (β).
+
+  Q3. Reset del tema: (i) esborrar tot / (ii) preservar themeId, esborrar
+      tokens custom / (iii) no tocar res del tema
+      → Triat: (ii).
+
+  Q4. [implícita] Reset dels presets d'estils de l'usuari
+      → NO es toca (decisió forta per evitar destruir treball creatiu).
+
+El spec resultant tenia aquesta estructura (335 línies al principi):
+  - Secció 1: Objectiu
+  - Secció 2: Decisions cerrades al brainstorming
+  - Secció 3: Què es restableix i què es preserva
+  - Secció 4: Arquitectura (mòduls afectats + API de factoryReset.ts)
+  - Secció 5: Flux d'execució (pas 1-4)
+  - Secció 6: UI (tarjeta + modal)
+  - Secció 7: Edge cases
+  - Secció 8: Coses que NO es fan
+  - Secció 9: Pla de testing manual
+  - Secció 10: Dominis afectats
+  - Secció 11: Referències al codi
+  - Annex: motivació
+
+Fitxers afectats inicialment previstos (Fase B original):
+  - frontend/utils/factoryReset.ts (NOU, ~60 línies)
+  - frontend/components/SettingsModal.tsx (+~120 línies)
+  - frontend/App.tsx (+~25 línies)
+  - Skills_Claude/domain-localstorage.md (+~5 línies)
+
+================================================================================
+
+
+5. REVISIÓ ITERATIVA — RALPH LOOP DE 8 ITERACIONS
+──────────────────────────────────────────────────
+
+A petició de l'usuari ("use el plugin de ralph múltiples veces para que
+utilice el plugin de code-review y/o superpowers debug para localizar
+cualquier posible desviación o bug durant el proceso"), es va llançar el
+plugin ralph-loop amb --max-iterations=8 per a revisió sistemàtica del
+spec i del codi de Fase A.
+
+La configuració del loop incluïa:
+  - Fitxer d'estat compartit: docs/superpowers/specs/reviews/2026-04-07-ralph-findings.md
+  - Llista de 10 angles de revisió (A1..A10) a triar un per iteració sense repetir
+  - Condicions de convergència: ≥6 angles coberts + últims 2 iters només minor/zero issues
+  - Promise de completació: <promise>REVIEW COMPLETE</promise>
+
+Angles coberts durant les 8 iteracions:
+
+  Iter 1 - Angle A4: Inventari de keys snlbpro_* no cobertes pel spec
+           → 2 issues (1 important, 1 minor):
+             • Issue 1 (important): sonilab_guion_<docId> keys no mencionades
+             • Issue 2 (minor): sonilab_token key no especificada explícitament
+
+  Iter 2 - Angle A5: Inventari de contextos React que inicialitzen de localStorage
+           → 2 issues (ambdós important):
+             • Issue 3: Llista de contextos incompleta al spec (6 + 9 components, no 3)
+             • Issue 4: Race condition intra-tab entre removeItem i reload
+
+  Iter 3 - Angle A1: systematic-debugging sobre el codi de Fase A
+           → 1 issue (minor):
+             • Issue 5: Comentari de handleSetTcIn tècnicament imprecís
+
+  Iter 4 - Angle A6: Verificació backend (altres writers de preferences)
+           → CLEAN (cap issue trobat) — el backend té un sol write path
+
+  Iter 5 - Angle A7: Race conditions i multi-pestanya
+           → 1 issue (important):
+             • Issue 6: Multi-pestanya no contemplada; altres tabs poden desfer el reset
+
+  Iter 6 - Angle A8: Edge cases del modal i del flux
+           → 4 issues (2 important, 2 minor):
+             • Issue 7 (important): Cambios sense desar es poden perdre silenciosament
+             • Issue 8 (important): Contradicció al spec sobre estat del botó Cancel·lar
+             • Issue 9 (minor): sessionStorage.setItem sense try/catch
+             • Issue 10 (minor): Fals negatiu del backend check
+
+  Iter 7 - Angle A3: Verificació de referències a codi del spec
+           → 1 issue (minor consolidat):
+             • Issue 11: 3 refs de línia desfasades + 1 ref semànticament confusa
+
+  Iter 8 - Angle A9: Coherència interna del spec
+           → 2 issues (ambdós minor):
+             • Issue 12: Drift terminològic toast vs banner
+             • Issue 13: Nom KEYS_TO_REMOVE referenciat però mai definit
+
+Angles NO coberts (per límit de 8 iteracions):
+  - A2: Code-review formal de Fase A (redundant amb A1)
+  - A10: Migració inversa (conceptual, baixa probabilitat de descobrir algo nou)
+
+Convergència: a iter 8, ambdues condicions complertes (≥6 angles, últims
+2 iters només minors). Emès <promise>REVIEW COMPLETE</promise>.
+
+TOTAL: 13 issues trobats (6 important, 7 minor, 0 critical).
+
+================================================================================
+
+
+6. APLICACIÓ DELS 13 ISSUES AL SPEC (OPCIÓ 2: PROFESSIONAL I SEGURA)
+─────────────────────────────────────────────────────────────────────
+
+L'usuari va triar aplicar els 13 issues amb decisions explícites sobre els
+3 que tenien múltiples opcions de fix:
+
+  Pregunta A (Issue 6 — multi-tab): opció B (BroadcastChannel) +
+             addició d'aviso informatiu al modal recomanant tancar altres
+             pestanyes (belt-and-suspenders).
+
+  Pregunta B (Issue 7 — unsaved changes): opció A (check history.isDirty
+             al handler del Reset amb sub-modal de confirmació Desar/
+             Continuar sense desar/Cancel·lar). Queda explícitament FORA
+             del scope la millora transversal (beforeunload global).
+
+  Pregunta C (Issue 10 — fals negatiu): opció B (verificar via api.me()
+             post-reload abans de mostrar el banner).
+
+L'execució es va estructurar en 4 fases amb TodoWrite:
+
+FASE 1 — Codi (Issue 5 aplicat a Fase A)
+  ✓ Comentari de handleSetTcIn reformulat a VideoSubtitlesEditorView.tsx
+
+FASE 2 — Spec, issues important (6 issues)
+  ✓ Issue 4: Secció 5 reescrita com Fase A (pre-reload) + Fase B
+             (post-reload pre-render). La neteja de localStorage es fa
+             dins d'applyPendingFactoryReset() invocat a frontend/index.tsx
+             abans del ReactDOM.createRoot().render(<App/>). Elimina la
+             race condition intra-tab completament.
+
+  ✓ Issue 6: Nou sub-apartat "Multi-pestanya" a la secció 5 amb listener
+             BroadcastChannel 'snlbpro-factory-reset' a App.tsx. Sub-tab
+             receptores fan window.location.reload() automàticament. A
+             més, avís informatiu dins del modal recomanant a l'usuari
+             tancar altres pestanyes manualment (redundancy).
+
+  ✓ Issue 7: Sub-modal de confirmació addicional a la secció 6.2 si
+             history.isDirty === true. Tres opcions: Desar/Continuar
+             sense desar/Cancel·lar. Requereix exposar un history.isDirty
+             global al SettingsModal via ref window.__sonilabIsDirtyRef
+             o equivalent (decisió d'implementació menor deferit).
+
+  ✓ Issue 8: Secció 6.2 reescrita amb 3 estats clarament separats
+             (inicial / checkbox marcat / in-flight) i taula explícita
+             de mecanismes bloquejats durant in-flight (Cancel, Escape,
+             backdrop, X). Raó documentada: evitar estats inconsistents
+             per cancel·lació parcial.
+
+  ✓ Issue 3: Secció 5 "Per què la recàrrega és obligatòria" ampliada
+             a 6 contextos + 9 components (des dels 3 originals del
+             spec). Referències concretes a TranscriptionContext,
+             TranslationContext, UserStylesContext i als components.
+
+  ✓ Issue 1: Secció 3.2 ampliada amb sonilab_guion_<docId> a la llista
+             de preservats i nota crítica explicant l'existència de dos
+             prefixes paral·lels (snlbpro_ i sonilab_) i per què això
+             descarta tot prefix scan.
+
+FASE 3 — Spec, issues minor (6 issues)
+  ✓ Issue 2: sonilab_token explícit a la taula de preservats amb
+             referencia a api.ts:8.
+
+  ✓ Issue 9: Tots els sessionStorage.setItem/getItem/removeItem del
+             pseudocode envoltats en try/catch.
+
+  ✓ Issue 10: El useEffect del banner post-reload ara fa api.me() i
+              comprova que profile.preferences.shortcuts està realment
+              a null abans de mostrar el banner. Suprimeix falsos
+              negatius (request processat al backend però response
+              perduda pel reload).
+
+  ✓ Issue 11: Secció 11 "Referències al codi" corregida:
+              - AuthContext.tsx:25-48 (era 30-48)
+              - users.service.ts:59-80 (era 59-79)
+              - SettingsModal.tsx:133-320 (era 133-322)
+              - SettingsModal.tsx:736 reformulat a "entre L735 i L736"
+              + afegides 5 referències noves a fitxers descoberts.
+
+  ✓ Issue 12: Totes les ocurrències de "toast" a seccions 7 i 9.2
+              substituïdes per "banner" (coherència amb secció 5 pas 4).
+
+  ✓ Issue 13: La llista de keys a la secció 4.2 ara té nom explícit
+              KEYS_TO_REMOVE: readonly string[] amb les constants
+              PENDING_FLAG, WARN_FLAG, BC_CHANNEL també nomenades.
+
+FASE 4 — Self-review final
+  ✓ Detectades i arreglades 2 inconsistències residuals:
+    - El listener de BroadcastChannel usava string literal en lloc de
+      la constant PENDING_FLAG. Corregit amb import explícit des de
+      factoryReset.ts.
+    - Secció 2 no registrava les decisions del ralph loop. Afegida
+      subsecció 2.2 amb les 5 decisions noves (inversió del flux,
+      BroadcastChannel, isDirty, cancel bloqueado, api.me verification).
+  ✓ Secció 8 "Coses que NO es fan" ampliada amb 4 cláusules addicionals
+    per reflectir el scope post-loop (no beforeunload global, no listeners
+    de storage als 3 contextos, no modularitzar KEYS_TO_REMOVE, no tocar
+    keys explícitament preservades).
+  ✓ Cap referència residual al flux antic (grep de "pas 1 —", "pas 2 —",
+    "toast" confirma).
+
+Estat final del spec:
+  - 654 línies (des de 335 originals)
+  - 13 issues resolts (0 pendents)
+  - 5 fitxers afectats (era 3 — afegit frontend/index.tsx i el separat
+    entre factoryReset.ts i SettingsModal.tsx)
+  - 11 casos de test manual (era 7) — afegits multi-tab, isDirty,
+    cancel-blocked, sessionStorage-disabled
+
+================================================================================
+
+
+7. DECISIONS ARQUITECTÒNIQUES CLAU DEL SPEC FINAL
+──────────────────────────────────────────────────
+
+  • BLOCKLIST ESTRICTA: el reset usa una llista explícita (KEYS_TO_REMOVE)
+    en lloc d'un prefix scan. Raó: el codebase té dos prefixes paral·lels
+    (snlbpro_ i sonilab_), i un prefix scan en qualsevol dels dos faria
+    mal (el de snlbpro_ deixaria escapar sonilab_*, el de sonilab_
+    esborraria el token d'auth i tancaria sessió).
+
+  • DIVISIÓ EN DUES FASES: factoryReset() (Fase A, pre-reload) només
+    toca backend, notifica altres pestanyes i marca un flag. La neteja
+    de localStorage es fa a applyPendingFactoryReset() (Fase B), invocat
+    a frontend/index.tsx ABANS del ReactDOM.createRoot().render().
+    Això elimina la race condition on els useEffect de persistència
+    (TranscriptionContext, TranslationContext) podien re-escriure keys
+    durant la finestra entre removeItem i reload.
+
+  • MULTI-PESTANYA VIA BROADCASTCHANNEL: patró ja present al codebase
+    (VideoSubtitlesEditorView.tsx:586, ScriptExternalView.tsx:52) per
+    al sync de guió entre finestres. Reutilitzat aquí amb un canal nou
+    'snlbpro-factory-reset'. Les tabs germanes reben el missatge i es
+    recarreguen automàticament, agafant els defaults nets post-Fase B.
+
+  • PRESERVACIÓ DEL TREBALL CREATIU DE L'USUARI: els presets d'estils
+    tipogràfics (me.preferences.userStyles al backend, snlbpro_user_styles_
+    a localStorage) i els historials de versions dels documents
+    (snlbpro_versions_<docId>) es preserven explícitament. Raó: poden
+    ser hores de feina de l'usuari que el botó "Restablir configuració"
+    no hauria de destruir.
+
+  • PRESERVACIÓ DEL THEMEID: només es neteja la paleta custom
+    (customThemeTokens) però es preserva el themeId bàsic. L'usuari
+    que tenia tema "Oscur" seleccionat segueix en "Oscur" després del
+    reset — només perd les personalitzacions fines.
+
+  • RESET ≠ LOGOUT: el token d'auth (sonilab_token) no es toca. L'usuari
+    segueix logueat després del reset.
+
+  • PROTECCIÓ CONTRA PÈRDUA DE FEINA SENSE DESAR: abans d'iniciar el
+    reset, el handler comprova history.isDirty global. Si true, es
+    desvia a un sub-modal de confirmació addicional.
+
+  • MECANISMES DE CANCEL·LACIÓ BLOQUEJATS DURANT IN-FLIGHT: una vegada
+    l'usuari clica "Restablir configuració", tots els mecanismes de
+    sortida (Cancel·lar, Escape, backdrop click, X) queden desactivats
+    fins que el reload es dispari. Evita estats inconsistents per
+    cancel·lació parcial.
+
+  • VERIFICACIÓ POST-RELOAD: el useEffect del banner no confia cegament
+    en el flag WARN — fa api.me() i verifica que el backend realment
+    NO té les preferències nullades abans de mostrar el banner. Evita
+    falsos negatius (request processat però response perduda).
+
+================================================================================
+
+
+8. SKILLS I EINES UTILITZADES
+──────────────────────────────
+
+  - superpowers:systematic-debugging (Phase 1 root cause investigation
+    del codi de Fase A)
+  - superpowers:brainstorming (disseny estructurat del spec amb 4
+    preguntes clau per arribar al disseny)
+  - ralph-loop:ralph-loop (revisió iterativa de 8 iteracions amb
+    convergència automàtica)
+  - TodoWrite (seguiment del progrés de les 4 fases durant l'aplicació
+    dels 13 issues)
+
+================================================================================
+
+
+9. PENDENT PER A LA PRÒXIMA SESSIÓ
+───────────────────────────────────
+
+Aquest log es commiteja com a part d'una tanda de 3 commits separats:
+
+  Commit 1: Fase A (TC IN/OUT fix + canvi defaults Q/W + comentari
+            actualitzat post-Issue 5)
+            - frontend/constants.ts
+            - frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+
+  Commit 2: Spec del Factory Reset + informe del ralph loop + aquest log
+            - docs/superpowers/specs/2026-04-07-reset-configuracio-frontend.md
+            - docs/superpowers/specs/reviews/2026-04-07-ralph-findings.md
+            - Skills_Claude/Logs/CLAUDE_LOG_TCIN_TCOUT_PRECISION_SHORTCUTS_QW_Y_SPEC_FACTORY_RESET.txt
+
+  Commit 3: (opcional/diferit) Actualització del domain-user-styles.md
+            per documentar que el factory reset preserva els presets
+            (si s'escau).
+
+Després dels commits, la sessió pot continuar amb:
+
+  - Invocar la skill superpowers:writing-plans per convertir el spec
+    revisat en un pla d'implementació executable pas a pas.
+  - O bé pausar aquí i tornar a obrir el tema en una sessió futura
+    llegint aquest log + el spec actualitzat com a context.
+
+================================================================================
+
+
+10. REFERÈNCIES A FITXERS DEL PROJECTE
+───────────────────────────────────────
+
+Context original de l'usuari:
+  docs/superpowers/specs/2026-04-07-reporte-tcin-tcout.md
+
+Spec final del Factory Reset:
+  docs/superpowers/specs/2026-04-07-reset-configuracio-frontend.md
+
+Informe del ralph loop amb els 13 issues:
+  docs/superpowers/specs/reviews/2026-04-07-ralph-findings.md
+
+Fitxers de codi modificats (Fase A):
+  frontend/constants.ts (L92-93)
+  frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx
+    (L838-868 — handleSetTcIn i handleSetTcOut)
+
+Fitxers que es modificarien en la Fase B (no aplicada encara, pendent
+de la implementació post-spec):
+  frontend/utils/factoryReset.ts (NOU, ~100 línies)
+  frontend/index.tsx (+~10 línies per applyPendingFactoryReset)
+  frontend/components/SettingsModal.tsx (+~160 línies — tarjeta, modal,
+    sub-modal isDirty, handler amb check)
+  frontend/App.tsx (+~50 línies — state, effect, banner, listener BC)
+  Skills_Claude/domain-localstorage.md (+~5 línies — pas 6 a la guia)
+
+================================================================================
+FI DEL LOG
+================================================================================
