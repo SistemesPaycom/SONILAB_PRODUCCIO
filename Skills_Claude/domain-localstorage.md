@@ -13,7 +13,10 @@ El prefijo anterior era `slsf_`. Las claves antiguas en browsers de desarrollo s
 export const LOCAL_STORAGE_KEYS = {
   SHORTCUTS:            'snlbpro_shortcuts',
   EDITOR_STYLES:        'snlbpro_editor_styles',  // DEPRECATED — solo lectura para migración legacy
-  LIBRARY_WIDTH:        'snlbpro_library_width',
+  LIBRARY_WIDTH:            'snlbpro_library_width',
+  LIBRARY_NAME_COL_WIDTH:   'snlbpro_library_name_col_width',
+  LIBRARY_FORMAT_COL_WIDTH: 'snlbpro_library_format_col_width',
+  LIBRARY_DATE_COL_WIDTH:   'snlbpro_library_date_col_width',
   TAKE_MARGIN:          'snlbpro_take_margin',
   TAKE_START_MARGIN:    'snlbpro_take_start_margin',
   MAX_LINES_SUBS:       'snlbpro_max_lines_subs',
