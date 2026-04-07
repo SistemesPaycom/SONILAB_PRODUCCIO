@@ -68,10 +68,10 @@ El parpadeig de la commit anterior va ser causat per `useImportantStyleRef` (cal
 
 | Fitxer | Tipus de canvi | Línies aprox. |
 |--------|----------------|---------------|
-| `frontend/components/Library/SonilabLibraryView.tsx` | (a) Eliminar `text-white`/`text-gray-200` dels 4 botons navTabs. (b) Afegir `color: 'var(--us-home-navtabs-color)'` als 4 inline styles. (c) Canviar el `color` del wrapper del breadcrumb a `var(--us-home-breadcrumb-color)`. (d) Eliminar `text-gray-200`/`text-gray-400` de les migues del breadcrumb. (e) Canviar el `color` del header de taula a `var(--us-home-tableheader-color)`. | ~744-810, ~913, ~932-934, ~949 |
+| `frontend/components/Library/SonilabLibraryView.tsx` | (a) Eliminar `text-white`/`text-gray-200` dels 4 botons navTabs. (b) Afegir `color: 'var(--us-home-navtabs-color)'` als 4 inline styles. (c) Canviar el `color` del wrapper del breadcrumb a `var(--us-home-breadcrumb-color)`. (d) Eliminar `text-gray-200`/`text-gray-400` de les migues del breadcrumb. (e) Eliminar `text-gray-500` del separador `/` entre migues (línia 925). (f) Canviar el `color` del header de taula a `var(--us-home-tableheader-color)`. | ~744-810, ~913, ~925, ~932-934, ~949 |
 | `frontend/components/Settings/UserStyles/StyleAtomEditor.tsx` | Eliminar la prop `hideColor` i el placeholder buit. Render uniforme amb 4 columnes. | tot el fitxer |
 | `frontend/components/Settings/UserStyles/HomeStylesPanel.tsx` | Eliminar `hideColor: true` de les 3 files. | línies 17-19 |
-| `frontend/components/Settings/UserStyles/HomeStylePreview.tsx` | Verificar que la preview reflecteix bé els colors (probablement ja funciona). | només lectura/ajust si cal |
+| `frontend/components/Settings/UserStyles/HomeStylePreview.tsx` | **Eliminar els overrides hardcodejats** del helper `cellStyle` per als 3 elements: `'#ffffff'` i `'#e5e7eb'` als 3 spans de navtabs (línies 26-28), `'var(--th-text-secondary)'` al breadcrumb (línia 30), `'var(--th-text-muted)'` al tableheader (línia 33). Després del canvi, la preview reflectirà el color real del preset. També actualitzar el comentari del header del fitxer (línies 4-12) que actualment diu que aquests 3 elements "llegeixen el color del tema admin a la UI real" — ja no és cert. | línies 4-12, 26-33 |
 
 **Fitxers explícitament NO tocats** (per evitar reintroduir el parpadeig):
 - `frontend/context/UserStyles/UserStylesContext.tsx`
@@ -162,6 +162,11 @@ Demanar a l'usuari que executi el snippet del MutationObserver al seu entorn amb
 - Suport per a "color actiu vs inactiu" diferenciat.
 - Animacions de transició quan canvia el color.
 - Validació de contrast WCAG.
+
+## 10.1 Limitacions conegudes (no són bugs)
+
+- **Emojis no canvien de color**: els botons `Projectes` (📌) i `Media` (🎞️) usen emojis Unicode. El `color` CSS no afecta els emojis natius — sempre es renderitzen amb els seus colors propis del sistema. Només els icons SVG (`Files`/`Folder`, `Paperera`/`Trash`) canvien de color via `currentColor`. **Aquesta és una limitació visual coneguda i no s'ha de tractar com un bug**. Si en el futur cal coherència visual, els emojis s'haurien de substituir per icons SVG dedicats — fora de l'abast d'aquest spec.
+- **`font-black` de la miga activa del breadcrumb**: la última miga (no clickable) té la classe Tailwind `font-black` (peso 900) hardcodejada per diferenciar-la visualment de les inactives. Aquesta classe sobreescriu el `font-weight` heretat del wrapper. Conseqüència: si l'usuari activa "Negreta" al preset (peso 700), els inactius seran 700 i l'activa 900 — la diferència segueix sent visible. Si l'usuari desactiva "Negreta" (peso 400), els inactius seran 400 i l'activa 900 — diferència més marcada. Ambdós escenaris són correctes; **no cal eliminar `font-black`** perquè el comportament és coherent amb el principi de diferenciació actiu/inactiu pel pes.
 
 ## 11. Criteris d'acceptació
 
