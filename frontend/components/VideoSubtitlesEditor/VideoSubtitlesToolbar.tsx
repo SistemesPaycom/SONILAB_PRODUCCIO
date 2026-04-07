@@ -44,6 +44,7 @@ interface VideoSubtitlesToolbarProps {
     onRedo?: () => void;
     canUndo?: boolean;
     canRedo?: boolean;
+
 }
 
 const ControlButton: React.FC<{ onClick: () => void; title: string; children: React.ReactNode; className?: string; disabled?: boolean }> = (props) => (

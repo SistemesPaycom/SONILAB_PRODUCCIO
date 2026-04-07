@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Segment, Id, TimelineViewMode } from '../../types';
 import { useWaveformExtractor } from '../../hooks/useWaveformExtractor';
+import { LOCAL_STORAGE_KEYS } from '../../constants';
 import * as Icons from '../icons';
 import {
   DownloadIcon,
@@ -57,7 +58,17 @@ const MAX_ZOOM = 500;
 const DEFAULT_ZOOM = 100;
 
 // Segment interaction constants
-const HOLD_MS = 500;           // ms threshold for long-press to arm drag
+/** Read hold-ms from localStorage; clamp 0–2000, fallback 500 */
+function getHoldMs(): number {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS);
+    if (raw == null) return 500;
+    const parsed = JSON.parse(raw);
+    const n = typeof parsed === 'number' ? parsed : Number(parsed);
+    if (!Number.isFinite(n)) return 500;
+    return Math.max(0, Math.min(2000, n));
+  } catch { return 500; }
+}
 const EDGE_HIT_PX = 8;        // pixels from segment edge for resize hit zone
 const MIN_SEG_DURATION = 0.1;  // minimum segment duration in seconds
 const RULER_H = 22;            // height of the timecode ruler strip at top of canvas
@@ -575,7 +586,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
                 : 'move';
             const sc = scrollRef.current;
             if (sc) sc.style.cursor = zone === 'body' ? 'grabbing' : 'col-resize';
-          }, HOLD_MS);
+          }, getHoldMs());
         }
       }
       // Don't seek on mouseDown — decision happens on mouseUp
@@ -691,7 +702,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       // Short click → select segment + seek on mouseUp (only if no drag occurred)
       if (!wasArmed && !wasSeekDrag && e) {
         const elapsed = performance.now() - mouseDownTsRef.current;
-        if (elapsed < HOLD_MS) {
+        if (elapsed < getHoldMs()) {
           // If the short click was on a segment, select it now (triggers parent seek too)
           if (dragSegIdRef.current) {
             onSegmentClick?.(dragSegIdRef.current);

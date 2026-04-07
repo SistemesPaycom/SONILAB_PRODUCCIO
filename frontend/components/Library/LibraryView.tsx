@@ -80,6 +80,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [isRenameModalOpen, setRenameModalOpen] = useState(false);
 const [renameValue, setRenameValue] = useState('');
 const [page, setPage] = useState<'library'|'media'|'projects'>('library');
+  const [projectFolderIds, setProjectFolderIds] = useState<Set<string>>(new Set());
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [nameColWidth, setNameColWidth] = useState(200);
@@ -114,6 +115,16 @@ const goTrash = () => {
   // page lo dejamos igual o lo puedes resetear si quieres:
   // setPage('library');
 };
+
+  // Fetch project folder IDs from the backend when the projects tab is active
+  useEffect(() => {
+    if (!useBackend || page !== 'projects') return;
+    api.listProjects()
+      .then((projects) => {
+        setProjectFolderIds(new Set((projects || []).map((p: any) => p.folderId).filter(Boolean)));
+      })
+      .catch(() => {});
+  }, [useBackend, page]);
 
   const handleResizeNameMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -266,7 +277,19 @@ setUploadProgress(null);
   const ids = Array.from(state.selectedIds).map((v) => String(v));
 
   if (!useBackend) {
-    dispatch({ type: 'PERMANENTLY_DELETE_ITEMS', payload: { itemIds: ids } });
+    // Cascade soft delete to all descendants of selected folders
+    const allIds = new Set<string>(ids);
+    const queue = ids.filter((id) => state.folders.some((f) => f.id === id));
+    while (queue.length) {
+      const cur = queue.shift()!;
+      for (const f of state.folders.filter((f) => f.parentId === cur && !f.isDeleted)) {
+        allIds.add(f.id); queue.push(f.id);
+      }
+      for (const d of state.documents.filter((d) => d.parentId === cur && !d.isDeleted)) {
+        allIds.add(d.id);
+      }
+    }
+    dispatch({ type: 'DELETE_ITEMS', payload: { itemIds: Array.from(allIds) } });
     return;
   }
 
@@ -275,8 +298,8 @@ setUploadProgress(null);
     const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
 
     await Promise.all([
-      ...folderIds.map((id) => api.purgeFolder(id)),
-      ...docIds.map((id) => api.purgeDocument(id)),
+      ...folderIds.map((id) => api.deleteFolder(id)),
+      ...docIds.map((id) => api.deleteDocument(id)),
     ]);
 
     await reloadTree();
@@ -286,7 +309,19 @@ setUploadProgress(null);
   const ids = Array.from(state.selectedIds).map((v) => String(v));
 
   if (!useBackend) {
-    dispatch({ type: 'RESTORE_ITEMS', payload: { itemIds: ids } });
+    // Cascade restore to all descendants of selected folders
+    const allIds = new Set<string>(ids);
+    const queue = ids.filter((id) => state.folders.some((f) => f.id === id));
+    while (queue.length) {
+      const cur = queue.shift()!;
+      for (const f of state.folders.filter((f) => f.parentId === cur && f.isDeleted)) {
+        allIds.add(f.id); queue.push(f.id);
+      }
+      for (const d of state.documents.filter((d) => d.parentId === cur && d.isDeleted)) {
+        allIds.add(d.id);
+      }
+    }
+    dispatch({ type: 'RESTORE_ITEMS', payload: { itemIds: Array.from(allIds) } });
     return;
   }
 
@@ -305,6 +340,7 @@ setUploadProgress(null);
   
   const handlePermanentDeleteConfirmed = () => {
   const ids = Array.from(state.selectedIds).map((v) => String(v));
+  console.log('[purge] handler invoked, ids:', ids);
 
   if (!useBackend) {
     dispatch({ type: 'PERMANENTLY_DELETE_ITEMS', payload: { itemIds: ids } });
@@ -314,13 +350,19 @@ setUploadProgress(null);
   void (async () => {
     const folderIds = ids.filter((id) => state.folders.some((f) => f.id === id));
     const docIds = ids.filter((id) => state.documents.some((d) => d.id === id));
+    console.log('[purge] folderIds:', folderIds, 'docIds:', docIds);
 
-    await Promise.all([
-      ...folderIds.map((id) => api.purgeFolder(id)),
-      ...docIds.map((id) => api.purgeDocument(id)),
-    ]);
-
-    await reloadTree();
+    try {
+      await Promise.all([
+        ...folderIds.map((id) => api.purgeFolder(id)),
+        ...docIds.map((id) => api.purgeDocument(id)),
+      ]);
+      console.log('[purge] API calls succeeded, reloading tree');
+      await reloadTree();
+      dispatch({ type: 'SET_VIEW', payload: 'trash' });
+    } catch (err) {
+      console.error('[purge] error during purge:', err);
+    }
   })();
 };
   const breadcrumbs = React.useMemo(() => {
@@ -420,9 +462,8 @@ const itemsToRender = currentItems.filter((item) => {
     );
   }
 
-  if (page === 'projects') {
-    const st = ((item as any).sourceType || '').toLowerCase();
-    return item.type === 'document' && (st === 'srt' || item.name.toLowerCase().endsWith('.srt'));
+  if (page === 'projects' && state.currentFolderId === null) {
+    return item.type === 'folder' && projectFolderIds.has(item.id);
   }
 
   return true;
@@ -464,10 +505,10 @@ const itemsToRender = currentItems.filter((item) => {
     className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2
       ${(view === 'library' && page === 'projects') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 justify-center !p-0' : ''}`}
-    title="Proyectos"
+    title="Projectes"
   >
     <span>📌</span>
-    <span className={isCollapsed ? 'hidden' : 'inline'}>Proyectos</span>
+    <span className={isCollapsed ? 'hidden' : 'inline'}>Projectes</span>
   </button>
 
   <button
@@ -501,7 +542,7 @@ const itemsToRender = currentItems.filter((item) => {
   </button>
 )}
                             {view === 'library' && (
-                                <button onClick={() => setShowPermanentDeleteConfirm(true)} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Esborrar permanentment">
+                                <button onClick={handleDeleteSelected} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2" title="Mou a paperera">
                                     <Icons.Trash /><span>{`Esborrar (${selectedIds.size})`}</span>
                                 </button>
                             )}

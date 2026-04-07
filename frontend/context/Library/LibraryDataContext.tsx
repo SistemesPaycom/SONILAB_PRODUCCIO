@@ -343,15 +343,20 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const reloadTree = async () => {
-    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
+    const previousFolderId = state.currentFolderId;
     const tree = await api.getTree();
+    const normalizedFolders = (tree.folders || []).map(normalizeFolder);
+    const folderStillExists =
+      previousFolderId !== null &&
+      normalizedFolders.some(f => f.id === previousFolderId && !f.isDeleted);
     dispatch({
       type: 'SET_INITIAL_STATE',
       payload: {
         ...initialState,
-        folders: (tree.folders || []).map(normalizeFolder),
+        folders: normalizedFolders,
         documents: (tree.documents || []).map(normalizeDocument),
         selectedIds: new Set(),
+        currentFolderId: folderStillExists ? previousFolderId : null,
       },
     });
   };
@@ -390,8 +395,9 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const currentItems = useMemo(() => {
     const { folders, documents, currentFolderId, view, sortBy, sortOrder } = state;
     const isTrash = view === 'trash';
-    const filteredFolders = folders.filter(f => f.isDeleted === isTrash && (isTrash || f.parentId === currentFolderId));
-    const filteredDocs = documents.filter(d => d.isDeleted === isTrash && (isTrash || d.parentId === currentFolderId));
+    const deletedFolderIds = isTrash ? new Set(folders.filter(f => f.isDeleted).map(f => f.id)) : null;
+    const filteredFolders = folders.filter(f => f.isDeleted === isTrash && (isTrash || f.parentId === currentFolderId) && (!isTrash || !deletedFolderIds!.has(f.parentId!)));
+    const filteredDocs = documents.filter(d => d.isDeleted === isTrash && (isTrash || d.parentId === currentFolderId) && (!isTrash || !deletedFolderIds!.has(d.parentId!)));
     const combined: LibraryItem[] = [...filteredFolders, ...filteredDocs];
     combined.sort((a, b) => {
       if (a.type === 'folder' && b.type === 'document') return -1;

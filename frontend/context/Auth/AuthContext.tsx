@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, getToken, setToken } from '../../services/api';
+import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS, mergeShortcuts } from '../../constants';
 
 export type AuthReason = 'login' | 'expired';
 
@@ -29,6 +30,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const profile = await api.me();
       setMe(profile);
+      // Hidratar dreceres des de preferences del backend (prioritat sobre localStorage)
+      if (profile.preferences?.shortcuts) {
+        const merged = mergeShortcuts(DEFAULT_SHORTCUTS, profile.preferences.shortcuts);
+        localStorage.setItem(LOCAL_STORAGE_KEYS.SHORTCUTS, JSON.stringify(merged));
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: LOCAL_STORAGE_KEYS.SHORTCUTS,
+          newValue: JSON.stringify(merged),
+          storageArea: localStorage,
+        }));
+      }
       // Notificar ThemeProvider (que està fora d'AuthProvider) amb les preferències
       window.dispatchEvent(new CustomEvent('USER_PROFILE_LOADED', { detail: profile }));
     } catch {
