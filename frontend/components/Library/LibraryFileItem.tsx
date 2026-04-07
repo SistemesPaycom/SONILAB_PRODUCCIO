@@ -346,7 +346,7 @@ export const FileItem: React.FC<FileItemProps> = ({
       </div>
 
       <div
-        className="flex items-center px-4 uppercase select-none truncate"
+        className="flex items-center px-4 uppercase select-none min-w-0 overflow-hidden"
         style={{
           fontFamily: 'var(--us-home-format-family)',
           fontSize:   'var(--us-home-format-size)',
@@ -355,7 +355,7 @@ export const FileItem: React.FC<FileItemProps> = ({
           fontStyle:  'var(--us-home-format-style)',
         }}
       >
-        {formatLabel}
+        <span className="truncate">{formatLabel}</span>
       </div>
 
       <div
