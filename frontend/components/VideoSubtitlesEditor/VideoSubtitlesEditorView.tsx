@@ -837,7 +837,13 @@ const handleSave = useCallback(() => {
 
   const handleSetTcIn = useCallback(() => {
     if (!isEditing || !activeSegmentId) return;
-    const t = currentTimeRef.current;
+    // Lectura directa del <video> per evitar el lag del ref: currentTimeRef només
+    // s'actualitza dins del callback d'onTimeUpdate, que els navegadors disparen a
+    // ~4-6 Hz (~150-250 ms entre ticks). En un keypress arbitrari això fa que el ref
+    // pugui estar fins a ~250 ms per darrere del playhead real. Llegint directament
+    // de l'element HTML5 obtenim el valor al microsegon. Fallback al ref si encara
+    // no hi ha vídeo muntat.
+    const t = videoRef.current ? videoRef.current.currentTime : currentTimeRef.current;
     const gap = (generalConfig.minGapMs ?? 160) / 1000;
     const idx = segments.findIndex(s => s.id === activeSegmentId);
     if (idx === -1) return;
@@ -851,7 +857,8 @@ const handleSave = useCallback(() => {
 
   const handleSetTcOut = useCallback(() => {
     if (!isEditing || !activeSegmentId) return;
-    const t = currentTimeRef.current;
+    // Lectura directa de l'element <video> per precisió (vegeu handleSetTcIn).
+    const t = videoRef.current ? videoRef.current.currentTime : currentTimeRef.current;
     const gap = (generalConfig.minGapMs ?? 160) / 1000;
     const idx = segments.findIndex(s => s.id === activeSegmentId);
     if (idx === -1) return;
