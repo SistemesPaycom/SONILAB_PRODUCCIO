@@ -4,29 +4,6 @@ import type { LibraryItem, Document } from '../../appTypes';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import * as Icons from '../icons';
 
-/**
- * Construeix un objecte `style` que força els valors amb `!important`
- * mitjançant un callback ref. React 19 no accepta `!important` dins
- * l'objecte style directament; l'unica manera programatica es cridar
- * `el.style.setProperty(prop, value, 'important')` sobre el node real.
- *
- * Aquest helper rep un objecte camelCase i retorna un ref callback que
- * aplica cada propietat com !important al primer render i quan canvi.
- */
-function useImportantStyleRef(styles: Record<string, string | undefined>) {
-  const ref = React.useCallback((el: HTMLElement | null) => {
-    if (!el) return;
-    for (const [key, value] of Object.entries(styles)) {
-      if (value == null) continue;
-      // Converteix camelCase → kebab-case (fontFamily → font-family)
-      const kebab = key.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
-      el.style.setProperty(kebab, value, 'important');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(styles)]);
-  return ref;
-}
-
 interface FileItemProps {
   item: LibraryItem;
   isSelected: boolean;
@@ -77,30 +54,6 @@ export const FileItem: React.FC<FileItemProps> = ({
   const sourceType = item.type === 'document' ? item.sourceType : '';
   const isRef = item.type === 'document' && !!(item as any).refTargetId;
   const isOrphanLnk = isRef && !documents.find(d => d.id === (item as any).refTargetId && !d.isDeleted);
-
-  const fileNameRef = useImportantStyleRef({
-    fontFamily: 'var(--us-home-filename-family)',
-    fontSize:   'var(--us-home-filename-size)',
-    color:      isOrphanLnk ? '#6b7280' : (isLocked ? '#9ca3af' : 'var(--us-home-filename-color)'),
-    fontWeight: 'var(--us-home-filename-weight)',
-    fontStyle:  'var(--us-home-filename-style)',
-  });
-
-  const formatRef = useImportantStyleRef({
-    fontFamily: 'var(--us-home-format-family)',
-    fontSize:   'var(--us-home-format-size)',
-    color:      'var(--us-home-format-color)',
-    fontWeight: 'var(--us-home-format-weight)',
-    fontStyle:  'var(--us-home-format-style)',
-  });
-
-  const dateTimeRef = useImportantStyleRef({
-    fontFamily: 'var(--us-home-datetime-family)',
-    fontSize:   'var(--us-home-datetime-size)',
-    color:      'var(--us-home-datetime-color)',
-    fontWeight: 'var(--us-home-datetime-weight)',
-    fontStyle:  'var(--us-home-datetime-style)',
-  });
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -380,22 +333,40 @@ export const FileItem: React.FC<FileItemProps> = ({
           )}
         </span>
         <span
-          ref={fileNameRef}
           className={`truncate ${isLocked ? 'italic' : ''} ${isRef ? 'opacity-80' : ''} ${isOrphanLnk ? 'line-through' : ''}`}
+          style={{
+            fontFamily: 'var(--us-home-filename-family)',
+            fontSize:   'var(--us-home-filename-size)',
+            color:      isOrphanLnk ? '#6b7280' : (isLocked ? '#9ca3af' : 'var(--us-home-filename-color)'),
+            fontWeight: 'var(--us-home-filename-weight)' as any,
+            fontStyle:  'var(--us-home-filename-style)',
+          }}
         >{item.name}</span>
         {isLocked && <Icons.LockIcon size={12} className="animate-pulse flex-shrink-0" style={{ color: 'var(--th-accent-text)' }} />}
       </div>
 
       <div
-        ref={formatRef}
         className="flex items-center px-4 uppercase select-none truncate"
+        style={{
+          fontFamily: 'var(--us-home-format-family)',
+          fontSize:   'var(--us-home-format-size)',
+          color:      'var(--us-home-format-color)',
+          fontWeight: 'var(--us-home-format-weight)' as any,
+          fontStyle:  'var(--us-home-format-style)',
+        }}
       >
         {formatLabel}
       </div>
 
       <div
-        ref={dateTimeRef}
         className="hidden sm:flex items-center gap-2 select-none whitespace-nowrap px-4"
+        style={{
+          fontFamily: 'var(--us-home-datetime-family)',
+          fontSize:   'var(--us-home-datetime-size)',
+          color:      'var(--us-home-datetime-color)',
+          fontWeight: 'var(--us-home-datetime-weight)' as any,
+          fontStyle:  'var(--us-home-datetime-style)',
+        }}
       >
         <span>{formattedDate}</span>
         <span className="opacity-40">{formattedTime}</span>

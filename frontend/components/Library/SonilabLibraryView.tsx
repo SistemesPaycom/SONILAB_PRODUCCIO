@@ -18,23 +18,6 @@ import { LOCAL_STORAGE_KEYS } from '../../constants';
 import { useAuth } from '../../context/Auth/AuthContext';
 import { AdminPanel } from '../Admin/AdminPanel';
 
-/**
- * Force inline styles amb !important. Veure LibraryFileItem.tsx per al
- * raonament complert.
- */
-function useImportantStyleRef(styles: Record<string, string | undefined>) {
-  const ref = React.useCallback((el: HTMLElement | null) => {
-    if (!el) return;
-    for (const [key, value] of Object.entries(styles)) {
-      if (value == null) continue;
-      const kebab = key.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
-      el.style.setProperty(kebab, value, 'important');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(styles)]);
-  return ref;
-}
-
 type OpenMode = 'editor' | 'editor-video' | 'editor-video-subs' | 'editor-ssrtlsf' | 'editor-srt-standalone';
 
 interface LibraryViewProps {
@@ -97,30 +80,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [isRenameModalOpen, setRenameModalOpen] = useState(false);
 const [renameValue, setRenameValue] = useState('');
 const [page, setPage] = useState<'library'|'media'|'projects'>('library');
-
-  const applyNavTabsStyles = React.useCallback((el: HTMLElement | null) => {
-    if (!el) return;
-    el.style.setProperty('font-family', 'var(--us-home-navtabs-family)', 'important');
-    el.style.setProperty('font-size',   'var(--us-home-navtabs-size)',   'important');
-    el.style.setProperty('font-weight', 'var(--us-home-navtabs-weight)', 'important');
-    el.style.setProperty('font-style',  'var(--us-home-navtabs-style)',  'important');
-  }, []);
-
-  const applyBreadcrumbStyles = React.useCallback((el: HTMLElement | null) => {
-    if (!el) return;
-    el.style.setProperty('font-family', 'var(--us-home-breadcrumb-family)', 'important');
-    el.style.setProperty('font-size',   'var(--us-home-breadcrumb-size)',   'important');
-    el.style.setProperty('font-weight', 'var(--us-home-breadcrumb-weight)', 'important');
-    el.style.setProperty('font-style',  'var(--us-home-breadcrumb-style)',  'important');
-  }, []);
-
-  const applyTableHeaderStyles = React.useCallback((el: HTMLElement | null) => {
-    if (!el) return;
-    el.style.setProperty('font-family', 'var(--us-home-tableheader-family)', 'important');
-    el.style.setProperty('font-size',   'var(--us-home-tableheader-size)',   'important');
-    el.style.setProperty('font-weight', 'var(--us-home-tableheader-weight)', 'important');
-    el.style.setProperty('font-style',  'var(--us-home-tableheader-style)',  'important');
-  }, []);
 
   const [projectFolderIds, setProjectFolderIds] = useState<Set<string>>(new Set());
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
@@ -783,11 +742,16 @@ const selectedItem =
         <div className={`flex items-start mb-4 ${isCollapsed ? 'flex-col items-center gap-3' : 'sm:flex-row justify-between items-start sm:items-center gap-4'}`}>
         <div className={`flex items-center ${isCollapsed ? 'flex-col gap-3' : 'gap-2'}`}>
   <button
-    ref={applyNavTabsStyles}
     onClick={goLibrary}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'library') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Files"
     aria-label="Files"
   >
@@ -795,11 +759,16 @@ const selectedItem =
   </button>
 
   <button
-    ref={applyNavTabsStyles}
     onClick={goProjects}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'projects') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Projectes"
     aria-label="Projectes"
   >
@@ -807,11 +776,16 @@ const selectedItem =
   </button>
 
   <button
-    ref={applyNavTabsStyles}
     onClick={goMedia}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${(view === 'library' && page === 'media') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Media"
     aria-label="Media"
   >
@@ -819,11 +793,16 @@ const selectedItem =
   </button>
 
   <button
-    ref={applyNavTabsStyles}
     onClick={goTrash}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
       ${view === 'trash' ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
+    style={{
+      fontFamily: 'var(--us-home-navtabs-family)',
+      fontSize:   'var(--us-home-navtabs-size)',
+      fontWeight: 'var(--us-home-navtabs-weight)' as any,
+      fontStyle:  'var(--us-home-navtabs-style)',
+    }}
     title="Paperera"
     aria-label="Paperera"
   >
@@ -929,11 +908,14 @@ const selectedItem =
         
         {!isCollapsed && (
             <div
-              ref={applyBreadcrumbStyles}
               className="flex items-center gap-2 px-4 py-2 mb-2 mx-2 min-h-10"
               style={{
                 color: 'var(--th-text-secondary)',
                 borderBottom: '1px solid var(--th-border)',
+                fontFamily: 'var(--us-home-breadcrumb-family)',
+                fontSize:   'var(--us-home-breadcrumb-size)',
+                fontWeight: 'var(--us-home-breadcrumb-weight)' as any,
+                fontStyle:  'var(--us-home-breadcrumb-style)',
               }}
             >
                 <button onClick={handleGoBack} disabled={view === 'library' && !currentFolder} className="p-1 rounded-full hover:bg-white/10 disabled:opacity-0 transition-opacity" title="Enrere"><Icons.ArrowLeft className="w-4 h-4" /></button>
@@ -962,13 +944,16 @@ const selectedItem =
           <div className="flex-1 overflow-auto custom-scrollbar">
             <div className="min-w-max inline-block align-middle pb-8 w-full">
               <header
-                ref={applyTableHeaderStyles}
                 className="grid gap-0 items-center uppercase tracking-widest sticky top-0 z-30 py-2.5 mx-2"
                 style={{
                   color: 'var(--th-text-muted)',
                   backgroundColor: 'var(--th-bg-secondary)',
                   borderBottom: '1px solid var(--th-border)',
                   gridTemplateColumns: gridColumns,
+                  fontFamily: 'var(--us-home-tableheader-family)',
+                  fontSize:   'var(--us-home-tableheader-size)',
+                  fontWeight: 'var(--us-home-tableheader-weight)' as any,
+                  fontStyle:  'var(--us-home-tableheader-style)',
                 }}
               >
                 <div onClick={handleSelectAll} className="cursor-pointer h-full flex items-center justify-center border-r border-[var(--th-border)]" aria-label="Seleccionar tot">

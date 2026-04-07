@@ -179,19 +179,28 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (me === null) migratedUserIds.current.clear();
   }, [me]);
 
-  // Debounced push al backend.
+  // Debounced push al backend. Llegim `me` via ref per evitar que aquesta
+  // funció es recreï en cada canvi d'identitat de me — era una cadena que
+  // invalidava `mutate` → `value` → tots els consumers re-renderitzaven
+  // innecessàriament en cada mutació de l'AuthContext.
+  const meRef = useRef(me);
+  useEffect(() => { meRef.current = me; }, [me]);
+
   const schedulePush = useCallback((next: UserStylesPayload) => {
-    if (!USE_BACKEND || !me) return;
+    if (!USE_BACKEND || !meRef.current) return;
     if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       api.updateMe({ preferences: { userStyles: next } }).catch(() => {});
       debounceRef.current = null;
     }, DEBOUNCE_MS) as unknown as number;
-  }, [me]);
+  }, []);
 
   const mutate = useCallback((updater: (p: UserStylesPayload) => UserStylesPayload) => {
     setPayload(prev => {
       const next = updater(prev);
+      // Skip si el contingut serialitzat es identic — evita re-renders innecesaris
+      // i pushes redundants al backend.
+      if (JSON.stringify(next) === JSON.stringify(prev)) return prev;
       schedulePush(next);
       return next;
     });
