@@ -914,7 +914,7 @@ const selectedItem =
                             {view === 'library' && (
                                  <>
                                     <button onClick={() => setCreateFolderModalOpen(true)} className="px-3 py-2 rounded-lg font-semibold flex items-center hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)', fontFamily: 'var(--us-home-navtabs-family)', fontSize: 'var(--us-home-navtabs-size)', color: 'var(--us-home-navtabs-color)', fontWeight: 'var(--us-home-navtabs-weight)' as any, fontStyle: 'var(--us-home-navtabs-style)' }} title="Crear carpeta"><Icons.FolderPlus className="w-[1em] h-[1em]" /></button>
-                                    <button onClick={() => setImportModalOpen(true)} className="px-3 py-2 text-gray-200 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} title="Importar fitxer"><Icons.Upload /></button>
+                                    <button onClick={() => setImportModalOpen(true)} className="px-3 py-2 rounded-lg font-semibold flex items-center hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)', fontFamily: 'var(--us-home-navtabs-family)', fontSize: 'var(--us-home-navtabs-size)', color: 'var(--us-home-navtabs-color)', fontWeight: 'var(--us-home-navtabs-weight)' as any, fontStyle: 'var(--us-home-navtabs-style)' }} title="Importar fitxer"><Icons.Upload className="w-[1em] h-[1em]" /></button>
                                     <button
     onClick={() => setIsCreateProjectOpen(true)}
     className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
