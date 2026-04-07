@@ -986,17 +986,17 @@ const selectedItem =
                     {isAllSelected && <Icons.Check className="w-3 h-3 text-white" />}
                   </div>
                 </div>
-                <div className="relative group/header flex items-center h-full border-r border-[var(--th-border)]">
-                  <div onClick={() => handleSortChange(SortByKey.Name)} className="flex-1 cursor-pointer px-4 h-full flex items-center hover:bg-white/5 transition-colors">
-                    <span>Nom</span>
+                <div className="relative group/header flex items-center h-full border-r border-[var(--th-border)] overflow-hidden">
+                  <div onClick={() => handleSortChange(SortByKey.Name)} className="flex-1 min-w-0 cursor-pointer px-4 h-full flex items-center hover:bg-white/5 transition-colors">
+                    <span className="truncate">Nom</span>
                   </div>
                   <div onMouseDown={handleResizeNameMouseDown} onClick={(e) => e.stopPropagation()} className="absolute -right-0.5 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 group-hover/header:bg-white/10 transition-colors z-40" title="Canviar amplada">
                     <div className="h-full w-[1px] bg-white/10 group-hover/header:bg-white/20 mx-auto" />
                   </div>
                 </div>
-                <div className="relative group/header flex items-center h-full border-r border-[var(--th-border)]">
-                  <div onClick={() => handleSortChange(SortByKey.Format)} className="flex-1 cursor-pointer px-4 h-full flex items-center hover:bg-white/5 transition-colors">
-                    <span>Format</span>
+                <div className="relative group/header flex items-center h-full border-r border-[var(--th-border)] overflow-hidden">
+                  <div onClick={() => handleSortChange(SortByKey.Format)} className="flex-1 min-w-0 cursor-pointer px-4 h-full flex items-center hover:bg-white/5 transition-colors">
+                    <span className="truncate">Format</span>
                   </div>
                   <div onMouseDown={handleResizeFormatMouseDown} onClick={(e) => e.stopPropagation()} className="absolute -right-0.5 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 group-hover/header:bg-white/10 transition-colors z-40" title="Canviar amplada">
                     <div className="h-full w-[1px] bg-white/10 group-hover/header:bg-white/20 mx-auto" />
