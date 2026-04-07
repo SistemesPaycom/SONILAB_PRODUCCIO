@@ -914,7 +914,7 @@ const selectedItem =
             <div
               className="flex items-center gap-2 px-4 py-2 mb-2 mx-2 min-h-10"
               style={{
-                color: 'var(--th-text-secondary)',
+                color: 'var(--us-home-breadcrumb-color)',
                 borderBottom: '1px solid var(--th-border)',
                 fontFamily: 'var(--us-home-breadcrumb-family)',
                 fontSize:   'var(--us-home-breadcrumb-size)',
@@ -926,7 +926,7 @@ const selectedItem =
                 <div className="flex items-center gap-1 truncate">
                     {breadcrumbs.map((crumb, index) => (
                         <React.Fragment key={crumb.id ?? crumb.name}>
-                            {index > 0 && <span className="text-gray-500 mx-1">/</span>}
+                            {index > 0 && <span className="mx-1">/</span>}
                             <button 
                                 onClick={() => {
                                     if (crumb.id === 'trash') return;
@@ -934,7 +934,7 @@ const selectedItem =
                                     dispatch({ type: 'SET_CURRENT_FOLDER', payload: crumb.id });
                                 }} 
                                 disabled={index === breadcrumbs.length - 1} 
-                                className={`px-2 py-1 rounded transition-colors ${index === breadcrumbs.length - 1 ? 'font-black text-gray-200 bg-transparent cursor-default' : 'hover:bg-white/10 text-gray-400'}`}
+                                className={`px-2 py-1 rounded transition-colors ${index === breadcrumbs.length - 1 ? 'font-black bg-transparent cursor-default' : 'hover:bg-white/10'}`}
                             >
                                 {crumb.name}
                             </button>
