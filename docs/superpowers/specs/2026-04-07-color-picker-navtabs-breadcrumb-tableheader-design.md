@@ -16,7 +16,7 @@ Conseqüència: l'usuari pot configurar tipografia, mida, negreta i cursiva d'aq
 
 - Permetre que l'usuari personalitzi el color dels 3 elements des del panell de configuració.
 - Mantenir l'alineació visual de les 6 files del `HomeStylesPanel` (4 columnes sempre).
-- **Que el preset de l'usuari prevalgui sempre sobre el tema admin** (Sonilab/Dark/Light/Midnight) — una vegada l'usuari personalitza un color, aquest mana fins que faci "Restablir per defecte".
+- **Que el preset de l'usuari prevalgui sempre sobre el tema admin** (sonilab/dark/light/midnight) — una vegada l'usuari personalitza un color, aquest mana fins que faci "Restablir per defecte".
 - **No reintroduir el parpadeig** que es va arreglar a la commit `ef60b36`.
 
 ## 3. No-objectius
@@ -71,7 +71,8 @@ El parpadeig de la commit anterior va ser causat per `useImportantStyleRef` (cal
 | `frontend/components/Library/SonilabLibraryView.tsx` | (a) Eliminar `text-white`/`text-gray-200` dels 4 botons navTabs. (b) Afegir `color: 'var(--us-home-navtabs-color)'` als 4 inline styles. (c) Canviar el `color` del wrapper del breadcrumb a `var(--us-home-breadcrumb-color)`. (d) Eliminar `text-gray-200`/`text-gray-400` de les migues del breadcrumb. (e) Eliminar `text-gray-500` del separador `/` entre migues (línia 925). (f) Canviar el `color` del header de taula a `var(--us-home-tableheader-color)`. | ~744-810, ~913, ~925, ~932-934, ~949 |
 | `frontend/components/Settings/UserStyles/StyleAtomEditor.tsx` | Eliminar la prop `hideColor` i el placeholder buit. Render uniforme amb 4 columnes. | tot el fitxer |
 | `frontend/components/Settings/UserStyles/HomeStylesPanel.tsx` | Eliminar `hideColor: true` de les 3 files. | línies 17-19 |
-| `frontend/components/Settings/UserStyles/HomeStylePreview.tsx` | **Eliminar els overrides hardcodejats** del helper `cellStyle` per als 3 elements: `'#ffffff'` i `'#e5e7eb'` als 3 spans de navtabs (línies 26-28), `'var(--th-text-secondary)'` al breadcrumb (línia 30), `'var(--th-text-muted)'` al tableheader (línia 33). Després del canvi, la preview reflectirà el color real del preset. També actualitzar el comentari del header del fitxer (línies 4-12) que actualment diu que aquests 3 elements "llegeixen el color del tema admin a la UI real" — ja no és cert. | línies 4-12, 26-33 |
+| `frontend/components/Settings/UserStyles/HomeStylePreview.tsx` | **Eliminar els overrides hardcodejats** del helper `cellStyle` per als 3 elements: `'#ffffff'` i `'#e5e7eb'` als 3 spans de navtabs (línies 26-28), `'var(--th-text-secondary)'` al breadcrumb (línia 30), `'var(--th-text-muted)'` al tableheader (línia 33). El paràmetre `colorOverride` del helper es pot eliminar completament — després del canvi cap crida l'usa. Cal alinear el helper amb el patró de `ScriptStylePreview.tsx`/`SubtitleStylePreview.tsx` (sense paràmetre override). També actualitzar el comentari del header del fitxer (línies 4-12) que actualment diu que aquests 3 elements "llegeixen el color del tema admin a la UI real" — ja no és cert. | línies 4-12, 13-19, 26-33 |
+| `Skills_Claude/domain-user-styles.md` | (a) Documentar que `navTabs`, `breadcrumb` i `tableHeader` són ara color-personalitzables. (b) Corregir el text de "Persistencia" — actualment diu `version: 1` però el payload és `version: 2`. (c) Afegir una nota a "Reglas no negociables" sobre el patró: el preset prevaleix sobre el tema admin per als colors. | secció "Persistencia" + "Reglas no negociables" |
 
 **Fitxers explícitament NO tocats** (per evitar reintroduir el parpadeig):
 - `frontend/context/UserStyles/UserStylesContext.tsx`
@@ -86,6 +87,13 @@ El parpadeig de la commit anterior va ser causat per `useImportantStyleRef` (cal
 Cap canvi de schema. Els presets `v2` ja existents tenen els camps `color` per a `tableHeader`/`navTabs`/`breadcrumb`. La factory `FACTORY_HOME_STYLES` ja els defineix amb `var(--th-text-*)`. L'única diferència és que ara aquests colors **es veuran a la UI real** en lloc de ser ignorats.
 
 Els usuaris que ja tenen presets guardats no notaran cap canvi visual fins que toquin el picker de color, perquè el color heretat seguirà sent `var(--th-text-*)`.
+
+**Migració v1→v2 (preexistent)**: la funció `migrateAtomColorsV1ToV2` a `userStylesMigration.ts` ja gestiona els 3 elements correctament. El mapping `V1_HEX_TO_V2_THEMEVAR` (línies 66-77) inclou:
+- `'#ffffff' → 'var(--th-text-primary)'` per a `navTabs`
+- `'#b8b8b8' → 'var(--th-text-secondary)'` per a `breadcrumb`
+- `'#6b7280' → 'var(--th-text-muted)'` per a `tableHeader` (compartit amb `formatLabel`)
+
+Això vol dir que els usuaris migrats des de v1 ja tenen el color "del tema" per defecte. Cap acció addicional de migració necessària.
 
 ## 7. Tema admin vs preset d'usuari
 
@@ -104,7 +112,7 @@ Després d'implementar, executar aquests checks amb el plugin Playwright:
 ### 8.1 Test de no-regressió visual
 1. Carregar la home amb `VITE_USE_BACKEND=1`.
 2. Snapshot inicial.
-3. Verificar amb `browser_snapshot` que els 4 botons navTabs, el breadcrumb i la cabecera de taula són visibles i tenen contrast llegible en els 3 temes (sonilab, dark, light).
+3. Verificar amb `browser_snapshot` que els 4 botons navTabs, el breadcrumb i la cabecera de taula són visibles i tenen contrast llegible en **els 4 temes** (sonilab, dark, light, midnight). Aquesta verificació és **obligatòria** abans de donar el canvi per fet, perquè el risc de la fila 162 (botó actiu il·legible en tema light) NO ha estat verificat manualment al disseny — només s'ha hipotecat. Si en tema light el contrast del botó actiu és inferior a WCAG AA (4.5:1 per text normal, 3:1 per icones), aplicar la mitigació de la fila 162: ajustar la factory de `navTabs.color` a `var(--th-text-inverse)` o similar.
 
 ### 8.2 Test anti-parpadeig (crític)
 Aquest és el gat que ja vam tenir. Cal verificar que **NO** torna.
@@ -151,7 +159,7 @@ Demanar a l'usuari que executi el snippet del MutationObserver al seu entorn amb
 | Risc | Probabilitat | Mitigació |
 |------|-------------|-----------|
 | Reintroduir el parpadeig per algun canvi col·lateral | Mitja | Cap canvi a `UserStylesContext` ni `applyUserStylesToDOM`. Test 8.2 obligatori. |
-| Botó navTab actiu queda il·legible en tema light (icona fosca sobre fons accent fosc) | Baixa | Ja verificat: en tema light, el fons accent és blau clar i el text-primary és fosc → contrast suficient (ratio > 4.5:1). Si falla, ajustar la factory de `navTabs` a `var(--th-text-inverse)` per defecte. |
+| Botó navTab actiu queda il·legible en tema light o midnight (icona del color del preset sobre fons accent del tema) | **Mitja** | **NO verificat al disseny — cal verificar amb test 8.1 abans de tancar la implementació.** Mitigació si falla: ajustar la factory de `navTabs.color` a `var(--th-text-inverse)` (que sempre dona contrast amb l'accent del tema) o forçar `currentColor: white` només per al botó actiu via una classe de Tailwind preservada (no recomanat — torna al problema actual). |
 | Color picker emet hex inesperat | Molt baixa | El `<input type="color">` HTML5 sempre retorna `#rrggbb`. Cap validació addicional necessària. |
 | L'usuari no entén que el seu canvi sobreescriu el tema | Baixa | Comportament intuïtiu i alineat amb el principi "preset prevaleix". El "Restablir per defecte" ja està al `StylesPresetBar`. |
 
@@ -165,8 +173,11 @@ Demanar a l'usuari que executi el snippet del MutationObserver al seu entorn amb
 
 ## 10.1 Limitacions conegudes (no són bugs)
 
-- **Emojis no canvien de color**: els botons `Projectes` (📌) i `Media` (🎞️) usen emojis Unicode. El `color` CSS no afecta els emojis natius — sempre es renderitzen amb els seus colors propis del sistema. Només els icons SVG (`Files`/`Folder`, `Paperera`/`Trash`) canvien de color via `currentColor`. **Aquesta és una limitació visual coneguda i no s'ha de tractar com un bug**. Si en el futur cal coherència visual, els emojis s'haurien de substituir per icons SVG dedicats — fora de l'abast d'aquest spec.
+- **Emojis no canvien de color**: els botons `Projectes` (📌) i `Media` (🎞️) usen emojis Unicode. El `color` CSS no afecta els emojis natius — sempre es renderitzen amb els seus colors propis del sistema. Només els icons SVG (`Files`/`Folder`, `Paperera`/`Trash`) canvien de color via `currentColor` (verificat a `frontend/components/icons.tsx:5,17`). **Aquesta és una limitació visual coneguda i no s'ha de tractar com un bug**. Si en el futur cal coherència visual, els emojis s'haurien de substituir per icons SVG dedicats — fora de l'abast d'aquest spec.
 - **`font-black` de la miga activa del breadcrumb**: la última miga (no clickable) té la classe Tailwind `font-black` (peso 900) hardcodejada per diferenciar-la visualment de les inactives. Aquesta classe sobreescriu el `font-weight` heretat del wrapper. Conseqüència: si l'usuari activa "Negreta" al preset (peso 700), els inactius seran 700 i l'activa 900 — la diferència segueix sent visible. Si l'usuari desactiva "Negreta" (peso 400), els inactius seran 400 i l'activa 900 — diferència més marcada. Ambdós escenaris són correctes; **no cal eliminar `font-black`** perquè el comportament és coherent amb el principi de diferenciació actiu/inactiu pel pes.
+- **Regla CSS `[data-theme="light"] .lib-nav-active.text-white { color: #ffffff }`**: aquesta regla del `ThemeContext.tsx` (línies 235-236) actualment força el text blanc als botons amb classe `.lib-nav-active.text-white` en tema light. Després d'eliminar `text-white` dels 4 botons del navTab, **aquesta regla queda morta per al cas dels navTabs**, però segueix aplicant-se als botons "Crear" i "Guardar" dels modals (línies 1059, 1079 de `SonilabLibraryView.tsx`) que també usen la classe `.lib-nav-active text-white`. **NO cal eliminar la regla** del `ThemeContext.tsx` — segueix sent vàlida per a aquests botons de modal.
+- **Botons "Notificacions" i "Configuració" del peu de la sidebar**: tenen `text-gray-200` hardcodejat (línies 1024, 1035 de `SonilabLibraryView.tsx`) però **no formen part del scope `navTabs`** del preset. Són botons separats. No s'han de tractar com a part d'aquest canvi.
+- **Preview vs UI real - estats actiu/inactiu**: la preview a `HomeStylePreview.tsx` mostra 3 spans navtabs (Files/Projectes/Media) sense fons accent. La UI real té 4 botons (els 3 anteriors + Paperera) amb fons accent al botó actiu. El preview NO simula el fons accent — això és intencionat per simplicitat. L'usuari veurà el color del text/icona del preset, però la diferenciació actiu/inactiu només serà visible a la UI real. **Aquesta asimetria preview/UI no és un bug**.
 
 ## 11. Criteris d'acceptació
 
@@ -175,7 +186,7 @@ Demanar a l'usuari que executi el snippet del MutationObserver al seu entorn amb
 3. ✅ El color editat pel preset es veu a la home real (no només a la preview).
 4. ✅ El color persisteix entre recàrregues amb backend actiu.
 5. ✅ El test 8.2 (anti-parpadeig) passa: ≤ 2 mutacions de `style` en 5 segons.
-6. ✅ Els 3 temes (sonilab, dark, light) renderitzen els 3 elements de manera llegible amb la factory per defecte.
+6. ✅ **Els 4 temes** (sonilab, dark, light, midnight) renderitzen els 3 elements de manera llegible amb la factory per defecte. Verificat manualment o amb Playwright al test 8.1.
 7. ✅ TypeScript build manté els 6 errors baseline (no afegir-ne de nous).
 
 ---
