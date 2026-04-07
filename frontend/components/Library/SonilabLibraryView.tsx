@@ -950,7 +950,7 @@ const selectedItem =
               <header
                 className="grid gap-0 items-center uppercase tracking-widest sticky top-0 z-30 py-2.5 mx-2"
                 style={{
-                  color: 'var(--th-text-muted)',
+                  color: 'var(--us-home-tableheader-color)',
                   backgroundColor: 'var(--th-bg-secondary)',
                   borderBottom: '1px solid var(--th-border)',
                   gridTemplateColumns: gridColumns,
