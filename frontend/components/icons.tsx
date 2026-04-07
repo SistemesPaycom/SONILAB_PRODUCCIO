@@ -248,3 +248,15 @@ export const EarIcon: React.FC<{ className?: string; size?: number }> = ({ class
     <path d="M14.5 17.5c-2.32 1-4.5 1-4.5-1"></path>
   </svg>
 );
+
+export const Pin: React.FC<{ className?: string; size?: number }> = ({ className = 'w-6 h-6', size = 24 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} width={size} height={size} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16 12V4h1a1 1 0 100-2H7a1 1 0 100 2h1v8l-3 3v2h5.586l.707 4.707L12 22l.707-2.293L13.414 17H19v-2l-3-3z" />
+  </svg>
+);
+
+export const Film: React.FC<{ className?: string; size?: number }> = ({ className = 'w-6 h-6', size = 24 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} width={size} height={size} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v16a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4h18M3 12h18M3 16h18M7 4v16M17 4v16" />
+  </svg>
+);
