@@ -917,7 +917,7 @@ const selectedItem =
                                     <button onClick={() => setImportModalOpen(true)} className="px-3 py-2 rounded-lg font-semibold flex items-center hover:brightness-125" style={{ backgroundColor: 'var(--th-bg-tertiary)', fontFamily: 'var(--us-home-navtabs-family)', fontSize: 'var(--us-home-navtabs-size)', color: 'var(--us-home-navtabs-color)', fontWeight: 'var(--us-home-navtabs-weight)' as any, fontStyle: 'var(--us-home-navtabs-style)' }} title="Importar fitxer"><Icons.Upload className="w-[1em] h-[1em]" /></button>
                                     <button
     onClick={() => setIsCreateProjectOpen(true)}
-    className="px-3 py-1.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
+    className="px-3 py-2 rounded-lg font-semibold" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)', fontFamily: 'var(--us-home-navtabs-family)', fontSize: 'var(--us-home-navtabs-size)', fontWeight: 'var(--us-home-navtabs-weight)' as any, fontStyle: 'var(--us-home-navtabs-style)' }}
     title="Crear projecte"
   >
     Crear projecte
