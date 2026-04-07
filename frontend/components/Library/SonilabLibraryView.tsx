@@ -744,11 +744,12 @@ const selectedItem =
   <button
     onClick={goLibrary}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
-      ${(view === 'library' && page === 'library') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
+      ${(view === 'library' && page === 'library') ? 'lib-nav-active' : 'lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
     style={{
       fontFamily: 'var(--us-home-navtabs-family)',
       fontSize:   'var(--us-home-navtabs-size)',
+      color:      'var(--us-home-navtabs-color)',
       fontWeight: 'var(--us-home-navtabs-weight)' as any,
       fontStyle:  'var(--us-home-navtabs-style)',
     }}
@@ -761,11 +762,12 @@ const selectedItem =
   <button
     onClick={goProjects}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
-      ${(view === 'library' && page === 'projects') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
+      ${(view === 'library' && page === 'projects') ? 'lib-nav-active' : 'lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
     style={{
       fontFamily: 'var(--us-home-navtabs-family)',
       fontSize:   'var(--us-home-navtabs-size)',
+      color:      'var(--us-home-navtabs-color)',
       fontWeight: 'var(--us-home-navtabs-weight)' as any,
       fontStyle:  'var(--us-home-navtabs-style)',
     }}
@@ -778,11 +780,12 @@ const selectedItem =
   <button
     onClick={goMedia}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
-      ${(view === 'library' && page === 'media') ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
+      ${(view === 'library' && page === 'media') ? 'lib-nav-active' : 'lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
     style={{
       fontFamily: 'var(--us-home-navtabs-family)',
       fontSize:   'var(--us-home-navtabs-size)',
+      color:      'var(--us-home-navtabs-color)',
       fontWeight: 'var(--us-home-navtabs-weight)' as any,
       fontStyle:  'var(--us-home-navtabs-style)',
     }}
@@ -795,11 +798,12 @@ const selectedItem =
   <button
     onClick={goTrash}
     className={`px-2.5 py-2 rounded-lg transition-colors flex items-center justify-center
-      ${view === 'trash' ? 'text-white lib-nav-active' : 'text-gray-200 lib-nav-inactive'}
+      ${view === 'trash' ? 'lib-nav-active' : 'lib-nav-inactive'}
       ${isCollapsed ? 'w-10 h-10 !p-0' : ''}`}
     style={{
       fontFamily: 'var(--us-home-navtabs-family)',
       fontSize:   'var(--us-home-navtabs-size)',
+      color:      'var(--us-home-navtabs-color)',
       fontWeight: 'var(--us-home-navtabs-weight)' as any,
       fontStyle:  'var(--us-home-navtabs-style)',
     }}
