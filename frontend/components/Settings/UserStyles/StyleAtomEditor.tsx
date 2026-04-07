@@ -25,7 +25,7 @@ export const StyleAtomEditor: React.FC<Props> = ({ label, atom, onChange, minSiz
   return (
     <div className="grid grid-cols-1 md:grid-cols-[150px_1fr] items-center gap-4 py-3 border-b last:border-b-0" style={{ borderColor: 'var(--th-border)' }}>
       <h4 className="font-semibold md:text-right" style={{ color: 'var(--th-text-primary)' }}>{label}</h4>
-      <div className={`grid grid-cols-2 ${hideColor ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-3 items-end`}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
         <div>
           <label className="block text-xs mb-1" style={{ color: 'var(--th-text-muted)' }}>Tipografia</label>
           <select
@@ -56,7 +56,12 @@ export const StyleAtomEditor: React.FC<Props> = ({ label, atom, onChange, minSiz
             style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)', color: 'var(--th-text-primary)' }}
           />
         </div>
-        {!hideColor && (
+        {hideColor ? (
+          // Placeholder buit per mantenir l'alineació de columnes — el color
+          // d'aquest element ve del tema admin / estat actiu i no es pot
+          // personalitzar des d'aquí.
+          <div aria-hidden="true" />
+        ) : (
           <div>
             <label className="block text-xs mb-1" style={{ color: 'var(--th-text-muted)' }}>Color</label>
             <input

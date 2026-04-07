@@ -7,7 +7,7 @@ import { HomeStylesPanel } from './HomeStylesPanel';
 type SubTab = 'script' | 'subtitle' | 'home';
 
 export const StylesTab: React.FC = () => {
-  const [active, setActive] = useState<SubTab>('script');
+  const [active, setActive] = useState<SubTab>('home');
 
   const TabButton: React.FC<{ id: SubTab; label: string }> = ({ id, label }) => {
     const isActive = active === id;
@@ -28,9 +28,9 @@ export const StylesTab: React.FC = () => {
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
-        <TabButton id="script"   label="Editor de guions" />
-        <TabButton id="subtitle" label="Editor de subtítols" />
         <TabButton id="home"     label="Inici" />
+        <TabButton id="subtitle" label="Editor de subtítols" />
+        <TabButton id="script"   label="Editor de guions" />
       </div>
       {active === 'script'   && <ScriptStylesPanel />}
       {active === 'subtitle' && <SubtitleStylesPanel />}
