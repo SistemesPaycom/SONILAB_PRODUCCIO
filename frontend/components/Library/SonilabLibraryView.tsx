@@ -756,7 +756,7 @@ const selectedItem =
     title="Files"
     aria-label="Files"
   >
-    <Icons.Folder className="w-4 h-4" />
+    <Icons.Folder className="w-[1em] h-[1em]" />
   </button>
 
   <button
@@ -774,7 +774,7 @@ const selectedItem =
     title="Projectes"
     aria-label="Projectes"
   >
-    <span>📌</span>
+    <Icons.Pin className="w-[1em] h-[1em]" />
   </button>
 
   <button
@@ -792,7 +792,7 @@ const selectedItem =
     title="Media"
     aria-label="Media"
   >
-    <span>🎞️</span>
+    <Icons.Film className="w-[1em] h-[1em]" />
   </button>
 
   <button
@@ -810,7 +810,7 @@ const selectedItem =
     title="Paperera"
     aria-label="Paperera"
   >
-    <Icons.Trash className="w-4 h-4" />
+    <Icons.Trash className="w-[1em] h-[1em]" />
   </button>
 </div>
 
