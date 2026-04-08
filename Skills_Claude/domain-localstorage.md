@@ -56,6 +56,7 @@ Cada usuario tiene su propio JSON de presets de estilos tipográficos en una cla
 3. Mantener el prefijo `snlbpro_` en todas las claves nuevas.
 4. Si se renombra una clave existente: los datos anteriores del usuario en localStorage se pierden (reset silencioso al leer). Valorar si hace falta migración o si el reset es aceptable.
 5. Actualizar este archivo.
+6. **Factory Reset**: decidir si la nueva clave debe restablecerse al "factory reset" (Settings → General). Si sí, añadirla a la lista `KEYS_TO_REMOVE` de `frontend/utils/factoryReset.ts`. Si no (porque es trabajo del usuario, datos del documento, o la sesión), dejarla fuera de esa lista y añadir un comentario aquí explicando por qué. Ver `docs/superpowers/specs/2026-04-07-reset-configuracio-frontend.md` para el criterio completo.
 
 ## Limpieza de claves legacy slsf_ (si hace falta)
 
