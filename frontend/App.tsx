@@ -23,7 +23,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useHashRoute } from './hooks/useHashRoute';
 import useLocalStorage from './hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from './constants';
-import { BC_CHANNEL, PENDING_FLAG } from './utils/factoryReset';
+import { BC_CHANNEL, PENDING_FLAG, WARN_FLAG } from './utils/factoryReset';
 import SettingsModal from './components/SettingsModal';
 import * as Icons from './components/icons';
 import { AuthModal } from './components/Auth/AuthModal';
@@ -278,6 +278,40 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // Factory Reset — post-reload warning banner state
+  const [factoryResetWarn, setFactoryResetWarn] = useState(false);
+
+  // Factory Reset — on mount, check if the last reset had a WARN_FLAG.
+  // If so, verify via api.me() whether the backend actually has shortcuts
+  // nullified — if it does, the flag was a false negative (response lost
+  // after backend already processed the request) and we suppress the banner.
+  useEffect(() => {
+    let cancelled = false;
+    let flag: string | null = null;
+    try {
+      flag = sessionStorage.getItem(WARN_FLAG);
+      if (!flag) return;
+      sessionStorage.removeItem(WARN_FLAG);
+    } catch {
+      return; // sessionStorage disabled
+    }
+
+    api.me()
+      .then((profile: any) => {
+        if (cancelled) return;
+        const backendActuallyReset = !profile?.preferences?.shortcuts;
+        if (!backendActuallyReset) {
+          setFactoryResetWarn(true);
+        }
+      })
+      .catch(() => {
+        // /me failed → assume partial reset and warn the user
+        if (!cancelled) setFactoryResetWarn(true);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   // Toasts de tasques completades (notificació HOME)
   const [completedToasts, setCompletedToasts] = useState<JobRecord[]>([]);
@@ -643,6 +677,26 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
       {history.isDirty && (
         <div className="fixed bottom-4 right-4 px-3 py-1 bg-amber-500 text-black text-[10px] font-black uppercase rounded-full shadow-lg animate-pulse z-[100]">
           Canvis sense desar
+        </div>
+      )}
+
+      {/* Factory Reset — partial reset warning banner (post-reload) */}
+      {factoryResetWarn && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[700] max-w-xl px-4 py-3 bg-amber-900/95 border border-amber-500/50 rounded-xl shadow-2xl backdrop-blur-md flex items-start gap-3">
+          <span className="text-amber-400 text-lg">⚠</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-amber-100">Reset parcial</p>
+            <p className="text-xs text-amber-200/80 mt-1">
+              S'han restablert els ajustos locals però no s'ha pogut sincronitzar amb el servidor. Algunes preferències poden tornar a aparèixer fins que tornis a provar el reset més tard.
+            </p>
+          </div>
+          <button
+            onClick={() => setFactoryResetWarn(false)}
+            className="text-amber-400 hover:text-white text-lg transition-colors"
+            aria-label="Tancar avís"
+          >
+            &times;
+          </button>
         </div>
       )}
 
