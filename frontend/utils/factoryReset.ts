@@ -53,14 +53,56 @@ export const BC_CHANNEL = 'snlbpro-factory-reset';
 
 // ─── Phase A / Phase B function signatures (stubbed for next tasks) ──────────
 
-/** Phase A — implemented in Task 2. */
+/**
+ * Phase A — Initiates the factory reset for the current user.
+ *
+ * Steps:
+ *   1. Clears backend preferences (shortcuts, customThemeTokens) via api.updateMe.
+ *   2. Notifies sibling tabs via BroadcastChannel.
+ *   3. Marks PENDING_FLAG on sessionStorage with userId (or '' if null).
+ *   4. If backend call failed, also marks WARN_FLAG.
+ *
+ * Does NOT:
+ *   - Touch localStorage directly (that's Phase B's job, to eliminate the race).
+ *   - Call window.location.reload() (the caller — SettingsModal handler — does it).
+ */
 export async function factoryReset(userId: string | null): Promise<{
   ok: boolean;
   backendOk: boolean;
 }> {
-  // TEMPORARY STUB — replaced in Task 2
-  void userId;
-  return { ok: true, backendOk: true };
+  // Step 1: backend
+  let backendOk = true;
+  try {
+    await api.updateMe({
+      preferences: {
+        shortcuts: null,
+        customThemeTokens: null,
+      },
+    });
+  } catch {
+    backendOk = false;
+  }
+
+  // Step 2: notify sibling tabs
+  try {
+    const bc = new BroadcastChannel(BC_CHANNEL);
+    bc.postMessage({ type: 'reset' });
+    bc.close();
+  } catch {
+    // BroadcastChannel not available on very old browsers; ignore.
+  }
+
+  // Step 3 + 4: mark flags on sessionStorage
+  try {
+    sessionStorage.setItem(PENDING_FLAG, userId ?? '');
+    if (!backendOk) {
+      sessionStorage.setItem(WARN_FLAG, '1');
+    }
+  } catch {
+    // sessionStorage disabled (some private-mode browsers); reset will degrade to no-op at Phase B.
+  }
+
+  return { ok: true, backendOk };
 }
 
 /** Phase B — implemented in Task 3. */
