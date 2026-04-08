@@ -44,7 +44,7 @@ async softDeleteFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: 
   if (!root) throw new NotFoundException('Folder not found');
 
   const folders = await this.folderModel
-    .find({ ownerId, isDeleted: false }, { _id: 1, parentId: 1 })
+    .find({ isDeleted: false }, { _id: 1, parentId: 1 })
     .lean();
 
   const children = new Map<string, string[]>();
@@ -154,7 +154,7 @@ async purgeFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: strin
   if (!root) throw new NotFoundException('Folder not found');
 
   const folders = await this.folderModel
-    .find({ ownerId }, { _id: 1, parentId: 1 })
+    .find({}, { _id: 1, parentId: 1 })
     .lean();
 
   const children = new Map<string, string[]>();
@@ -200,8 +200,8 @@ async purgeFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: strin
   }
 
   // Borra docs del árbol y luego folders del árbol
-  await this.docModel.deleteMany({ ownerId, parentId: { $in: toDelete } });
-  const res = await this.folderModel.deleteMany({ ownerId, _id: { $in: toDelete } });
+  await this.docModel.deleteMany({ parentId: { $in: toDelete } });
+  const res = await this.folderModel.deleteMany({ _id: { $in: toDelete } });
 
   return { purgedFolderIds: res.deletedCount ?? toDelete.length };
 }

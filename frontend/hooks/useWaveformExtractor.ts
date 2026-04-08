@@ -20,12 +20,13 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 export function useWaveformExtractor() {
   const [status, setStatus] = useState<ExtractionStatus>('idle');
   const [peaks, setPeaks] = useState<WaveformPeaks | null>(null);
-  const lastFileRef = useRef<File | null>(null);
+  const lastKeyRef = useRef<string | null>(null);
 
-  const extract = useCallback(async (file: File, docId?: string) => {
-    // Avoid re-extracting the same file
-    if (lastFileRef.current === file && peaks) return;
-    lastFileRef.current = file;
+  const extract = useCallback(async (file: File | null, docId?: string) => {
+    // Avoid re-extracting the same source
+    const currentKey = docId ?? (file ? 'local-file' : null);
+    if (lastKeyRef.current === currentKey && peaks) return;
+    lastKeyRef.current = currentKey;
 
     setStatus('loading');
     setPeaks(null);
@@ -69,6 +70,11 @@ export function useWaveformExtractor() {
 
     // ── Strategy 2: Client-side Web Audio API (fallback for edge cases) ──
     // This runs only when: no docId, backend unreachable, or FFmpeg failed.
+    if (!file) {
+      console.warn('[Waveform] No file available for client-side fallback');
+      setStatus('error');
+      return;
+    }
     try {
       console.log('[Waveform] Extracting client-side via Web Audio API (fallback)...');
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();

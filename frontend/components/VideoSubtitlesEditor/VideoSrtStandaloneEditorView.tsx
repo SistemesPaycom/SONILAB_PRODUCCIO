@@ -92,7 +92,7 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
 
   const { isAIProcessing, handleWhisperTranscription, handleAITranslation, handleAIRevision } =
     useSubtitleAIOperations({
-      videoFile,
+      videoSrc,
       segments,
       onCommitSegments: (newSegs) => subsHistory.commit(newSegs),
       onCloseModal: () => setIsAIModalOpen(false),

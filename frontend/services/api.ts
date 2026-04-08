@@ -224,6 +224,12 @@ async listProjects() {
   streamUrl(docId: string) {
     return `${API_URL}/media/${docId}/stream`;
   },
+  /** Stream URL con token en query param — para usar directamente en <video src> */
+  streamUrlWithToken(docId: string): string {
+    const token = getToken();
+    const base = `${API_URL}/media/${docId}/stream`;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  },
   /** Fetch cached waveform peaks from backend. Returns null if unavailable. */
   async getWaveform(docId: string): Promise<{
     cached: boolean;

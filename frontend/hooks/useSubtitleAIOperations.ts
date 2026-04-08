@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Segment } from '../types/Subtitles';
 
 interface UseSubtitleAIOperationsOptions {
-  videoFile: File | null;
+  videoSrc: string | null;
   segments: Segment[];
   onCommitSegments: (newSegments: Segment[]) => void;
   onCloseModal: () => void;
@@ -13,7 +13,7 @@ interface UseSubtitleAIOperationsOptions {
  * Compartit per VideoSubtitlesEditorView i VideoSrtStandaloneEditorView.
  */
 export function useSubtitleAIOperations({
-  videoFile,
+  videoSrc,
   segments,
   onCommitSegments,
   onCloseModal,
@@ -21,7 +21,7 @@ export function useSubtitleAIOperations({
   const [isAIProcessing, setIsAIProcessing] = useState(false);
 
   const handleWhisperTranscription = useCallback(async (_lang: string) => {
-    if (!videoFile) { alert('Vinculeu un vídeo primer.'); return; }
+    if (!videoSrc) { alert('Vinculeu un vídeo primer.'); return; }
     setIsAIProcessing(true);
     try {
       // TODO: integrar pipeline WhisperX real
@@ -30,7 +30,7 @@ export function useSubtitleAIOperations({
     } finally {
       setIsAIProcessing(false);
     }
-  }, [videoFile, onCloseModal]);
+  }, [videoSrc, onCloseModal]);
 
   const handleAITranslation = useCallback(async (_from: string, _to: string) => {
     if (segments.length === 0) return;
