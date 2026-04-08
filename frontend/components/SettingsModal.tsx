@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { AppShortcuts, Shortcut } from '../appTypes';
 import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS, mergeShortcuts } from '../constants';
 import { api } from '../services/api';
@@ -318,6 +318,156 @@ const ShortcutsTab: React.FC = () => {
         </div>
     );
 };
+// ─── Factory Reset Confirmation Modal ────────────────────────────────────────
+
+interface FactoryResetConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+const FactoryResetConfirmModal: React.FC<FactoryResetConfirmModalProps> = ({ isOpen, onClose, onConfirm }) => {
+  const [confirmed, setConfirmed] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  // Reset state when modal opens/closes
+  useEffect(() => {
+    if (!isOpen) {
+      setConfirmed(false);
+      setIsResetting(false);
+    }
+  }, [isOpen]);
+
+  // Block Escape during in-flight; allow normal close otherwise.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isResetting) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, isResetting, onClose]);
+
+  if (!isOpen) return null;
+
+  const handleBackdropClick = () => {
+    if (!isResetting) onClose();
+  };
+
+  const handleConfirmClick = async () => {
+    setIsResetting(true);
+    try {
+      await onConfirm();
+    } finally {
+      // onConfirm is responsible for calling window.location.reload();
+      // if it returns without reloading (shouldn't happen normally),
+      // reset the in-flight state so the user isn't stuck.
+      setIsResetting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[800] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={handleBackdropClick}
+    >
+      <div
+        className="max-w-2xl w-full rounded-2xl shadow-2xl flex flex-col"
+        style={{ backgroundColor: 'var(--th-bg-primary)', border: '1px solid var(--th-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-6 border-b border-[var(--th-border)] flex items-center gap-3">
+          <span className="text-amber-400 text-2xl">⚠</span>
+          <h2 className="text-xl font-black text-white uppercase tracking-tight">
+            Restablir configuració de fàbrica
+          </h2>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-gray-300">
+            Aquesta acció restablirà la configuració d'aquesta aplicació al seu estat per defecte. Algunes coses es mantindran intactes.
+          </p>
+
+          {/* Two-column list: restablirà vs preservarà */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+              <p className="text-xs font-black uppercase tracking-widest text-red-400 mb-3">❌ Es restablirà</p>
+              <ul className="text-xs text-gray-300 space-y-1.5">
+                <li>• Dreceres de teclat</li>
+                <li>• Ajustos de la interfície</li>
+                <li>• Personalització del tema</li>
+                <li>• Mides i columnes de la Llibreria</li>
+              </ul>
+            </div>
+            <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+              <p className="text-xs font-black uppercase tracking-widest text-emerald-400 mb-3">✓ Es preservarà</p>
+              <ul className="text-xs text-gray-300 space-y-1.5">
+                <li>• Presets d'estils tipogràfics</li>
+                <li>• Tema seleccionat</li>
+                <li>• Historials de versions dels documents</li>
+                <li>• Sessió oberta (no es tanca sessió)</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Multi-tab info box */}
+          <div className="p-3 rounded-lg flex items-start gap-2 text-xs" style={{ backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)' }}>
+            <span className="text-blue-400">ℹ</span>
+            <p className="text-gray-300 flex-1">
+              <span className="font-bold text-blue-300">Consell: </span>
+              es recomana tenir només aquesta pestanya de Sonilab oberta durant el procés. Les altres pestanyes es recarregaran automàticament, però per seguretat és millor tancar-les abans.
+            </p>
+          </div>
+
+          {/* Checkbox blocker */}
+          <label className="flex items-start gap-3 cursor-pointer pt-2">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              disabled={isResetting}
+              className="mt-0.5 w-4 h-4 accent-red-500 cursor-pointer disabled:cursor-not-allowed"
+            />
+            <span className="text-sm text-gray-200">
+              Entenc que es perdran aquests ajustos i que aquesta acció no es pot desfer.
+            </span>
+          </label>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-[var(--th-border)] flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={isResetting}
+            className="px-6 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: 'var(--th-bg-tertiary)', color: 'var(--th-text-secondary)', border: '1px solid var(--th-border)' }}
+          >
+            Cancel·lar
+          </button>
+          <button
+            onClick={handleConfirmClick}
+            disabled={!confirmed || isResetting}
+            className="px-6 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            style={{ backgroundColor: 'rgb(220, 38, 38)', color: 'white' }}
+          >
+            {isResetting && (
+              <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
+                <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+              </svg>
+            )}
+            {isResetting ? 'Restablint…' : 'Restablir configuració'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { logout } = useAuth();
@@ -772,6 +922,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           <button onClick={onClose} className="px-8 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95" style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}>Fet</button>
         </div>
       </div>
+
+      {/* Factory Reset Confirmation Modal */}
+      <FactoryResetConfirmModal
+        isOpen={isFactoryResetModalOpen}
+        onClose={() => setIsFactoryResetModalOpen(false)}
+        onConfirm={async () => {
+          // Stub for now — real handler wired in Task 11
+          console.log('Factory reset confirmed (stub)');
+        }}
+      />
     </div>
   );
 };
