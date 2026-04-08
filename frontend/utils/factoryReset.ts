@@ -105,7 +105,49 @@ export async function factoryReset(userId: string | null): Promise<{
   return { ok: true, backendOk };
 }
 
-/** Phase B — implemented in Task 3. */
+/**
+ * Phase B — Applies pending localStorage cleanup. MUST be invoked at
+ * frontend/index.tsx BEFORE ReactDOM.createRoot(...).render(<App />).
+ *
+ * Synchronous and safe to call before React mounts. Does not touch React or api.
+ *
+ * If no PENDING_FLAG on sessionStorage, does nothing (common case: normal load).
+ *
+ * If flag present:
+ *   1. Reads userId from the flag payload (empty string if user wasn't logged in).
+ *   2. Removes PENDING_FLAG (but NOT WARN_FLAG — banner post-reload reads it).
+ *   3. Iterates KEYS_TO_REMOVE and removes each from localStorage.
+ *   4. If userId present, also removes the scoped variant of CUSTOM_THEME_TOKENS.
+ */
 export function applyPendingFactoryReset(): void {
-  // TEMPORARY STUB — replaced in Task 3
+  let userId: string | null = null;
+  try {
+    const pending = sessionStorage.getItem(PENDING_FLAG);
+    if (pending === null) return; // common path: no pending reset
+    userId = pending || null;     // '' → null; 'abc123' → 'abc123'
+    sessionStorage.removeItem(PENDING_FLAG);
+  } catch {
+    return; // sessionStorage disabled → can't tell if pending, bail out
+  }
+
+  // Clean all keys from the authoritative blocklist
+  for (const key of KEYS_TO_REMOVE) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Unlikely but defensive — continue with remaining keys
+    }
+  }
+
+  // Scoped variant of CUSTOM_THEME_TOKENS (only if we have a userId)
+  if (userId) {
+    try {
+      localStorage.removeItem(`${LOCAL_STORAGE_KEYS.CUSTOM_THEME_TOKENS}_${userId}`);
+    } catch {
+      // Ignore
+    }
+  }
+
+  // NOTE: do NOT remove LOCAL_STORAGE_KEYS.THEME (user keeps their theme choice).
+  // NOTE: do NOT remove WARN_FLAG from sessionStorage — App.tsx banner effect reads it.
 }
