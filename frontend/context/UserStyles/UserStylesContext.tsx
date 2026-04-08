@@ -30,6 +30,106 @@ import {
   FACTORY_SUBTITLE_STYLES,
   FACTORY_HOME_STYLES,
 } from './factoryStyles';
+
+const BUILTIN_CLEANUP_DONE_KEY = 'snlbpro_user_styles_builtin_cleanup_v1';
+
+/**
+ * Override permanent: en cada mount, substitueix el preset `builtin: true`
+ * ('Per defecte') de cada scope amb els valors factory del codi actual.
+ *
+ * El preset 'Per defecte' és la font de veritat del sistema i només es
+ * modifica tocant `factoryStyles.ts` al codi i fent release. Els canvis
+ * arriben automàticament a tots els usuaris al proxim mount sense
+ * migracions manuals. Si l'usuari té canvis stale persistits al backend
+ * o a localStorage, aquest override els pisa silenciosament.
+ *
+ * Els presets `builtin: false` (creats per l'usuari amb el botó 'Nou')
+ * es preserven intactes.
+ */
+function overrideBuiltinPresets(payload: UserStylesPayload): UserStylesPayload {
+  const replaceBuiltin = <S extends { presets: any[]; activePresetId: string }>(
+    state: S,
+    factoryStyles: any,
+  ): S => {
+    const nextPresets = state.presets.map(p =>
+      p.builtin
+        ? {
+            id: 'default',
+            name: 'Per defecte',
+            builtin: true,
+            styles: factoryStyles,
+          }
+        : p,
+    );
+    // Si no hi havia cap builtin, l'afegim al principi
+    if (!nextPresets.some(p => p.builtin)) {
+      nextPresets.unshift({
+        id: 'default',
+        name: 'Per defecte',
+        builtin: true,
+        styles: factoryStyles,
+      });
+    }
+    return { ...state, presets: nextPresets };
+  };
+
+  return {
+    ...payload,
+    scriptEditor:   replaceBuiltin(payload.scriptEditor,   FACTORY_SCRIPT_STYLES),
+    subtitleEditor: replaceBuiltin(payload.subtitleEditor, FACTORY_SUBTITLE_STYLES),
+    home:           replaceBuiltin(payload.home,           FACTORY_HOME_STYLES),
+  };
+}
+
+/**
+ * Cleanup one-time: elimina tots els presets `builtin: false` del payload.
+ * S'executa UNA sola vegada per instal·lació, detectat via la flag
+ * BUILTIN_CLEANUP_DONE_KEY a localStorage. Despres d'aquesta primera
+ * execució, els presets custom que l'usuari crei amb el botó 'Nou' es
+ * preserven normalment en mount futurs.
+ *
+ * Motivació: el sistema antic permetia als usuaris editar el preset 'Per
+ * defecte' directament, i també crear presets custom. Amb el nou model
+ * (preset 'Per defecte' inmutable + botó 'Nou' per crear variants), cal
+ * netejar presets custom residuals del sistema antic. Aquest cleanup
+ * s'ha confirmat amb l'usuari com a acceptable perquè la feature de
+ * presets custom encara no s'havia utilitzat en producció.
+ */
+function cleanupCustomPresetsIfPending(payload: UserStylesPayload): {
+  cleaned: UserStylesPayload;
+  didCleanup: boolean;
+} {
+  let alreadyDone = false;
+  try {
+    alreadyDone = localStorage.getItem(BUILTIN_CLEANUP_DONE_KEY) === '1';
+  } catch {
+    // localStorage deshabilitat: no podem garantir idempotencia,
+    // millor no fer cleanup per no repetir-lo en cada mount.
+    alreadyDone = true;
+  }
+  if (alreadyDone) return { cleaned: payload, didCleanup: false };
+
+  const stripNonBuiltin = <S extends { presets: any[]; activePresetId: string }>(state: S): S => {
+    const builtinOnly = state.presets.filter(p => p.builtin);
+    const nextActive = builtinOnly.find(p => p.id === state.activePresetId)?.id
+      ?? builtinOnly[0]?.id
+      ?? state.activePresetId;
+    return { ...state, presets: builtinOnly, activePresetId: nextActive };
+  };
+
+  const cleaned: UserStylesPayload = {
+    ...payload,
+    scriptEditor:   stripNonBuiltin(payload.scriptEditor),
+    subtitleEditor: stripNonBuiltin(payload.subtitleEditor),
+    home:           stripNonBuiltin(payload.home),
+  };
+
+  try {
+    localStorage.setItem(BUILTIN_CLEANUP_DONE_KEY, '1');
+  } catch { /* noop */ }
+
+  return { cleaned, didCleanup: true };
+}
 import { useAuth } from '../Auth/AuthContext';
 import { api } from '../../services/api';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
@@ -62,6 +162,10 @@ interface UserStylesContextValue {
     atomKey: keyof StyleSetMap[S],
     patch: Partial<StyleAtom>,
   ): void;
+  /** Fuerza un push inmediato del payload actual al backend, cancelando
+   *  cualquier debounce pendiente. Lo usa el botón "Guardar" del panel
+   *  de estils para dar feedback inmediato al usuario. */
+  savePayloadNow(): void;
   /** Estimate de fila para virtual scroll del editor de subtítulos (px). */
   subtitleRowEstimate: number;
 }
@@ -181,9 +285,28 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const scopedLocal = readScopedLocal(me.id);
     const legacy = readLegacyEditorStyles();
     const result = loadOrMigrate({ remote, scopedLocal, legacy });
-    setPayload(result.payload);
-    if (result.needsPush && USE_BACKEND) {
-      api.updateMe({ preferences: { userStyles: result.payload } }).catch(() => {});
+
+    // Cleanup one-time dels presets custom residuals (sistema antic).
+    // Només s'executa a la primera càrrega per usuari després del deploy
+    // d'aquest canvi, marcat per la flag BUILTIN_CLEANUP_DONE_KEY.
+    const { cleaned, didCleanup } = cleanupCustomPresetsIfPending(result.payload);
+
+    // Override permanent del preset 'Per defecte' amb els factory del codi.
+    // S'executa en TOTS els mounts, no només al primer. Els canvis al codi
+    // de factoryStyles.ts es propaguen automàticament a tots els usuaris.
+    const normalized = overrideBuiltinPresets(cleaned);
+
+    setPayload(normalized);
+
+    // Push al backend si cal (needsPush original, o si hem fet cleanup,
+    // o si l'override del builtin ha canviat el contingut vs el que hi
+    // havia al remote).
+    const contentChanged =
+      result.needsPush ||
+      didCleanup ||
+      JSON.stringify(normalized) !== JSON.stringify(remote);
+    if (contentChanged && USE_BACKEND) {
+      api.updateMe({ preferences: { userStyles: normalized } }).catch(() => {});
     }
   }, [me?.id]);
 
@@ -326,6 +449,21 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   }, [mutate]);
 
+  // Push inmediato del payload actual al backend. Usa payloadRef per evitar
+  // tancar sobre el valor stale. Cancel·la el debounce pendent (si n'hi ha)
+  // per no duplicar l'enviament.
+  const payloadRef = useRef(payload);
+  useEffect(() => { payloadRef.current = payload; }, [payload]);
+  const savePayloadNow = useCallback(() => {
+    if (debounceRef.current != null) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (USE_BACKEND && meRef.current) {
+      api.updateMe({ preferences: { userStyles: payloadRef.current } }).catch(() => {});
+    }
+  }, []);
+
   // ── Mètriques derivades per a subtítols ───────────────────────────────────
   const subtitleRowEstimate = useMemo(() => {
     const sb = activePreset('subtitleEditor').styles;
@@ -342,6 +480,7 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     deletePreset,
     resetActivePreset,
     updateAtom,
+    savePayloadNow,
     subtitleRowEstimate,
   }), [
     payload,
@@ -353,6 +492,7 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     deletePreset,
     resetActivePreset,
     updateAtom,
+    savePayloadNow,
     subtitleRowEstimate,
   ]);
 
