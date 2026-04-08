@@ -7,6 +7,7 @@ import { useAuth } from '../context/Auth/AuthContext';
 import { useTheme } from '../context/Theme/ThemeContext';
 import { CUSTOM_THEME_ID, PRESET_THEMES, TOKEN_GROUPS, buildCustomTheme } from '../context/Theme/themes';
 import { StylesTab } from './Settings/UserStyles/StylesTab';
+import { factoryReset } from '../utils/factoryReset';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -539,7 +540,7 @@ const UnsavedChangesWarningModal: React.FC<UnsavedChangesWarningModalProps> = ({
 
 const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
-  const { logout } = useAuth();
+  const { logout, me } = useAuth();
   const { theme, themeId, setThemeId, themes, customTokens, setCustomTokens, resetCustomTokensFromPreset } = useTheme();
   const [customEditorOpen, setCustomEditorOpen] = useState(false);
   const [copyFromPreset, setCopyFromPreset] = useState<string | null>(null);
@@ -566,6 +567,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   // Factory Reset modal state
   const [isFactoryResetModalOpen, setIsFactoryResetModalOpen] = useState(false);
+  // Factory Reset — unsaved changes sub-modal state
+  const [isUnsavedChangesModalOpen, setIsUnsavedChangesModalOpen] = useState(false);
+
+  // Factory Reset handler — calls factoryReset (Phase A) then reloads.
+  // factoryReset() itself sets PENDING_FLAG and WARN_FLAG on sessionStorage, so
+  // this function just triggers it and the subsequent reload.
+  const performFactoryReset = async () => {
+    const userId = me?.id ?? null;
+    await factoryReset(userId);
+    window.location.reload();
+  };
+
+  const handleFactoryResetConfirm = async () => {
+    // Check for unsaved changes in any editor via the global ref exposed by App.tsx
+    const isDirty = typeof window !== 'undefined' && window.__sonilabIsDirtyRef?.current === true;
+
+    if (isDirty) {
+      // Divert to unsaved changes sub-modal — close the main modal first
+      setIsFactoryResetModalOpen(false);
+      setIsUnsavedChangesModalOpen(true);
+      return;
+    }
+
+    await performFactoryReset();
+  };
+
+  const handleSaveAndContinue = () => {
+    setIsUnsavedChangesModalOpen(false);
+    // Trigger save via synthetic Ctrl+S keyboard event — most editors listen for it.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));
+    // Wait briefly for the save to propagate, then run the reset.
+    setTimeout(() => {
+      void performFactoryReset();
+    }, 300);
+  };
+
+  const handleDiscardAndContinue = () => {
+    setIsUnsavedChangesModalOpen(false);
+    void performFactoryReset();
+  };
+
+  const handleUnsavedCancel = () => {
+    setIsUnsavedChangesModalOpen(false);
+  };
 
   const TabButton: React.FC<{ tabId: ActiveTab; label: string; disabled?: boolean }> = ({ tabId, label, disabled }) => {
     const isActive = activeTab === tabId;
@@ -996,10 +1041,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       <FactoryResetConfirmModal
         isOpen={isFactoryResetModalOpen}
         onClose={() => setIsFactoryResetModalOpen(false)}
-        onConfirm={async () => {
-          // Stub for now — real handler wired in Task 11
-          console.log('Factory reset confirmed (stub)');
-        }}
+        onConfirm={handleFactoryResetConfirm}
+      />
+
+      {/* Unsaved Changes Sub-Modal (only shown if isDirty at reset time) */}
+      <UnsavedChangesWarningModal
+        isOpen={isUnsavedChangesModalOpen}
+        onSaveAndContinue={handleSaveAndContinue}
+        onDiscardAndContinue={handleDiscardAndContinue}
+        onCancel={handleUnsavedCancel}
       />
     </div>
   );
