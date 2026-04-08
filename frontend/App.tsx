@@ -34,6 +34,16 @@ import { UserStylesProvider } from './context/UserStyles/UserStylesContext';
 import { api } from './services/api';
 import TasksIAPanel, { JobRecord } from './components/TasksIA/TasksIAPanel';
 
+// Global ref for SettingsModal to check isDirty before the factory reset.
+// See spec section 6.2 "Cas especial: canvis sense desar". Using a global
+// ref avoids the need for a shared context or prop-drilling from the deeply
+// nested editor components.
+declare global {
+  interface Window {
+    __sonilabIsDirtyRef?: { current: boolean };
+  }
+}
+
 const MIN_LIBRARY_WIDTH = 280;
 const COLLAPSED_WIDTH = 60; 
 
@@ -445,6 +455,17 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
   const docContent = useMemo(() => currentDoc?.contentByLang[effectiveLang] || '', [currentDoc, effectiveLang]);
   const history = useDocumentHistory(openDocId || 'temp', docContent);
+
+  // Expose history.isDirty globally so SettingsModal's factory reset handler
+  // can check it before wiping state. Initialized once, updated via effect.
+  if (typeof window !== 'undefined' && !window.__sonilabIsDirtyRef) {
+    window.__sonilabIsDirtyRef = { current: false };
+  }
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.__sonilabIsDirtyRef) {
+      window.__sonilabIsDirtyRef.current = history.isDirty;
+    }
+  }, [history.isDirty]);
 
   // Contingut CSV per a la vista DADES: usa el valor guardat o el deriva del guió canònic si és buit
   const csvContentToShow = useMemo(() => {
