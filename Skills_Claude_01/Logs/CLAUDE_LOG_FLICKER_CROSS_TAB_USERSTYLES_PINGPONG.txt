@@ -1,0 +1,405 @@
+================================================================================
+CLAUDE LOG — FIX DE FLICKER CATASTROFIC PER PING-PONG CROSS-TAB A USERSTYLES
+================================================================================
+Data/hora  : 2026-04-08
+Autor      : Claude (claude-opus-4-6) — sessio interactiva amb l'usuari
+Commit fix : 78e7718 fix(user-styles): remove cross-tab storage listener to kill ping-pong flicker
+Severitat  : CRITICA — la plataforma era inusable amb mes d'una pestanya oberta
+================================================================================
+
+
+1. RESUM DEL PROBLEMA (sintomes observats per l'usuari)
+--------------------------------------------------------
+En obrir un fitxer .srt al editor de subtitols, tota la zona del editor
+comencava a parpadejar de forma massiva i visible. El mateix parpadeig
+apareixia a la taula Files del Library. La resta de la UI (video, toolbar,
+header) no es veia afectada.
+
+Caracteristiques clau del sintoma:
+  - Apareixia immediatament en obrir el editor, no calia interactuar
+  - Mes facil de reproduir quan l'usuari tenia multiples pestanyes obertes
+    (2 Brave + 2 Edge en el cas que ens va permetre diagnosticar-ho)
+  - A vegades s'aturava tot sol al cap de ~5 minuts sense explicacio
+    aparent, pero tornava en recarregar
+  - L'usuari va observar correctament que semblava "un pols entre Tema i
+    Estil" — intuicio que va resultar molt propera al mecanisme real
+
+Impacte: bloquejava completament qualsevol treball amb el editor de
+subtitols, i per tant bloquejava les proves manuals del feature Factory
+Reset (T13 del plan d'implementacio).
+
+
+2. METODOLOGIA DE DIAGNOSTIC
+-----------------------------
+Es va seguir la skill superpowers:systematic-debugging, Phase 1 (Root
+Cause Investigation) estricta, sense proposar cap fix fins tenir evidencia.
+
+FASE 1.1 — Analisi estatic inicial:
+  - Revisio dels 3 llocs modificats a App.tsx per la sessio anterior
+    (Factory Reset feature) — tot correcte, cap loop obvi
+  - Revisio de UserStylesContext.tsx — semblava ben protegit amb
+    lastAppliedPayloadRef + guards per JSON.stringify
+  - Revisio de applyUserStylesToDOM.ts — NO causa directa (nomes cridat
+    per l'effect de UserStylesContext amb guard per serialize)
+  - Revisio de commits recents que toquen user-styles: molts fixes previs
+    a commit ef60b36 "estabilitzar UserStylesContext + revertir refs amb
+    !important" — pero el bug actual era DIFERENT al documentat alla
+
+Conclusio fase 1.1: res obvi. Necessitavem evidencia runtime del navegador.
+
+FASE 1.2 — Instrumentacio runtime (pegat a la consola DevTools):
+
+  SNIPPET #1 — Contar mutacions d'atribut style al DOM:
+    (() => {
+      let count = 0;
+      const seen = new Map();
+      const obs = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.type === 'attributes' && m.attributeName === 'style') {
+            count++;
+            const target = m.target;
+            const tag = target.tagName + ...;
+            seen.set(tag, (seen.get(tag) || 0) + 1);
+          }
+        }
+      });
+      obs.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['style'],
+        subtree: true,
+      });
+      setTimeout(() => {
+        obs.disconnect();
+        console.log('Total style mutations:', count);
+        console.log('Top mutators:');
+        const sorted = [...seen.entries()].sort((a,b) => b[1] - a[1]).slice(0, 10);
+        for (const [tag, n] of sorted) console.log('  ', n, 'x', tag);
+      }, 3000);
+    })();
+
+  Resultat: 48.930 mutacions en 3 segons, TOTES al mateix element:
+    48930 x HTML
+
+  Interpretacio: ~16.310 mutacions/seg a document.documentElement.style.
+  Aquest es el target exacte que modifica applyUserStylesToDOM via
+  root.style.setProperty(). Primera confirmacio: el loop esta dins del
+  sistema de user-styles.
+
+  SNIPPET #2 — Patchejar setProperty per saber QUINES propietats:
+    (() => {
+      const seen = new Map();
+      let count = 0;
+      const origSetProperty = CSSStyleDeclaration.prototype.setProperty;
+      CSSStyleDeclaration.prototype.setProperty = function(prop, value, priority) {
+        count++;
+        seen.set(prop, (seen.get(prop) || 0) + 1);
+        return origSetProperty.call(this, prop, value, priority);
+      };
+      setTimeout(() => {
+        CSSStyleDeclaration.prototype.setProperty = origSetProperty;
+        console.log('Total:', count);
+        const sorted = [...seen.entries()].sort((a,b) => b[1] - a[1]).slice(0, 20);
+        for (const [prop, n] of sorted) console.log('  ', n, 'x', prop);
+      }, 3000);
+    })();
+
+  Resultat: 221.061 crides a setProperty en 3 segons, totes a vars --us-*.
+  Cada propietat exactament 2377 vegades. 221061 / 93 properties = 2377
+  invocacions d'applyUserStylesToDOM en 3s = ~790 invocacions/seg.
+
+  Interpretacio confirmada: l'effect de UserStylesContext.tsx:130-135 que
+  invoca applyUserStylesToDOM s'executava ~790 vegades/seg. El guard per
+  JSON.stringify NO estava atrapant els casos — payload canviava DE VERITAT
+  en cada invocacio.
+
+  SNIPPET #3 — Capturar stack traces per veure QUI crida setProperty:
+    (() => {
+      const orig = CSSStyleDeclaration.prototype.setProperty;
+      const traces = [];
+      CSSStyleDeclaration.prototype.setProperty = function(prop, value, priority) {
+        if (String(prop).startsWith('--us-') && traces.length < 3) {
+          traces.push(new Error().stack);
+        }
+        return orig.call(this, prop, value, priority);
+      };
+      setTimeout(() => {
+        CSSStyleDeclaration.prototype.setProperty = orig;
+        traces.forEach((t, i) => console.log('Trace', i+1, t));
+      }, 500);
+    })();
+
+  Resultat: 3 traces identiques, totes des de:
+    applyUserStylesToDOM (applyUserStylesToDOM.ts:110:16)
+    UserStylesContext.tsx:134:5
+    commitHookPassiveMountEffects (React internals)
+
+  Interpretacio: no es un re-render loop durant el render, es un loop a
+  traves d'effects. Alguna cosa esta cridant setPayload en bucle.
+
+FASE 1.3 — Instrumentacio del codi font (no del navegador):
+
+  Es van afegir temporalment 3 blocs marcats com [DIAG-FLICKER] TEMPORAL
+  dins de UserStylesContext.tsx:
+
+  (a) Envoltori al setPayload que loga la stack de cada crida (primeres 20)
+  (b) Log de MOUNT/UNMOUNT del provider amb un mountId aleatori
+  (c) Log dins de l'effect d'applyUserStylesToDOM amb info diagnostica
+      (empty guard, serialize length, content changed, prev/next head)
+
+  L'usuari va recarregar la pagina i va pegar els primers 15-20 logs de
+  consola amb els [DIAG] marcadors.
+
+  Pista critica #1: apareixia nomes UN cicle MOUNT → UNMOUNT → MOUNT
+  (patro normal de StrictMode en dev), seguit de molts applies en loop
+  amb nomes 1 mountId. Per tant NO era un remount loop del provider.
+
+  Pista critica #2: els applies alternaven perfectament entre dos
+  payloads de mida diferent:
+    apply #1 serLen=2474 (payload A)
+    apply #2 serLen=2441 (payload B)  ← 33 bytes menys que A
+    apply #3 serLen=2474 (payload A)
+    apply #4 serLen=2441 (payload B)
+    ...
+
+  L'oscilacio A↔B↔A↔B perfecta no pot venir de mutacions aleatories.
+  Es un ping-pong entre dos fonts diferents que tenen cadascun la seva
+  versio "correcta" del payload i s'escriuen mutuament.
+
+  Pista critica #3: quan es va envoltar setPayload amb stack trace, el
+  92% de les crides venien d'un mateix lloc:
+    [DIAG] setPayload call #2
+        at UserStylesContext.tsx:122:21
+        at onStorage (UserStylesContext.tsx:206:45)
+
+  Totes les crides #2 fins #20 venien de onStorage. Aquesta era la
+  font del loop: el listener de storage events de cross-tab sync.
+
+
+3. ROOT CAUSE EXACTE
+---------------------
+UserStylesContext.tsx tenia dos blocs que junts formaven un loop infinit
+en presencia de multiples pestanyes:
+
+BLOC 1 — useEffect de persistencia (linia 138-140 aprox abans del fix):
+  useEffect(() => {
+    if (me?.id) writeScopedLocal(me.id, payload);
+  }, [me?.id, payload]);
+
+  Cada vegada que payload canvia, escriu a localStorage.
+  writeScopedLocal crida localStorage.setItem(scopedKey(userId), JSON...).
+
+BLOC 2 — useEffect de sync cross-tab (linia 143-155 aprox abans del fix):
+  useEffect(() => {
+    if (!me?.id) return;
+    const key = scopedKey(me.id);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== key || !e.newValue) return;
+      try {
+        const parsed: UserStylesPayload = JSON.parse(e.newValue);
+        if ((parsed as any)?.version === 2) setPayload(parsed);  // ← sense guard
+      } catch { /* noop */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [me?.id]);
+
+  L'event "storage" del navegador es dispara a TOTES les pestanyes germanes
+  del mateix origin quan una d'elles fa localStorage.setItem a una key
+  que ja existia. Inclou pestanyes dins del mateix navegador (no entre
+  navegadors diferents com Brave ↔ Edge, cada un te el seu localStorage).
+
+MECANISME DEL LOOP (exemple amb 2 pestanyes al mateix navegador):
+
+  Estat inicial:
+    Pestanya P1: payload = A (2474 bytes) — perque va carregar primer amb
+                 un path de loadOrMigrate determinat
+    Pestanya P2: payload = B (2441 bytes) — perque va carregar segons amb
+                 un timing lleugerament diferent, entrant a un branch
+                 diferent de loadOrMigrate (p.ex. el valor scopedLocal va
+                 arribar abans que la resposta de me?.preferences)
+
+  Tick 1: P1 te A, escriu A al localStorage (effect de persistencia).
+          → localStorage ara te A.
+          → Es dispara 'storage' event a P2 amb e.newValue = A.
+          → P2 onStorage rep A, fa setPayload(A), re-render, aplica al DOM.
+          → Ara P2 te A tambe? NO. Perque l'effect de persistencia de P2
+            es reactiva i escriu SEGUIDAMENT el seu B "old" perque React
+            encara no ha flushed el setPayload(A) per complet. O perque
+            hi ha un re-render que reverteix. La clau del bug es que la
+            segona pestanya acaba escrivint la seva propia versio B.
+          → Es dispara 'storage' event a P1 amb e.newValue = B.
+          → P1 onStorage rep B, fa setPayload(B), re-render, aplica al DOM.
+          → P1 persistencia reverteix a A.
+          → ...
+
+  Alternativament (i mes probablement): dues pestanyes amb payloads
+  genuinament diferents, cadascuna escriu el seu, l'altra llegeix i
+  setPayloda, l'altra torna a escriure el seu, loop infinit.
+
+  Tant la mitjana com el pic: ~790 iteracions/seg, visible com flicker
+  massiu a qualsevol element que consumeixi var(--us-*).
+
+PER QUE NO BASTAVEN ELS GUARDS PER CONTINGUT:
+  Una primera proposta va ser afegir un guard dins d'onStorage del tipus
+  `if (JSON.stringify(currentPayload) === e.newValue) return;`. Pero el
+  bug es que els dos payloads son GENUINAMENT DIFERENTS (2474 bytes vs
+  2441 bytes, 33 bytes de diferencia real). Un guard per igualtat de
+  contingut no convergeix perque MAI son iguals — i per tant mai trencaria
+  el loop.
+
+  L'unica manera d'eliminar el ping-pong era trencar un dels dos blocs
+  completament.
+
+
+4. LA SOLUCIO APLICADA (commit 78e7718)
+----------------------------------------
+Eliminar completament el BLOC 2 (el listener de storage events cross-tab).
+Mantenir el BLOC 1 (persistencia a localStorage) intacte.
+
+Codi eliminat (reemplacat per un comentari dens que explica per que):
+
+  - // Sync entre finestres: si una altra finestra canvia el cache, re-llegir.
+  - useEffect(() => {
+  -   if (!me?.id) return;
+  -   const key = scopedKey(me.id);
+  -   const onStorage = (e: StorageEvent) => {
+  -     if (e.key !== key || !e.newValue) return;
+  -     try {
+  -       const parsed: UserStylesPayload = JSON.parse(e.newValue);
+  -       if ((parsed as any)?.version === 2) setPayload(parsed);
+  -     } catch { /* noop */ }
+  -   };
+  -   window.addEventListener('storage', onStorage);
+  -   return () => window.removeEventListener('storage', onStorage);
+  - }, [me?.id]);
+
+  + // ⚠ Sync cross-tab via storage events: DESACTIVAT deliberadament.
+  + // [20+ linies explicant el perque del bug, el mecanisme del loop, la
+  + //  known limitation acceptada, i com recuperar la feature al futur si
+  + //  cal — amb BroadcastChannel + origen explicit per missatge].
+
+Known limitations acceptades:
+  - Si l'usuari te dues pestanyes obertes i edita un preset d'estils en
+    una, l'altra no ho veura fins que la recarregui manualment.
+  - El backend segueix sent la font de veritat i loadOrMigrate resol la
+    consistencia al proxim reload. Aquesta perdua de sync cross-tab en
+    temps real es nice-to-have, no es critica per a l'us normal del
+    producte.
+  - Single-tab: comportament identic, zero regression.
+
+
+5. ALTERNATIVES CONSIDERADES I DESCARTADES
+-------------------------------------------
+Alternativa A: guard per serialize dins d'onStorage.
+  Rebutjat: els dos payloads son genuinament diferents, el guard mai
+  convergiria.
+
+Alternativa B: guard per serialize dins del writeScopedLocal useEffect
+(no escriure si el serialized actual es igual al que ja hi ha a localStorage).
+  Podria trencar el loop en alguns casos, pero no quan les dues pestanyes
+  tenen cadascuna un payload diferent (cadascuna ve determinada a escriure
+  el seu, que per a ella es "nou respecte al que hi ha"). Complex i fragil.
+
+Alternativa C: BroadcastChannel amb sender tab id i bailout self-eco.
+  Es l'arquitectura correcta si en algun moment cal tornar a tenir sync
+  cross-tab real. Massa canvi per a un fix d'emergencia. Documentat al
+  comentari inline per a futur.
+
+Alternativa D: desactivar UserStylesContext completament.
+  Nuclear, rompria Settings → Estils i tots els components que consumeixen
+  var(--us-*). Descartat.
+
+Alternativa E (la triada): eliminar nomes el listener cross-tab. Minim
+blast radius, trenca el loop en el receptor. Persistencia i DOM apply
+intactes. Zero regression single-tab. Known limitation documentada.
+
+
+6. COM REPRODUIR EL BUG AL FUTUR (en cas de regresio)
+------------------------------------------------------
+1. Obrir la app de Sonilab en 2+ pestanyes del mateix navegador
+2. En una pestanya, obrir un fitxer .srt al editor de subtitols (o anar
+   al tab Files del Library)
+3. Observar: zona del editor o taula Files parpadejant massivament
+4. Obrir DevTools → Console i pegar el SNIPPET #1 de la seccio 2 d'aquest log
+5. Si la sortida mostra milers de mutations per segon al HTML element,
+   el bug ha tornat
+6. Continuar amb SNIPPET #2 i #3 per confirmar que venen de --us-* i
+   d'onStorage del UserStylesContext
+7. Re-llegir aquest log i el commit 78e7718 per entendre la causa original
+
+
+7. COM VERIFICAR QUE LA SOLUCIO FUNCIONA
+-----------------------------------------
+Verificacio que ha fet l'usuari despres del commit 78e7718:
+  A — Sigue flickeando? NO
+  B — Los estilos se ven bien? SI
+  C — Settings → Estils funciona en vivo dins d'una pestanya? SI
+
+Tests adicionals suggerits al futur:
+  - Multi-tab: obrir 2+ pestanyes, verificar que no flickea (el fix directe)
+  - Edit en viu: canviar un preset en Settings → Estils, confirmar que
+    s'aplica al DOM de la mateixa pestanya sense flicker
+  - Persistencia: recarregar despres d'un edit, confirmar que l'edit
+    persisteix (localStorage + backend funcionen)
+  - Sessio nova: logout/login, confirmar que el backend retorna el payload
+    correcte i s'aplica sense flicker
+
+
+8. FITXERS AFECTATS
+--------------------
+Modificat (1 fitxer, commit 78e7718):
+  frontend/context/UserStyles/UserStylesContext.tsx
+    - Eliminat: useEffect(() => { ... addEventListener('storage') ... }, [me?.id])
+    - Afegit: bloc de comentari dens explicant el perque del bug i les
+      known limitations
+
+Totalitzacio: 28 insertions, 14 deletions a UserStylesContext.tsx.
+Cap altre fitxer tocat. Cap canvi a package.json, build config, o altres
+contextes.
+
+
+9. CONTEXT DE LA SESSIO (per si es llegeix aquest log sense mes context)
+-------------------------------------------------------------------------
+Aquest fix es va aplicar al final d'una llarga sessio interactiva amb
+l'usuari que incloia:
+
+  1. Fix previ de precisio TC IN/OUT + canvi de defaults d'atajos I/O → Q/W
+     al editor de subtitols (commit 9c75e78)
+  2. Disseny + implementacio del feature "Factory Reset" a Settings → General
+     (commits 7c06dff fins 583dbdc, 14 commits en total)
+  3. Usuari comenca proves manuals (T13 del plan), obre un .srt i descobreix
+     el flicker
+  4. Fase 1 de systematic-debugging amb instrumentacio runtime + instrumentacio
+     del codi font = root cause identificat
+  5. Fix aplicat (commit 78e7718)
+  6. Verificacio per l'usuari: OK
+
+El bug de flicker NO era part del treball del Factory Reset. Era pre-existent
+al codebase, latent, i nomes es manifestava amb el cas multi-tab que l'usuari
+no havia tingut fins a probar-ho a fons aquest dia. Si el domain doc
+domain-user-styles.md:75 menciona un bug historic de flicker (commit ef60b36),
+aquell era DIFERENT: mutacions DOM durant render amb !important/MutationObserver,
+corregit per ef60b36. El bug d'avui era un altre, i s'ha de documentar com a
+categoria separada.
+
+Si en el futur es vol recuperar la sincronitzacio cross-tab dels user-styles
+(es a dir, que si edites un preset en una pestanya, l'altra pestanya ho
+vegi en temps real sense recarregar), la implementacio CORRECTA es:
+
+  - Usar BroadcastChannel en lloc d'addEventListener('storage')
+  - Cada missatge ha de portar un senderTabId unic generat al mount del provider
+  - El receptor ha de verificar `if (msg.senderTabId === myTabId) return;`
+    per evitar que rebre l'eco del seu propi enviament
+  - El emissor nomes ha d'enviar missatges per canvis iniciats per l'usuari
+    (edits via Settings → Estils), NO per cada mutacio del payload (que inclou
+    els canvis rebuts d'altres pestanyes — aixo reprodueix el loop)
+  - Alternativament: usar un debounce i un "last known sender" per garantir
+    que mai es propaga el propi canvi
+
+Aquest refactor esta explicitament mencionat al comentari inline que
+substitueix el codi eliminat, per si algu el troba al futur.
+
+
+================================================================================
+FI DEL LOG
+================================================================================
