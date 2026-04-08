@@ -76,11 +76,11 @@ export class LibraryController {
     @Param('id') id: string,
     @Body('batchDocIds') batchDocIds?: string[],
   ) {
-    return this.library.softDeleteFolderTree(user.userId, id, batchDocIds);
+    return this.library.softDeleteFolderTree(id, batchDocIds);
   }
   @Patch('/folders/:id/restore')
-restoreFolder(@CurrentUser() user: RequestUser, @Param('id') id: string) {
-  return this.library.restoreFolderTree(user.userId, id);
+restoreFolder(@CurrentUser() _user: RequestUser, @Param('id') id: string) {
+  return this.library.restoreFolderTree(id);
 }
 
 @Patch('/documents/:id/restore')
@@ -94,7 +94,7 @@ purgeFolder(
   @Param('id') id: string,
   @Body('batchDocIds') batchDocIds?: string[],
 ) {
-  return this.library.purgeFolderTree(user.userId, id, batchDocIds);
+  return this.library.purgeFolderTree(id, batchDocIds);
 }
 
 @Delete('/documents/:id/purge')

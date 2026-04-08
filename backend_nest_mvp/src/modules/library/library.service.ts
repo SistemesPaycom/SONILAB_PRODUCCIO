@@ -39,8 +39,8 @@ export class LibraryService {
     return doc ? { ...doc, id: doc._id.toString() } : null;
   }
 
-async softDeleteFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: string[]) {
-  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+async softDeleteFolderTree(rootFolderId: string, batchDocIds?: string[]) {
+  const root = await this.folderModel.findOne({ _id: rootFolderId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
 
   const folders = await this.folderModel
@@ -93,13 +93,13 @@ async softDeleteFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: 
     }
   }
 
-  await this.folderModel.updateMany({ ownerId, _id: { $in: toDelete } }, { $set: { isDeleted: true } });
-  await this.docModel.updateMany({ ownerId, parentId: { $in: toDelete } }, { $set: { isDeleted: true } });
+  await this.folderModel.updateMany({ _id: { $in: toDelete } }, { $set: { isDeleted: true } });
+  await this.docModel.updateMany({ parentId: { $in: toDelete } }, { $set: { isDeleted: true } });
 
   return { deletedFolderIds: toDelete.length };
 }
-async restoreFolderTree(ownerId: string, rootFolderId: string) {
-  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+async restoreFolderTree(rootFolderId: string) {
+  const root = await this.folderModel.findOne({ _id: rootFolderId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
 
   // Si el padre fue purgado o no existe, restaurar en raíz
@@ -114,7 +114,7 @@ async restoreFolderTree(ownerId: string, rootFolderId: string) {
 
   // Cogemos todas las folders (incluidas borradas) para reconstruir el árbol
   const folders = await this.folderModel
-    .find({ ownerId }, { _id: 1, parentId: 1 })
+    .find({}, { _id: 1, parentId: 1 })
     .lean();
 
   const children = new Map<string, string[]>();
@@ -137,20 +137,20 @@ async restoreFolderTree(ownerId: string, rootFolderId: string) {
 
   // Restauramos folders + docs dentro del árbol
   await this.folderModel.updateMany(
-    { ownerId, _id: { $in: toRestore } },
+    { _id: { $in: toRestore } },
     { $set: { isDeleted: false } },
   );
 
   await this.docModel.updateMany(
-    { ownerId, parentId: { $in: toRestore } },
+    { parentId: { $in: toRestore } },
     { $set: { isDeleted: false } },
   );
 
   return { restoredFolderIds: toRestore.length };
 }
 
-async purgeFolderTree(ownerId: string, rootFolderId: string, batchDocIds?: string[]) {
-  const root = await this.folderModel.findOne({ _id: rootFolderId, ownerId }).lean();
+async purgeFolderTree(rootFolderId: string, batchDocIds?: string[]) {
+  const root = await this.folderModel.findOne({ _id: rootFolderId }).lean();
   if (!root) throw new NotFoundException('Folder not found');
 
   const folders = await this.folderModel
