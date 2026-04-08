@@ -139,20 +139,34 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (me?.id) writeScopedLocal(me.id, payload);
   }, [me?.id, payload]);
 
-  // Sync entre finestres: si una altra finestra canvia el cache, re-llegir.
-  useEffect(() => {
-    if (!me?.id) return;
-    const key = scopedKey(me.id);
-    const onStorage = (e: StorageEvent) => {
-      if (e.key !== key || !e.newValue) return;
-      try {
-        const parsed: UserStylesPayload = JSON.parse(e.newValue);
-        if ((parsed as any)?.version === 2) setPayload(parsed);
-      } catch { /* noop */ }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [me?.id]);
+  // ⚠ Sync cross-tab via storage events: DESACTIVAT deliberadament.
+  //
+  // Anteriorment aquest Provider escoltava `window.addEventListener('storage')`
+  // per la clau `snlbpro_user_styles_<userId>` i quan rebia un canvi d'una altra
+  // pestanya feia `setPayload(parsed)`. Això causava un bucle ping-pong
+  // catastròfic en presencia de múltiples pestanyes:
+  //
+  //   P1 persist X0 → storage event → P2 setPayload(X0) → P2 persist X0 →
+  //   storage event → P1 setPayload(X0) → ... 790 apply/seg, flicker massiu
+  //   visible al DOM (verificat amb MutationObserver: ~49000 mutacions a
+  //   document.documentElement.style en 3s).
+  //
+  // El loop era impossible de trencar només amb guards per contingut
+  // serialitzat perquè els payloads de les dues pestanyes eren genuïnament
+  // diferents (p. ex. 2474 bytes ↔ 2441 bytes) — el mismatch persistía i el
+  // ping-pong continuava indefinidament.
+  //
+  // Known limitation acceptada: si l'usuari té dues pestanyes obertes i edita
+  // un preset d'estils en una, l'altra pestanya no ho veurà fins que la
+  // recarregui manualment. El backend segueix sent la font de veritat i
+  // `loadOrMigrate` resol la consistència al pròxim reload.
+  //
+  // Si en el futur es vol recuperar la sincronització cross-tab, cal refactor
+  // profund: probablement usant BroadcastChannel amb un origen explícit per
+  // missatge (sender tab id) i bailout per "aquest missatge l'he emès jo mateix".
+  // Un simple `addEventListener('storage')` NO és suficient perquè no distingeix
+  // entre "un canvi de l'usuari en una altra pestanya" i "l'eco del meu propi
+  // write a localStorage".
 
   // Càrrega inicial / migració — només una vegada per userId i per sessió.
   // Si `me` canvia d'identitat (qualsevol mutació a AuthContext) però el userId
