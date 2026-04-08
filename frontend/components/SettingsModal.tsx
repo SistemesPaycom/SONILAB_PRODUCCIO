@@ -345,6 +345,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [editorMinGapMs, setEditorMinGapMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_GAP_MS, 160);
   const [waveformHoldMs, setWaveformHoldMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS, 500);
 
+  // Factory Reset modal state
+  const [isFactoryResetModalOpen, setIsFactoryResetModalOpen] = useState(false);
+
   const TabButton: React.FC<{ tabId: ActiveTab; label: string; disabled?: boolean }> = ({ tabId, label, disabled }) => {
     const isActive = activeTab === tabId;
     return (
@@ -723,14 +726,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 <p className="font-bold text-gray-200">Marge final de TAKE (Post-roll)</p>
                                 <p className="text-xs text-gray-500 italic">Temps afegit després de l'últim TC intern per tancar el TAKE.</p>
                             </div>
-                            <input 
-                                type="number" 
+                            <input
+                                type="number"
                                 min="0" max="30"
-                                value={takeMargin} 
+                                value={takeMargin}
                                 onChange={(e) => setTakeMargin(parseInt(e.target.value, 10) || 0)}
                                 className="w-20 rounded-lg px-3 py-2 text-white font-mono text-center outline-none" style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)', '--tw-ring-color': 'var(--th-accent)' } as any}
                             />
                         </div>
+                    </div>
+                </div>
+
+                <div className="p-6 rounded-2xl" style={{ backgroundColor: 'var(--th-bg-secondary)', border: '1px solid var(--th-border)' }}>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight mb-4 flex items-center gap-2">
+                        <svg className="w-5 h-5 accent-icon-color" style={{ color: 'var(--th-accent-text)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Restablir configuració
+                    </h3>
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1">
+                            <p className="font-bold text-gray-200">Restablir configuració de fàbrica</p>
+                            <p className="text-xs text-gray-500 italic mt-1">
+                                Tornar la configuració d'aquesta aplicació al seu estat per defecte. No afecta els teus presets d'estils ni els historials dels teus documents.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setIsFactoryResetModalOpen(true)}
+                            className="px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all active:scale-95 hover:brightness-125 whitespace-nowrap"
+                            style={{ backgroundColor: 'transparent', color: 'rgb(248 113 113)', border: '1px solid rgba(239, 68, 68, 0.4)' }}
+                        >
+                            Restablir configuració de fàbrica…
+                        </button>
                     </div>
                 </div>
              </div>
