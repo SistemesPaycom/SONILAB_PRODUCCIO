@@ -468,6 +468,75 @@ const FactoryResetConfirmModal: React.FC<FactoryResetConfirmModalProps> = ({ isO
   );
 };
 
+// ─── Unsaved Changes Warning Modal (sub-modal of Factory Reset) ──────────────
+
+interface UnsavedChangesWarningModalProps {
+  isOpen: boolean;
+  onSaveAndContinue: () => void;
+  onDiscardAndContinue: () => void;
+  onCancel: () => void;
+}
+
+const UnsavedChangesWarningModal: React.FC<UnsavedChangesWarningModalProps> = ({
+  isOpen,
+  onSaveAndContinue,
+  onDiscardAndContinue,
+  onCancel,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[900] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="max-w-md w-full rounded-2xl shadow-2xl flex flex-col"
+        style={{ backgroundColor: 'var(--th-bg-primary)', border: '1px solid var(--th-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6 border-b border-[var(--th-border)] flex items-center gap-3">
+          <span className="text-amber-400 text-2xl">⚠</span>
+          <h2 className="text-lg font-black text-white uppercase tracking-tight">
+            Tens canvis sense desar
+          </h2>
+        </div>
+
+        <div className="p-6">
+          <p className="text-sm text-gray-300">
+            Tens canvis sense desar en un document. Si continues amb el reset, aquests canvis es perdran definitivament.
+          </p>
+          <p className="text-sm text-gray-300 mt-3 font-bold">Què vols fer?</p>
+        </div>
+
+        <div className="p-6 border-t border-[var(--th-border)] flex flex-col gap-2">
+          <button
+            onClick={onSaveAndContinue}
+            className="px-6 py-2.5 text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95"
+            style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
+          >
+            Desar i continuar
+          </button>
+          <button
+            onClick={onDiscardAndContinue}
+            className="px-6 py-2.5 text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95"
+            style={{ backgroundColor: 'rgb(220, 38, 38)', color: 'white' }}
+          >
+            Continuar sense desar
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-6 py-2.5 text-xs font-black uppercase tracking-widest rounded-xl transition-all"
+            style={{ backgroundColor: 'var(--th-bg-tertiary)', color: 'var(--th-text-secondary)', border: '1px solid var(--th-border)' }}
+          >
+            Cancel·lar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const USE_BACKEND = process.env.VITE_USE_BACKEND === '1';
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { logout } = useAuth();
