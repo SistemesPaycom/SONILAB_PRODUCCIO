@@ -51,7 +51,7 @@ export const PENDING_FLAG = 'snlbpro_factory_reset_pending';
 export const WARN_FLAG = 'snlbpro_factory_reset_warn';
 export const BC_CHANNEL = 'snlbpro-factory-reset';
 
-// ─── Phase A / Phase B function signatures (stubbed for next tasks) ──────────
+// ─── Phase A / Phase B implementations ──────────────────────────────────────
 
 /**
  * Phase A — Initiates the factory reset for the current user.
