@@ -23,6 +23,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useHashRoute } from './hooks/useHashRoute';
 import useLocalStorage from './hooks/useLocalStorage';
 import { LOCAL_STORAGE_KEYS } from './constants';
+import { BC_CHANNEL, PENDING_FLAG } from './utils/factoryReset';
 import SettingsModal from './components/SettingsModal';
 import * as Icons from './components/icons';
 import { AuthModal } from './components/Auth/AuthModal';
@@ -245,6 +246,27 @@ const MainAppContent: React.FC = () => {
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [useBackend]);
+
+  // Factory Reset — sibling tab listener. If another tab triggers a factory
+  // reset, it broadcasts on BC_CHANNEL; we mark our own PENDING_FLAG and
+  // reload to pick up the clean state via applyPendingFactoryReset (Phase B).
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel(BC_CHANNEL);
+      bc.onmessage = (ev) => {
+        if (ev.data?.type === 'reset') {
+          try {
+            sessionStorage.setItem(PENDING_FLAG, '');
+          } catch { /* sessionStorage disabled — we'll reload anyway */ }
+          window.location.reload();
+        }
+      };
+    } catch {
+      // BroadcastChannel not available on very old browsers — ignore.
+    }
+    return () => { if (bc) bc.close(); };
+  }, []);
 
 const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
   const [isLibraryCollapsed, setIsLibraryCollapsed] = useState(false);
