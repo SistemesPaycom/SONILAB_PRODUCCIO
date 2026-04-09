@@ -250,6 +250,10 @@ if (!fs.existsSync(filePath)) {
     const range = res.req.headers.range;
     const contentType = doc.media.mimeType || 'application/octet-stream';
 
+    // CORP: permetre que <video src> cross-origin carregui aquest recurs.
+    // Helmet posa 'same-origin' per defecte i bloqueja la reproducció
+    // quan frontend (3000) i backend (8000) estan en orígens diferents.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Content-Type', contentType);
 

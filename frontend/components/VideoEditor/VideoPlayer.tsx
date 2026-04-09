@@ -218,7 +218,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           ref={videoRef}
           src={src}
           onTimeUpdate={(e) => handleTimeUpdateWithSave(e.currentTarget.currentTime)}
-          onLoadedMetadata={(e) => onDurationChange(e.currentTarget.duration)}
+          onLoadedMetadata={(e) => { if (e.currentTarget.duration > 0) onDurationChange(e.currentTarget.duration); }}
+          onDurationChange={(e) => { if (e.currentTarget.duration > 0) onDurationChange(e.currentTarget.duration); }}
           onCanPlay={() => setIsVideoLoading(false)}
           onError={() => setIsVideoLoading(false)}
           onPlay={onPlay}

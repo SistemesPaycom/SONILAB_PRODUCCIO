@@ -53,6 +53,7 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [mediaDocId, setMediaDocId] = useState<string | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [linkedMediaMissing, setLinkedMediaMissing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -317,8 +318,11 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
     if (!linkedId) return;
     autoLoadAttemptedRef.current = true;
 
-    const mediaDoc = state.documents.find(d => d.id === linkedId);
-    if (!mediaDoc) return;
+    const mediaDoc = state.documents.find(d => d.id === linkedId && !d.isDeleted);
+    if (!mediaDoc) {
+      setLinkedMediaMissing(true);
+      return;
+    }
 
     handleSyncMedia(mediaDoc);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -444,6 +448,13 @@ useEffect(() => {
         <div className="flex flex-col flex-grow min-h-0 overflow-hidden">
           <div className="flex-grow min-h-0 bg-black overflow-hidden relative">
             <VideoPlaybackArea {...playerProps} />
+            {linkedMediaMissing && !videoSrc && (
+              <div className="absolute top-2 left-2 right-2 z-10 bg-amber-900/80 border border-amber-600/50 rounded-lg px-3 py-2 flex items-center gap-2 text-xs text-amber-200">
+                <span>⚠</span>
+                <span>El vídeo vinculat ha estat eliminat o no està disponible.</span>
+                <button onClick={() => setLinkedMediaMissing(false)} className="ml-auto text-amber-400 hover:text-white">✕</button>
+              </div>
+            )}
           </div>
           <div className="flex-shrink-0 border-t border-gray-700/50" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
             <VideoSubtitlesToolbar
