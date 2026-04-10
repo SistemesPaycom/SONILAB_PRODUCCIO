@@ -444,12 +444,40 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   ) => {
     mutate(prev => {
       const state = prev[scope] as ScopeState<S>;
+      const activeId = state.activePresetId;
+
+      if (activeId !== 'custom') {
+        // Clonar el preset actiu cap a un nou 'custom' (reemplaça el 'custom' existent si n'hi havia)
+        const sourcePreset =
+          state.presets.find(p => p.id === activeId) ?? state.presets[0];
+        const clonedStyles = JSON.parse(JSON.stringify(sourcePreset.styles));
+        const patchedStyles = {
+          ...clonedStyles,
+          [atomKey]: { ...(clonedStyles[atomKey] as StyleAtom), ...patch },
+        };
+        const customPreset: UserStylePreset = {
+          id: 'custom',
+          name: 'custom',
+          builtin: false,
+          styles: patchedStyles,
+        };
+        const presetsWithoutCustom = state.presets.filter((p: any) => p.id !== 'custom');
+        return {
+          ...prev,
+          [scope]: {
+            activePresetId: 'custom',
+            presets: [...presetsWithoutCustom, customPreset],
+          },
+        } as UserStylesPayload;
+      }
+
+      // Ja en 'custom': aplica el patch directament
       return {
         ...prev,
         [scope]: {
           ...state,
           presets: state.presets.map(p => {
-            if (p.id !== state.activePresetId) return p;
+            if (p.id !== 'custom') return p;
             const currentAtom = (p.styles as any)[atomKey] as StyleAtom;
             return { ...p, styles: { ...p.styles, [atomKey]: { ...currentAtom, ...patch } } };
           }),
