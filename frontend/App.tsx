@@ -33,6 +33,8 @@ import { ThemeProvider } from './context/Theme/ThemeContext';
 import { UserStylesProvider } from './context/UserStyles/UserStylesContext';
 import { api } from './services/api';
 import TasksIAPanel, { JobRecord } from './components/TasksIA/TasksIAPanel';
+import { UploadProvider } from './context/Upload/UploadContext';
+import PujadesPanel from './components/Pujades/PujadesPanel';
 
 // Global ref for SettingsModal to check isDirty before the factory reset.
 // See spec section 6.2 "Cas especial: canvis sense desar". Using a global
@@ -288,6 +290,7 @@ const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isPujadesOpen, setIsPujadesOpen] = useState(false);
 
   // Factory Reset — post-reload warning banner state
   const [factoryResetWarn, setFactoryResetWarn] = useState(false);
@@ -642,12 +645,13 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
         style={{ width: isLibraryCollapsed ? COLLAPSED_WIDTH : libraryWidth, backgroundColor: 'var(--th-bg-app)' }}
         className={`flex-shrink-0 transition-[width] duration-200 ease-out relative z-10 will-change-[width]`}
       >
-        <LibraryView 
-            onOpenDocument={handleOpenDocument} 
-            isCollapsed={isLibraryCollapsed} 
-            setIsCollapsed={setIsLibraryCollapsed} 
+        <LibraryView
+            onOpenDocument={handleOpenDocument}
+            isCollapsed={isLibraryCollapsed}
+            setIsCollapsed={setIsLibraryCollapsed}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenNotifications={() => setIsNotificationsOpen(true)}
+            onOpenPujades={() => setIsPujadesOpen(true)}
             page={page}
   onChangePage={(p) => { setPage(p); setOpenDocId(null); setOpenMode(null); setIsEditing(false); }}
         />
@@ -693,6 +697,10 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
           onClose={() => setIsNotificationsOpen(false)}
           onTaskCompleted={handleTaskCompleted}
         />
+      )}
+
+      {isPujadesOpen && (
+        <PujadesPanel onClose={() => setIsPujadesOpen(false)} />
       )}
 
       {history.isDirty && (
@@ -1050,15 +1058,17 @@ const AuthedGate: React.FC = () => {
         reason={reason}
       />
       {(!USE_BACKEND || authed) && (
-        <LibraryProvider>
-          {route.view === 'script-view' && route.docId ? (
-            <ScriptExternalView docId={route.docId} />
-          ) : route.view === 'editor' && route.mode && route.docId ? (
-            <EditorTabContent mode={route.mode} docId={route.docId} />
-          ) : (
-            <MainAppContent />
-          )}
-        </LibraryProvider>
+        <UploadProvider>
+          <LibraryProvider>
+            {route.view === 'script-view' && route.docId ? (
+              <ScriptExternalView docId={route.docId} />
+            ) : route.view === 'editor' && route.mode && route.docId ? (
+              <EditorTabContent mode={route.mode} docId={route.docId} />
+            ) : (
+              <MainAppContent />
+            )}
+          </LibraryProvider>
+        </UploadProvider>
       )}
     </>
   );
