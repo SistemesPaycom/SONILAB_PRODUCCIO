@@ -110,11 +110,24 @@ interface PujadesPanelProps {
 
 ## Canvis a App.tsx
 
-1. Importar `UploadProvider` i `PujadesPanel`
-2. Embolcallar el contingut principal amb `<UploadProvider>`
-3. Afegir `const [isPujadesOpen, setIsPujadesOpen] = useState(false)`
-4. Renderitzar `{isPujadesOpen && <PujadesPanel onClose={() => setIsPujadesOpen(false)} />}` al costat de `TasksIAPanel`
-5. Passar `onOpenPujades={() => setIsPujadesOpen(true)}` a `LibraryView`
+`UploadProvider` s'ha de col·locar a `AuthedGate`, embolcallant `LibraryProvider` — no dins de `MainAppContent`. Això és necessari perquè `MainAppContent` (que conté `isPujadesOpen` i el render de `PujadesPanel`) ha de poder consumir el context com a fill del provider.
+
+Jerarquia resultant:
+```
+AuthedGate
+  UploadProvider       ← nou
+    LibraryProvider
+      MainAppContent   ← consumidor: isPujadesOpen, PujadesPanel
+        LibraryView    ← consumidor: addJob / updateJob / completeJob
+          CreateProjectModal ← consumidor: addJob / updateJob / completeJob
+```
+
+Canvis concrets:
+1. Importar `UploadProvider` i `PujadesPanel` a `App.tsx`
+2. A `AuthedGate`: embolcallar `LibraryProvider` amb `<UploadProvider>`
+3. A `MainAppContent`: afegir `const [isPujadesOpen, setIsPujadesOpen] = useState(false)`
+4. Renderitzar `{isPujadesOpen && <PujadesPanel onClose={() => setIsPujadesOpen(false)} />}` al costat de `<TasksIAPanel>`
+5. Passar `onOpenPujades={() => setIsPujadesOpen(true)}` a `<LibraryView>`
 
 ---
 
@@ -124,7 +137,7 @@ interface PujadesPanelProps {
 2. Eliminar `const [uploadProgress, setUploadProgress] = useState<...>(null)`
 3. Consumir `useUploadContext()` → `{ addJob, updateJob, completeJob }`
 4. A `handleSingleFileUpload`:
-   - Generar `const jobId = nanoid()` abans de la pujada
+   - Generar `const jobId = crypto.randomUUID()` abans de la pujada
    - Cridar `addJob(jobId, file.name)`
    - Callback de progrés: `(pct) => updateJob(jobId, pct)`
    - Al finalitzar OK: `completeJob(jobId, true)`
@@ -143,7 +156,7 @@ interface PujadesPanelProps {
 
 A `handleUploadNewMedia`:
 1. Consumir `useUploadContext()`
-2. Generar `const jobId = nanoid()` abans de `api.uploadMedia`
+2. Generar `const jobId = crypto.randomUUID()` abans de `api.uploadMedia`
 3. Cridar `addJob(jobId, file.name)`
 4. Afegir `onProgress: (pct) => updateJob(jobId, pct)` com a segon argument de `api.uploadMedia`
 5. Al finalitzar OK: `completeJob(jobId, true)`
