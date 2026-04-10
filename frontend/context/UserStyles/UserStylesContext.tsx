@@ -46,28 +46,36 @@ const BUILTIN_CLEANUP_DONE_KEY = 'snlbpro_user_styles_builtin_cleanup_v1';
  * Els presets `builtin: false` (creats per l'usuari amb el botó 'Nou')
  * es preserven intactes.
  */
-function overrideBuiltinPresets(payload: UserStylesPayload): UserStylesPayload {
+function overrideBuiltinPresets(
+  payload: UserStylesPayload,
+  globalStyles: { scriptEditor?: any; subtitleEditor?: any; home?: any } | null,
+): UserStylesPayload {
+  const factoryFor = (scope: StyleScope): any => {
+    const g = globalStyles as any;
+    switch (scope) {
+      case 'scriptEditor':   return g?.scriptEditor   ?? FACTORY_SCRIPT_STYLES;
+      case 'subtitleEditor': return g?.subtitleEditor ?? FACTORY_SUBTITLE_STYLES;
+      case 'home':           return g?.home           ?? FACTORY_HOME_STYLES;
+    }
+    throw new Error(`Unknown scope ${String(scope)}`);
+  };
+
   const replaceBuiltin = <S extends { presets: any[]; activePresetId: string }>(
     state: S,
-    factoryStyles: any,
+    scope: StyleScope,
   ): S => {
-    const nextPresets = state.presets.map(p =>
+    const factory = factoryFor(scope);
+    const nextPresets = state.presets.map((p: any) =>
       p.builtin
-        ? {
-            id: 'default',
-            name: 'Per defecte',
-            builtin: true,
-            styles: factoryStyles,
-          }
+        ? { id: 'default', name: 'Per defecte', builtin: true, styles: factory }
         : p,
     );
-    // Si no hi havia cap builtin, l'afegim al principi
-    if (!nextPresets.some(p => p.builtin)) {
+    if (!nextPresets.some((p: any) => p.builtin)) {
       nextPresets.unshift({
         id: 'default',
         name: 'Per defecte',
         builtin: true,
-        styles: factoryStyles,
+        styles: factory,
       });
     }
     return { ...state, presets: nextPresets };
@@ -75,9 +83,9 @@ function overrideBuiltinPresets(payload: UserStylesPayload): UserStylesPayload {
 
   return {
     ...payload,
-    scriptEditor:   replaceBuiltin(payload.scriptEditor,   FACTORY_SCRIPT_STYLES),
-    subtitleEditor: replaceBuiltin(payload.subtitleEditor, FACTORY_SUBTITLE_STYLES),
-    home:           replaceBuiltin(payload.home,           FACTORY_HOME_STYLES),
+    scriptEditor:   replaceBuiltin(payload.scriptEditor,   'scriptEditor'),
+    subtitleEditor: replaceBuiltin(payload.subtitleEditor, 'subtitleEditor'),
+    home:           replaceBuiltin(payload.home,           'home'),
   };
 }
 
@@ -294,7 +302,9 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Override permanent del preset 'Per defecte' amb els factory del codi.
     // S'executa en TOTS els mounts, no només al primer. Els canvis al codi
     // de factoryStyles.ts es propaguen automàticament a tots els usuaris.
-    const normalized = overrideBuiltinPresets(cleaned);
+    const globalStyles: { scriptEditor?: any; subtitleEditor?: any; home?: any } | null =
+      (me as any)?.globalStyles ?? null;
+    const normalized = overrideBuiltinPresets(cleaned, globalStyles);
 
     setPayload(normalized);
 
