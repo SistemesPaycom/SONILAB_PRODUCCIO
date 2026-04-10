@@ -173,6 +173,18 @@ interface UserStylesContextValue {
    *  cualquier debounce pendiente. Lo usa el botón "Guardar" del panel
    *  de estils para dar feedback inmediato al usuario. */
   savePayloadNow(): void;
+  /** Guarda el preset 'custom' amb el nom indicat. Retorna 'conflict' si el nom ja existeix
+   *  i overwrite=false, 'blocked-custom' si el nom és reservat 'custom',
+   *  'blocked-system' si el nom és 'Per defecte' i l'usuari no és admin, 'ok' si èxit. */
+  savePreset(
+    scope: StyleScope,
+    name: string,
+    overwrite?: boolean,
+  ): 'ok' | 'conflict' | 'blocked-custom' | 'blocked-system';
+  /** Guarda els estils del borrador 'custom' com a globals al backend (admin only). */
+  saveGlobalPreset(scope: StyleScope): Promise<void>;
+  /** Retorna true si hi ha un preset 'custom' (canvis no guardats) per al scope indicat. */
+  hasUnsavedChanges(scope: StyleScope): boolean;
   /** Estimate de fila para virtual scroll del editor de subtítulos (px). */
   subtitleRowEstimate: number;
 }
@@ -501,6 +513,103 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, []);
 
+  const savePreset = useCallback((
+    scope: StyleScope,
+    name: string,
+    overwrite = false,
+  ): 'ok' | 'conflict' | 'blocked-custom' | 'blocked-system' => {
+    const trimmed = name.trim();
+    if (!trimmed) return 'blocked-custom';
+    if (trimmed.toLowerCase() === 'custom') return 'blocked-custom';
+    if (
+      trimmed.toLowerCase() === 'per defecte' &&
+      meRef.current?.role !== 'admin'
+    ) return 'blocked-system';
+
+    const prevPayload = payloadRef.current;
+    const state = prevPayload[scope];
+    const customPreset = state.presets.find(p => p.id === 'custom');
+    if (!customPreset) return 'ok'; // res a guardar
+
+    const existing = state.presets.find(
+      p => p.id !== 'custom' && p.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existing && !overwrite) return 'conflict';
+
+    let newPayload: UserStylesPayload;
+
+    if (existing && overwrite) {
+      const updatedPresets = state.presets
+        .map(p =>
+          p.id === existing.id
+            ? { ...p, styles: JSON.parse(JSON.stringify(customPreset.styles)) }
+            : p,
+        )
+        .filter(p => p.id !== 'custom');
+      newPayload = {
+        ...prevPayload,
+        [scope]: { activePresetId: existing.id, presets: updatedPresets },
+      } as UserStylesPayload;
+    } else {
+      const newId = genId();
+      const newPreset: UserStylePreset = {
+        id: newId,
+        name: trimmed,
+        builtin: false,
+        styles: JSON.parse(JSON.stringify(customPreset.styles)),
+      };
+      const presetsWithoutCustom = state.presets.filter(p => p.id !== 'custom');
+      newPayload = {
+        ...prevPayload,
+        [scope]: { activePresetId: newId, presets: [...presetsWithoutCustom, newPreset] },
+      } as UserStylesPayload;
+    }
+
+    if (debounceRef.current != null) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setPayload(newPayload);
+    if (USE_BACKEND && meRef.current) {
+      api.updateMe({ preferences: { userStyles: newPayload } }).catch(() => {});
+    }
+    return 'ok';
+  }, []);
+
+  const saveGlobalPreset = useCallback(async (scope: StyleScope): Promise<void> => {
+    const prevPayload = payloadRef.current;
+    const state = prevPayload[scope];
+    const customPreset = state.presets.find(p => p.id === 'custom');
+    const activePreset = state.presets.find(p => p.id === state.activePresetId) ?? state.presets[0];
+    const stylesToSave = (customPreset ?? activePreset).styles;
+
+    await api.patchGlobalStyles({ scope, styles: stylesToSave });
+
+    // Actualitzar el preset builtin localment + eliminar 'custom' + activar builtin
+    const presetsWithoutCustom = state.presets.filter(p => p.id !== 'custom');
+    const presetsUpdated = presetsWithoutCustom.map(p =>
+      p.builtin ? { ...p, styles: JSON.parse(JSON.stringify(stylesToSave)) } : p,
+    );
+
+    const newPayload: UserStylesPayload = {
+      ...prevPayload,
+      [scope]: { activePresetId: 'default', presets: presetsUpdated },
+    } as UserStylesPayload;
+
+    if (debounceRef.current != null) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setPayload(newPayload);
+    if (USE_BACKEND && meRef.current) {
+      api.updateMe({ preferences: { userStyles: newPayload } }).catch(() => {});
+    }
+  }, []);
+
+  const hasUnsavedChanges = useCallback((scope: StyleScope): boolean => {
+    return payload[scope].presets.some(p => p.id === 'custom');
+  }, [payload]);
+
   // ── Mètriques derivades per a subtítols ───────────────────────────────────
   const subtitleRowEstimate = useMemo(() => {
     const sb = activePreset('subtitleEditor').styles;
@@ -518,6 +627,9 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     resetActivePreset,
     updateAtom,
     savePayloadNow,
+    savePreset,
+    saveGlobalPreset,
+    hasUnsavedChanges,
     subtitleRowEstimate,
   }), [
     payload,
@@ -530,6 +642,9 @@ export const UserStylesProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     resetActivePreset,
     updateAtom,
     savePayloadNow,
+    savePreset,
+    saveGlobalPreset,
+    hasUnsavedChanges,
     subtitleRowEstimate,
   ]);
 
