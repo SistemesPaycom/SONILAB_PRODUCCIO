@@ -39,7 +39,7 @@ function computeSubGridCols(sb: SubtitleEditorStyleSet): string {
   const idCpsCol    = `${Math.ceil(chOf(sb.idCps)       * 12)}px`;
   const timecodeCol = `${Math.ceil(chOf(sb.timecode)    * 21)}px`;
   const charCntCol  = `${Math.ceil(chOf(sb.charCounter) *  5)}px`;
-  return `${takeCol} ${idCpsCol} ${timecodeCol} ${charCntCol} max-content`;
+  return `${takeCol} ${idCpsCol} ${timecodeCol} ${charCntCol} 1fr`;
 }
 
 function computeSubRowHeight(sb: SubtitleEditorStyleSet): number {

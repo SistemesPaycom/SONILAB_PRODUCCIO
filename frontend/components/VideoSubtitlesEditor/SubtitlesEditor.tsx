@@ -171,21 +171,31 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   // calculation, so the container stays viewport-width while content overflows.
   // By reading scrollWidth (which includes overflow) and applying it as minWidth,
   // all items (width: 100%) and their borders extend to the full scrollable width.
-  const virtualItems = virtualizer.getVirtualItems();
-  useLayoutEffect(() => {
+  const syncVirtualWidth = useCallback(() => {
     const scrollEl = scrollContainerRef.current;
     const vcEl = virtualContainerRef.current;
     if (!scrollEl || !vcEl) return;
-    // Reset to auto first so scrollWidth reflects true content width
+    // Reset a auto primer perquè scrollWidth reflecteixi l'amplada real del contingut
     vcEl.style.minWidth = '100%';
-    // Read the true scrollable width (includes grid overflow)
     requestAnimationFrame(() => {
       const sw = scrollEl.scrollWidth;
-      if (sw > 0) {
-        vcEl.style.minWidth = sw + 'px';
-      }
+      if (sw > 0) vcEl.style.minWidth = sw + 'px';
     });
-  }, [virtualItems.length, segments]);
+  }, []);
+
+  const virtualItems = virtualizer.getVirtualItems();
+  useLayoutEffect(() => {
+    syncVirtualWidth();
+  }, [virtualItems.length, segments, syncVirtualWidth]);
+
+  // Re-sync quan el panell es redimensiona (per exemple, arrossegant el separador)
+  useEffect(() => {
+    const scrollEl = scrollContainerRef.current;
+    if (!scrollEl) return;
+    const ro = new ResizeObserver(syncVirtualWidth);
+    ro.observe(scrollEl);
+    return () => ro.disconnect();
+  }, [syncVirtualWidth]);
 
   // Auto-scroll to active segment via virtualizer
   useEffect(() => {

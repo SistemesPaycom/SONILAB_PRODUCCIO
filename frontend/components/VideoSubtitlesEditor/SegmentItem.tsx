@@ -95,10 +95,10 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
 
   const getLinePlain = (el: HTMLElement | null) => {
     if (!el) return '';
+    // No fem .trim() per preservar línies que siguin únicament un espai intencional
     return RichText.richToPlain(el.innerHTML ?? '')
       .replace(/\u00A0/g, ' ')
-      .replace(/\n+/g, ' ')
-      .trim();
+      .replace(/\n+/g, ' ');
   };
 
   const isLineNonEmpty = useCallback(
@@ -456,16 +456,17 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           title="Text corregit pel guió"
         />
       )}
-      <div
-        className="grid items-stretch"
-        style={{
-          // Amplades de columna calculades dinàmicament per `applyUserStylesToDOM`
-          // segons les CSS vars `--us-sub-*` del preset actiu de subtítols.
-          gridTemplateColumns: 'var(--us-sub-grid-columns)',
-          gridTemplateRows: `repeat(${maxLines}, var(--us-sub-row-height))`,
-        }}
-      >
-        {Array.from({ length: maxLines }).map((_, i) => (
+      <div className="flex items-stretch">
+        <div
+          className="grid items-stretch flex-1 min-w-0"
+          style={{
+            // Amplades de columna calculades dinàmicament per `applyUserStylesToDOM`
+            // segons les CSS vars `--us-sub-*` del preset actiu de subtítols.
+            gridTemplateColumns: 'var(--us-sub-grid-columns)',
+            gridTemplateRows: `repeat(${maxLines}, var(--us-sub-row-height))`,
+          }}
+        >
+          {Array.from({ length: maxLines }).map((_, i) => (
           <React.Fragment key={i}>
             {/* Columna 1: TAKE + indicador DIFF */}
             <div style={gridCellStyle} className="flex items-center px-2 gap-1">
@@ -584,7 +585,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
                 }}
                 data-segment-id={segment.id}
-                className={`outline-none whitespace-nowrap transition-colors ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:ring-1 rounded-sm' : ''}`}
+                className={`outline-none whitespace-nowrap transition-colors ${(contentLines[i] || '').length > 0 ? 'w-full block' : 'w-[1ch] inline-block'} ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:ring-1 rounded-sm' : ''}`}
                 style={{
                   fontFamily: 'var(--us-sub-content-family)',
                   fontSize:   'var(--us-sub-content-size)',
@@ -601,7 +602,20 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
               {charsPerLine[i] > maxCharsPerLine && <div className="absolute top-0 right-0 h-full w-0.5 bg-red-600/50" />}
             </div>
           </React.Fragment>
-        ))}
+          ))}
+        </div>
+
+        {/* Handle de selecció — visible en hover, activa el segment sense donar focus al text */}
+        <div
+          className={`flex items-center justify-center w-[60px] flex-shrink-0 rounded-sm transition-opacity cursor-pointer hover:bg-white/10 ${isActive ? 'opacity-40' : 'opacity-0 group-hover:opacity-100'}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick(segment.id);
+          }}
+          title="Seleccionar subtítol"
+        >
+          <span className="select-none text-[11px]" style={{ color: 'var(--th-text-muted, #555)' }}>⠿</span>
+        </div>
       </div>
 
       {/* Panel de correcció pendent (inline review) — VERMELL */}

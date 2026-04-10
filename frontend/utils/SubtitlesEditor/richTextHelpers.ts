@@ -58,9 +58,9 @@ export function richToPlain(html: string): string {
   let result = '';
   tempDiv.childNodes.forEach(child => result += processNode(child));
 
-  // Neteja final
+  // Neteja final — eliminem salts de línia de contorn però preservem espais intencionals
   return result
     .replace(/\u00A0/g, ' ') // Espais no separables a normals
     .replace(/\n{3,}/g, '\n\n') // Màxim 2 salts
-    .trim();
+    .replace(/^\n+|\n+$/g, ''); // Elimina \n inicials/finals sense afectar espais
 }
