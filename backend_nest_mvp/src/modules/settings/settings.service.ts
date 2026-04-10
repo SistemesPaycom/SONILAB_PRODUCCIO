@@ -20,7 +20,7 @@ export class SettingsService {
     const doc = await this.settingsModel
       .findOne({ settingKey: SETTING_KEY })
       .lean();
-    const styles = (doc as any)?.userStyles;
+    const styles = doc?.userStyles;
     if (!styles || Object.keys(styles).length === 0) return null;
     return styles;
   }
