@@ -82,12 +82,32 @@ export const api = {
     });
   },
   async me() {
-    return request<{ id: string; email: string; name?: string; role: string; preferences?: any }>(`/auth/me`);
+    return request<{
+      id: string;
+      email: string;
+      name?: string;
+      role: string;
+      preferences?: any;
+      globalStyles?: {
+        scriptEditor?: any;
+        subtitleEditor?: any;
+        home?: any;
+      } | null;
+    }>(`/auth/me`);
   },
   async updateMe(body: { name?: string; email?: string; preferences?: any }) {
     return request<{ id: string; email: string; name?: string; role: string; preferences?: any }>(`/auth/me`, {
       method: 'PATCH',
       body,
+    });
+  },
+  async patchGlobalStyles(payload: {
+    scope: 'scriptEditor' | 'subtitleEditor' | 'home';
+    styles: any;
+  }): Promise<void> {
+    await request<void>(`/settings/global-styles`, {
+      method: 'PATCH',
+      body: payload,
     });
   },
   async adminListUsers() {
