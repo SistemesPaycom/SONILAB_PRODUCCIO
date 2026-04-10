@@ -284,7 +284,8 @@ export const FileItem: React.FC<FileItemProps> = ({
   const formattedDate = new Date(item.updatedAt).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
   const formattedTime = new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const rawFormat = ((item as Document).sourceType || 'snlbpro').toUpperCase();
-  const formatLabel = item.type === 'folder' ? (isProject ? 'Projecte' : 'Carpeta') : isRef ? `LNK (${rawFormat})` : rawFormat;
+  const displayFormat = rawFormat === 'SNLBPRO' ? 'TXT' : rawFormat;
+  const formatLabel = item.type === 'folder' ? (isProject ? 'Projecte' : 'Carpeta') : isRef ? `LNK (${displayFormat})` : displayFormat;
 
   return (
     <div

@@ -202,8 +202,10 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
                           className={`h-full rounded-full transition-all duration-500 ${
                             job.status === 'queued' ? 'bg-amber-500' : ''
                           }`}
-                          style={job.status !== 'queued' ? { backgroundColor: 'var(--th-accent)' } : undefined}
-                          style={{ width: `${Math.max(job.progress, 2)}%` }}
+                          style={{
+                            width: `${Math.max(job.progress, 2)}%`,
+                            ...(job.status !== 'queued' ? { backgroundColor: 'var(--th-accent)' } : {}),
+                          }}
                         />
                       </div>
                       <div className="flex justify-between mt-1">
