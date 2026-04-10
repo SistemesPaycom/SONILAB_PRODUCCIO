@@ -45,6 +45,7 @@ export class AuthController {
       this.usersService.findById(user.userId),
       this.settingsService.getGlobalStyles(),
     ]);
+    if (!userData) return null;
     return { ...userData, globalStyles: globalStyles ?? null };
   }
 
