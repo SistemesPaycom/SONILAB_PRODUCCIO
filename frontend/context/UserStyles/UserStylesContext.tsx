@@ -51,11 +51,10 @@ function overrideBuiltinPresets(
   globalStyles: { scriptEditor?: any; subtitleEditor?: any; home?: any } | null,
 ): UserStylesPayload {
   const factoryFor = (scope: StyleScope): any => {
-    const g = globalStyles as any;
     switch (scope) {
-      case 'scriptEditor':   return g?.scriptEditor   ?? FACTORY_SCRIPT_STYLES;
-      case 'subtitleEditor': return g?.subtitleEditor ?? FACTORY_SUBTITLE_STYLES;
-      case 'home':           return g?.home           ?? FACTORY_HOME_STYLES;
+      case 'scriptEditor':   return globalStyles?.scriptEditor   ?? FACTORY_SCRIPT_STYLES;
+      case 'subtitleEditor': return globalStyles?.subtitleEditor ?? FACTORY_SUBTITLE_STYLES;
+      case 'home':           return globalStyles?.home           ?? FACTORY_HOME_STYLES;
     }
     throw new Error(`Unknown scope ${String(scope)}`);
   };
