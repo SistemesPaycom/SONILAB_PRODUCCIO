@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { GlobalSettings, GlobalSettingsSchema } from './settings.schema';
 import { SettingsService } from './settings.service';
 import { SettingsController } from './settings.controller';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @Module({
   imports: [
@@ -10,7 +11,7 @@ import { SettingsController } from './settings.controller';
       { name: GlobalSettings.name, schema: GlobalSettingsSchema },
     ]),
   ],
-  providers: [SettingsService],
+  providers: [SettingsService, RolesGuard],
   controllers: [SettingsController],
   exports: [SettingsService],
 })
