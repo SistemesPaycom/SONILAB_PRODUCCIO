@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as Icons from '../icons';
 import { api } from '../../services/api';
+import { LOCAL_STORAGE_KEYS } from '../../constants';
 
 export interface JobRecord {
   id: string;
@@ -30,6 +31,14 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
   const [tab, setTab] = useState<TabFilter>('active');
   const [loading, setLoading] = useState(true);
   const prevJobsRef = useRef<Map<string, string>>(new Map());
+  const [hiddenJobIds, setHiddenJobIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.TASKS_IA_HIDDEN_IDS);
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch {
+      return new Set();
+    }
+  });
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -66,8 +75,17 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
   }, [fetchJobs]);
 
   const activeJobs = jobs.filter(j => j.status === 'queued' || j.status === 'processing');
-  const historyJobs = jobs.filter(j => j.status === 'done' || j.status === 'error');
+  const historyJobs = jobs.filter(j => (j.status === 'done' || j.status === 'error') && !hiddenJobIds.has(j.id));
   const displayJobs = tab === 'active' ? activeJobs : historyJobs;
+
+  const clearHistory = () => {
+    if (!window.confirm('Netejar tot l\'historial de tasques finalitzades?')) return;
+    const newHidden = new Set([...hiddenJobIds, ...historyJobs.map(j => j.id)]);
+    setHiddenJobIds(newHidden);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.TASKS_IA_HIDDEN_IDS, JSON.stringify([...newHidden]));
+    } catch { /* silently fail */ }
+  };
 
   const statusLabel = (s: string) => {
     switch (s) {
@@ -152,6 +170,17 @@ const TasksIAPanel: React.FC<TasksIAPanelProps> = ({ onClose, onTaskCompleted })
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+          {tab === 'history' && historyJobs.length > 0 && (
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={clearHistory}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-gray-400 hover:text-red-400 hover:bg-red-900/20 border border-transparent hover:border-red-800/30 transition-all"
+              >
+                <Icons.Trash className="w-3.5 h-3.5" />
+                Netejar Historial
+              </button>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--th-accent)', borderTopColor: 'transparent' }} />

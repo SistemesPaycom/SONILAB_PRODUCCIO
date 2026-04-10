@@ -97,9 +97,9 @@ const PageWidthSlider: React.FC<{ value: number; onChange: (v: number) => void; 
     <div ref={panelRef} className="absolute top-full right-0 mt-2 bg-gray-800 border border-gray-700 p-4 rounded-lg shadow-2xl z-50 flex flex-col items-center gap-3 w-16">
       <div className="h-48 relative w-6 flex flex-col items-center">
         <div className="absolute inset-0 w-1.5 bg-white rounded-full left-1/2 -translate-x-1/2"></div>
-        <div 
-          className="absolute bottom-0 w-1.5 rounded-full left-1/2 -translate-x-1/2 transition-all duration-75" style={{ backgroundColor: 'var(--th-accent)' }}
-          style={{ height: `${progress}%` }}
+        <div
+          className="absolute bottom-0 w-1.5 rounded-full left-1/2 -translate-x-1/2 transition-all duration-75"
+          style={{ backgroundColor: 'var(--th-accent)', height: `${progress}%` }}
         ></div>
         <input 
           type="range"
@@ -115,9 +115,9 @@ const PageWidthSlider: React.FC<{ value: number; onChange: (v: number) => void; 
             width: '24px'
           } as any}
         />
-        <div 
-          className="absolute w-4 h-4 border-2 border-white rounded-full left-1/2 -translate-x-1/2 pointer-events-none shadow-md transition-all duration-75" style={{ backgroundColor: 'var(--th-accent)' }}
-          style={{ bottom: `calc(${progress}% - 8px)` }}
+        <div
+          className="absolute w-4 h-4 border-2 border-white rounded-full left-1/2 -translate-x-1/2 pointer-events-none shadow-md transition-all duration-75"
+          style={{ backgroundColor: 'var(--th-accent)', bottom: `calc(${progress}% - 8px)` }}
         ></div>
       </div>
       <span className="text-[10px] font-mono font-bold" style={{ color: 'var(--th-accent-text)' }}>{value}px</span>

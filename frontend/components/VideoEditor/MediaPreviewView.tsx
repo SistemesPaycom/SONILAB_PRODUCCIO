@@ -127,18 +127,16 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
                 onChange={(e) => onSeek(parseFloat(e.target.value))}
                 className="absolute inset-0 w-full h-full opacity-0 z-20 cursor-pointer custom-scrubber"
             />
-            <div 
+            <div
                 className="absolute top-0 left-0 h-full transition-all duration-75 z-10"
-                style={{ backgroundColor: 'var(--th-accent)' }} 
-                style={{ width: `${progressPercent}%` }}
+                style={{ backgroundColor: 'var(--th-accent)', width: `${progressPercent}%` }}
             />
             <div className="absolute top-0 left-0 w-full h-full bg-gray-700/30 group-hover:bg-gray-700/50 transition-colors" />
             
             {/* Bola de reproducció permanent */}
-            <div 
+            <div
                 className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow-lg border-2 border-white z-30 transition-transform duration-75 group-hover:scale-125"
-                style={{ backgroundColor: 'var(--th-accent)' }}
-                style={{ left: `calc(${progressPercent}% - 6px)` }}
+                style={{ backgroundColor: 'var(--th-accent)', left: `calc(${progressPercent}% - 6px)` }}
             />
         </div>
 

@@ -29,6 +29,10 @@ export const LOCAL_STORAGE_KEYS = {
   THEME: 'snlbpro_theme',
   /** Tokens del tema personalitzat (fallback local) */
   CUSTOM_THEME_TOKENS: 'snlbpro_custom_theme_tokens',
+  /** IDs de tasques IA ocultes de l'historial (persistit per l'usuari) */
+  TASKS_IA_HIDDEN_IDS: 'snlbpro_tasks_ia_hidden_ids',
+  /** Historial de subides (Pujades) persistit per l'usuari. Màx. 50 registres done/error. */
+  PUJADES_HISTORY: 'snlbpro_pujades_history',
 };
 
 export const A4_WIDTH_PX = 794;

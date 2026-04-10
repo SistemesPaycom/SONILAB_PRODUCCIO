@@ -9,7 +9,7 @@ interface PujadesPanelProps {
 }
 
 const PujadesPanel: React.FC<PujadesPanelProps> = ({ onClose }) => {
-  const { jobs } = useUploadContext();
+  const { jobs, clearHistory } = useUploadContext();
   const [tab, setTab] = useState<TabFilter>('active');
 
   const activeJobs = jobs.filter(j => j.status === 'uploading');
@@ -103,6 +103,17 @@ const PujadesPanel: React.FC<PujadesPanelProps> = ({ onClose }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+          {tab === 'history' && historyJobs.length > 0 && (
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={clearHistory}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-gray-400 hover:text-red-400 hover:bg-red-900/20 border border-transparent hover:border-red-800/30 transition-all"
+              >
+                <Icons.Trash className="w-3.5 h-3.5" />
+                Netejar Historial
+              </button>
+            </div>
+          )}
           {displayJobs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               {tab === 'active' ? (
