@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UsersService } from '../users/users.service';
+import { SettingsService } from '../settings/settings.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -14,6 +15,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly usersService: UsersService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -39,7 +41,11 @@ export class AuthController {
   @Get('/me')
   async me(@CurrentUser() user: RequestUser) {
     if (!user?.userId) return null;
-    return this.usersService.findById(user.userId);
+    const [userData, globalStyles] = await Promise.all([
+      this.usersService.findById(user.userId),
+      this.settingsService.getGlobalStyles(),
+    ]);
+    return { ...userData, globalStyles: globalStyles ?? null };
   }
 
   @UseGuards(JwtAuthGuard)

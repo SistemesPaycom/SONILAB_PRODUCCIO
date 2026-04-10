@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { LibraryModule } from './modules/library/library.module';
 import { MediaModule } from './modules/media/media.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -36,6 +37,7 @@ import { APP_GUARD } from '@nestjs/core';
     LibraryModule,
     MediaModule,
     ProjectsModule,
+    SettingsModule,
     ThrottlerModule.forRoot([
   {
     ttl: 60_000,     // 60s
