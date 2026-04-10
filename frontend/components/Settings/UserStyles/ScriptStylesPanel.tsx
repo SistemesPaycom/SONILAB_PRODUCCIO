@@ -19,19 +19,17 @@ const ROWS: { key: keyof ScriptEditorStyleSet; label: string }[] = [
 export const ScriptStylesPanel: React.FC = () => {
   const { activePreset, updateAtom } = useUserStyles();
   const preset = activePreset('scriptEditor');
-  const readOnly = preset.builtin;
 
   return (
     <div>
       <StylesPresetBar scope="scriptEditor" />
-      {readOnly && <BuiltinPresetNotice />}
+      {preset.builtin && <BuiltinPresetNotice />}
       {ROWS.map(row => (
         <StyleAtomEditor
           key={row.key}
           label={row.label}
           atom={preset.styles[row.key]}
           onChange={patch => updateAtom('scriptEditor', row.key, patch)}
-          disabled={readOnly}
         />
       ))}
       <ScriptStylePreview />
