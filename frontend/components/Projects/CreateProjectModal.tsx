@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
+import { useUploadContext } from '../../context/Upload/UploadContext';
 import type { Document, OpenMode } from '../../appTypes';
 import { importStructuredScriptFromFile } from '../../utils/Import/scriptImportPipeline';
 
@@ -38,6 +39,7 @@ export const CreateProjectModal: React.FC<{
   onOpenDocument: (docId: string | null, mode: OpenMode | null, edit: boolean) => void;
 }> = ({ open, onClose, onOpenDocument }) => {
   const { state, reloadTree, dispatch } = useLibrary();
+  const { addJob, updateJob, completeJob } = useUploadContext();
 
   const [tab, setTab] = useState<'transcribe' | 'importSrt'>('transcribe');
 
@@ -296,12 +298,16 @@ export const CreateProjectModal: React.FC<{
     void (async () => {
       setErr(null);
       setBusy(true);
+      const jobId = crypto.randomUUID();
+      addJob(jobId, file.name);
       try {
-        const r = await api.uploadMedia(file);
+        const r = await api.uploadMedia(file, (pct) => updateJob(jobId, pct));
+        completeJob(jobId, true);
         const newId = r?.document?.id;
         await reloadTree();
         if (newId) setMediaId(newId);
       } catch (e: any) {
+        completeJob(jobId, false, e?.message || 'Error subiendo vídeo');
         setErr(e?.message || 'Error subiendo vídeo');
       } finally {
         setBusy(false);
