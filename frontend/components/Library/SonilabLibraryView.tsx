@@ -17,6 +17,7 @@ import { CreateProjectModal } from '../Projects/CreateProjectModal';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import { useAuth } from '../../context/Auth/AuthContext';
+import { useUploadContext } from '../../context/Upload/UploadContext';
 import { AdminPanel } from '../Admin/AdminPanel';
 
 type OpenMode = 'editor' | 'editor-video' | 'editor-video-subs' | 'editor-ssrtlsf' | 'editor-srt-standalone';
@@ -27,6 +28,7 @@ interface LibraryViewProps {
   setIsCollapsed: (v: boolean) => void;
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
+  onOpenPujades: () => void;
 }
 
 const DEFAULT_IMPORT_OPTIONS: ImportOptions = {
@@ -60,12 +62,37 @@ const ConfirmationModal: React.FC<{
   );
 };
 
+const PujadesButton: React.FC<{ isCollapsed: boolean; onOpen: () => void }> = ({ isCollapsed, onOpen }) => {
+  const { jobs } = useUploadContext();
+  const activeCount = jobs.filter(j => j.status === 'uploading').length;
+  return (
+    <button
+      onClick={onOpen}
+      className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} text-gray-200 hover:brightness-125 relative`}
+      style={{ backgroundColor: 'var(--th-bg-tertiary)' }}
+      title="Pujades"
+    >
+      <Icons.Upload className="w-5 h-5" />
+      <span className={isCollapsed ? 'hidden' : 'inline'}>Pujades</span>
+      {activeCount > 0 && (
+        <span
+          className={`absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-gray-900 ${isCollapsed ? 'scale-75' : ''}`}
+          style={{ backgroundColor: 'var(--th-accent)' }}
+        >
+          {activeCount}
+        </span>
+      )}
+    </button>
+  );
+};
+
 export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenDocument,
   isCollapsed,
   setIsCollapsed,
   onOpenSettings,
   onOpenNotifications,
+  onOpenPujades,
 }) => {
   const { state, dispatch, currentItems, currentFolder,useBackend, createFolderRemote, createDocumentRemote, uploadMediaRemote, reloadTree } = useLibrary();
   const { isAdmin } = useAuth();
@@ -88,7 +115,7 @@ const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [nameColWidth, setNameColWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_NAME_COL_WIDTH, 200);
   const [formatColWidth, setFormatColWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_FORMAT_COL_WIDTH, 100);
   const [dateColWidth, setDateColWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_DATE_COL_WIDTH, 140);
-  const [uploadProgress, setUploadProgress] = useState<{ name: string; pct: number } | null>(null);
+  const { addJob, updateJob, completeJob } = useUploadContext();
   const [duplicateNotice, setDuplicateNotice] = useState<{ fileName: string; existingName: string; existingDocId: string; folderPath: string; file: File; targetParentId: string | null; tentative?: boolean } | null>(null);
   const [clipboard, setClipboard] = useState<{ itemIds: string[]; mode: 'copy' | 'cut' } | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -229,6 +256,7 @@ const goTrash = () => {
 
   const handleSingleFileUpload = async (file: File) => {
     if (!file) return;
+    let _uploadJobId: string | undefined;
     try {
       const originalName = file.name;
       const lastDotIndex = originalName.lastIndexOf('.');
@@ -293,13 +321,15 @@ const goTrash = () => {
       setDuplicateNotice({ fileName: file.name, existingName: existingDoc.name, existingDocId: existingDoc.id || existingDoc._id, folderPath, file, targetParentId: null, tentative: true });
     } else {
       // No probable match — proceed with normal upload
-      setUploadProgress({ name: file.name, pct: 0 });
+      _uploadJobId = crypto.randomUUID();
+      addJob(_uploadJobId, file.name);
 
       const uploadResult = await api.uploadMedia(file, (pct) => {
-        setUploadProgress({ name: file.name, pct });
+        updateJob(_uploadJobId!, pct);
       }, null);
 
-      setUploadProgress(null);
+      completeJob(_uploadJobId, true);
+      _uploadJobId = undefined;
 
       if (uploadResult.duplicated) {
         // Backend confirmed real duplicate by SHA-256
@@ -343,6 +373,7 @@ const goTrash = () => {
   });
 }
     } catch (error) {
+      if (_uploadJobId) completeJob(_uploadJobId, false, (error as any)?.message || 'error desconegut');
       console.error(`Error important arxiu ${file.name}:`, error);
       setUploadBlockError(`Error important ${file.name}: ${(error as any)?.message || 'error desconegut'}`);
     }
@@ -352,12 +383,13 @@ const goTrash = () => {
     if (!duplicateNotice) return;
     const { file, targetParentId } = duplicateNotice;
     const savedNotice = duplicateNotice; // snapshot for error recovery
-    // Close modal — progress bar takes over during upload
+    // Close modal — panel takes over during upload
     setDuplicateNotice(null);
+    const jobId = crypto.randomUUID();
+    addJob(jobId, file.name);
     try {
-      setUploadProgress({ name: file.name, pct: 0 });
-      const uploadResult = await api.uploadMedia(file, (pct) => setUploadProgress({ name: file.name, pct }), targetParentId);
-      setUploadProgress(null);
+      const uploadResult = await api.uploadMedia(file, (pct) => updateJob(jobId, pct), targetParentId);
+      completeJob(jobId, true);
       if (uploadResult.duplicated) {
         // Backend confirmed real duplicate by SHA-256 — show definitive modal (no tentative)
         const existingDoc = uploadResult.document;
@@ -375,7 +407,7 @@ const goTrash = () => {
         await reloadTree();
       }
     } catch (err) {
-      setUploadProgress(null);
+      completeJob(jobId, false, (err as any)?.message || 'error desconegut');
       console.error('Error en continue upload:', err);
       // Restore modal with error so user doesn't lose context silently
       setDuplicateNotice(savedNotice);
@@ -1057,6 +1089,7 @@ const selectedItem =
           <span className={isCollapsed ? 'hidden' : 'inline'}>Tasques IA</span>
           {activeTasksCount > 0 && <span className={`absolute -top-1 -right-1 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-gray-900 ${isCollapsed ? 'scale-75' : ''}`} style={{ backgroundColor: 'var(--th-accent)' }}>{activeTasksCount}</span>}
         </button>
+        <PujadesButton isCollapsed={isCollapsed} onOpen={onOpenPujades} />
         {isAdmin && (
           <button onClick={() => setIsAdminPanelOpen(true)} className={`rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${isCollapsed ? 'w-10 h-10 justify-center p-0' : 'px-3 py-2 w-full'} bg-amber-700/40 hover:bg-amber-700/60`} style={{ color: 'var(--th-text-primary)' }} title="Administració d'usuaris">
             <span className="text-base">👥</span>
@@ -1124,16 +1157,6 @@ const selectedItem =
     <span>⚠</span>
     <span className="text-sm">{deleteError}</span>
     <button onClick={() => setDeleteError(null)} className="ml-2 opacity-60 hover:opacity-100 text-xs" aria-label="Tancar">✕</button>
-  </div>
-)}
-{uploadProgress && (
-  <div className="fixed bottom-4 left-4 z-[600] text-gray-100 px-4 py-3 rounded-xl shadow-xl" style={{ backgroundColor: 'var(--th-bg-surface)', border: '1px solid var(--th-border)' }}>
-    <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--th-text-muted)' }}>Upload</div>
-    <div className="text-sm font-semibold truncate max-w-[320px]">{uploadProgress.name}</div>
-    <div className="mt-2 h-2 w-80 rounded overflow-hidden" style={{ backgroundColor: 'var(--th-bg-tertiary)' }}>
-      <div className="h-2" style={{ width: `${uploadProgress.pct}%`, backgroundColor: 'var(--th-accent)' }} />
-    </div>
-    <div className="mt-1 text-xs text-gray-300">{uploadProgress.pct}%</div>
   </div>
 )}
 <CreateProjectModal
