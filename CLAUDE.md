@@ -132,7 +132,22 @@ Iniciada. Contrato funcional cerrado y primer bloque implementado.
 - Organización visual dentro de Media (frontend only).
 - Compatibilidad con Projectes verificada pero no reforzada explícitamente.
 
-## 6. Reglas de trabajo
+## 6. Git — regla absoluta
+
+**NO hagas commits, NO crees ramas, NO hagas push, NO abras PRs, ni ninguna otra operación de git o GitHub, a menos que el usuario te lo pida EXPLÍCITAMENTE en ese momento.**
+
+Esto incluye:
+- `git commit` de cualquier tipo (ni aunque creas que el trabajo está "terminado")
+- `git checkout -b` o cualquier creación de rama
+- `git push` o `git push --force`
+- `gh pr create` o cualquier acción sobre pull requests
+- `git stash`, `git reset`, `git rebase` no solicitados
+
+Razón: el repositorio puede estar en un estado inestable deliberadamente. El usuario decide cuándo y cómo versionar.
+
+**Si tienes dudas sobre si el usuario quiere un commit: NO lo hagas. Espera a que lo pida.**
+
+## 7. Reglas de trabajo
 
 1. No abras una fase nueva por tu cuenta.
 2. No cambies arquitectura global sin instrucción explícita.

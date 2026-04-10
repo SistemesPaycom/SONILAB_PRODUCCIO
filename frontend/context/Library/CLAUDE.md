@@ -2,6 +2,8 @@
 
 Este archivo aplica a `frontend/context/Library/`.
 
+> **Git — regla heredada del CLAUDE.md raíz:** NO hagas commits, ramas, push ni ninguna operación de git/GitHub a menos que el usuario lo pida EXPLÍCITAMENTE.
+
 ## 1. Rol de esta carpeta
 
 Aquí vive el estado base y derivado de biblioteca.  

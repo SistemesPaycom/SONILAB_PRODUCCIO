@@ -2,6 +2,8 @@
 
 Este archivo complementa `SONILAB_PRODUCCIO/CLAUDE.md` y aplica a todo `frontend/`.
 
+> **Git — regla heredada del CLAUDE.md raíz:** NO hagas commits, ramas, push ni ninguna operación de git/GitHub a menos que el usuario lo pida EXPLÍCITAMENTE.
+
 ## 1. Prioridad
 
 En frontend prioriza:
