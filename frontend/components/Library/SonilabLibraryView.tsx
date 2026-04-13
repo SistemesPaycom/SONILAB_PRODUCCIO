@@ -29,6 +29,8 @@ interface LibraryViewProps {
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
   onOpenPujades: () => void;
+  page: 'library' | 'media' | 'projects';
+  onChangePage: (p: 'library' | 'media' | 'projects') => void;
 }
 
 const DEFAULT_IMPORT_OPTIONS: ImportOptions = {
@@ -93,6 +95,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenSettings,
   onOpenNotifications,
   onOpenPujades,
+  page,
+  onChangePage,
 }) => {
   const { state, dispatch, currentItems, currentFolder,useBackend, createFolderRemote, createDocumentRemote, uploadMediaRemote, reloadTree } = useLibrary();
   const { isAdmin } = useAuth();
@@ -107,7 +111,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [showPermanentDeleteConfirm, setShowPermanentDeleteConfirm] = useState(false);
   const [isRenameModalOpen, setRenameModalOpen] = useState(false);
 const [renameValue, setRenameValue] = useState('');
-const [page, setPage] = useState<'library'|'media'|'projects'>('library');
 
   const [projectFolderIds, setProjectFolderIds] = useState<Set<string>>(new Set());
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
@@ -137,20 +140,20 @@ const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const goLibrary = () => {
   dispatch({ type: 'SET_VIEW', payload: 'library' });
   setIsCollapsed(false);
-  setPage('library');
+  onChangePage('library');
 };
 
 const goMedia = () => {
   dispatch({ type: 'SET_VIEW', payload: 'library' });
   dispatch({ type: 'SET_CURRENT_FOLDER', payload: null });
   setIsCollapsed(false);
-  setPage('media');
+  onChangePage('media');
 };
 
 const goProjects = () => {
   dispatch({ type: 'SET_VIEW', payload: 'library' });
   setIsCollapsed(false);
-  setPage('projects');
+  onChangePage('projects');
 };
 
 const goTrash = () => {
@@ -160,15 +163,15 @@ const goTrash = () => {
   // setPage('library');
 };
 
-  // Fetch project folder IDs from the backend when the projects tab is active
+  // Fetch project folder IDs at mount so Files tab shows 🗃️ from the first render
   useEffect(() => {
-    if (!useBackend || page !== 'projects') return;
+    if (!useBackend) return;
     api.listProjects()
       .then((projects) => {
         setProjectFolderIds(new Set((projects || []).map((p: any) => p.folderId).filter(Boolean)));
       })
       .catch(() => {});
-  }, [useBackend, page]);
+  }, [useBackend]);
 
   const handleResizeNameMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -427,24 +430,25 @@ const goTrash = () => {
     }
   };
 
-  const itemsToRender = page === 'media'
-    ? state.documents.filter(
-        (doc) => !doc.isDeleted && MEDIA_EXTS.includes((doc.sourceType || '').toLowerCase()) && !!(doc as any).media && !(doc as any).refTargetId
-      )
-    : currentItems.filter((item) => {
-        if (view === 'trash') return true;
-        // Media canònica pertany exclusivament a la pestanya Media: no ha d'aparèixer a library/projects.
-        // Un LNK (refTargetId poblat, media null) no és media canònica i sí pertany a Arxius.
-        // També s'exclouen documents amb sourceType de media sense camp media (documents legacy).
-        if (item.type === 'document' && !(item as any).refTargetId && (
-          !!(item as any).media || MEDIA_EXTS.includes((item.sourceType || '').toLowerCase())
-        )) return false;
-        if (page === 'library') return true;
-        if (page === 'projects' && state.currentFolderId === null) {
-          return item.type === 'folder' && projectFolderIds.has(item.id);
-        }
-        return true;
-      });
+  const itemsToRender = view === 'trash'
+    ? currentItems  // Paperera global — currentItems ja conté tots els eliminats (veure LibraryDataContext)
+    : page === 'media'
+      ? state.documents.filter(
+          (doc) => !doc.isDeleted && MEDIA_EXTS.includes((doc.sourceType || '').toLowerCase()) && !!(doc as any).media && !(doc as any).refTargetId
+        )
+      : currentItems.filter((item) => {
+          // Media canònica pertany exclusivament a la pestanya Media: no ha d'aparèixer a library/projects.
+          // Un LNK (refTargetId poblat, media null) no és media canònica i sí pertany a Arxius.
+          // També s'exclouen documents amb sourceType de media sense camp media (documents legacy).
+          if (item.type === 'document' && !(item as any).refTargetId && (
+            !!(item as any).media || MEDIA_EXTS.includes((item.sourceType || '').toLowerCase())
+          )) return false;
+          if (page === 'library') return true;
+          if (page === 'projects' && state.currentFolderId === null) {
+            return item.type === 'folder' && projectFolderIds.has(item.id);
+          }
+          return true;
+        });
 
   const handleSelectAll = () => {
     dispatch({ type: 'TOGGLE_SELECT_ALL', payload: { itemIds: itemsToRender.map((item) => item.id) } });
@@ -1179,7 +1183,7 @@ const selectedItem =
         }}
         onClose={() => { setSrtModeModalOpen(false); setSrtModeDocId(null); }}
       />
-      {isImportModalOpen && <ImportFilesModal isOpen={isImportModalOpen} onClose={() => setImportModalOpen(false)} onFilesSelect={handleFilesUpload} accept=".pdf,.docx,.srt,.mp4,.wav,.mov,.webm,.ogg" title="Importar Fitxers" description="Selecciona o arrossega guions (PDF, DOCX), subtítols (SRT) o vídeo/àudio." />}
+      {isImportModalOpen && <ImportFilesModal isOpen={isImportModalOpen} onClose={() => setImportModalOpen(false)} onFilesSelect={handleFilesUpload} accept=".pdf,.docx,.srt,.mp4,.mp3,.wav,.mov,.webm,.ogg" title="Importar Fitxers" description="Selecciona o arrossega guions (PDF, DOCX), subtítols (SRT) o vídeo/àudio." />}
 
       {duplicateNotice && (
         <div
