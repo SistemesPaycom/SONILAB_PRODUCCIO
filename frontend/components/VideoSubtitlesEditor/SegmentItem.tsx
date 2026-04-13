@@ -468,22 +468,24 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         >
           {Array.from({ length: maxLines }).map((_, i) => (
           <React.Fragment key={i}>
-            {/* Columna 1: TAKE + indicador DIFF */}
+            {/* Columna 1: TAKE + indicador DIFF + botons d'acció */}
             <div style={gridCellStyle} className="flex items-center px-2 gap-1">
               {i === 0 && (
                 <>
-                  <span
-                    className="truncate"
-                    style={{
-                      fontFamily: 'var(--us-sub-takelabel-family)',
-                      fontSize:   'var(--us-sub-takelabel-size)',
-                      color:      'var(--us-sub-takelabel-color)',
-                      fontWeight: 'var(--us-sub-takelabel-weight)' as any,
-                      fontStyle:  'var(--us-sub-takelabel-style)',
-                    }}
-                  >
-                    {segment.primaryTakeNum ? `TK${segment.primaryTakeNum}` : ''}
-                  </span>
+                  {segment.primaryTakeNum && (
+                    <span
+                      className="truncate flex-shrink-0"
+                      style={{
+                        fontFamily: 'var(--us-sub-takelabel-family)',
+                        fontSize:   'var(--us-sub-takelabel-size)',
+                        color:      'var(--us-sub-takelabel-color)',
+                        fontWeight: 'var(--us-sub-takelabel-weight)' as any,
+                        fontStyle:  'var(--us-sub-takelabel-style)',
+                      }}
+                    >
+                      TK{segment.primaryTakeNum}
+                    </span>
+                  )}
                   {segment.hasDiff && (
                     <span
                       className="text-[8px] font-black text-red-400 bg-red-900/30 px-0.5 rounded leading-none"
@@ -492,7 +494,128 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                       DIFF
                     </span>
                   )}
+                  {isEditable && (
+                    <div
+                      className={`flex flex-1 gap-0.5 justify-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {onInsertBefore && (
+                        <button
+                          className="w-[1.8em] text-center py-0.5 rounded hover:bg-white/5 transition-colors leading-none"
+                          style={{
+                            fontFamily: 'var(--us-sub-actionbuttons-family)',
+                            fontSize:   'var(--us-sub-actionbuttons-size)',
+                            color:      'var(--us-sub-actionbuttons-color)',
+                            fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                            fontStyle:  'var(--us-sub-actionbuttons-style)',
+                          }}
+                          onClick={() => onInsertBefore(segment.id)}
+                          title="Insertar subtítol abans (Alt+↑)"
+                        >+↑</button>
+                      )}
+                      {onInsertAfter && (
+                        <button
+                          className="w-[1.8em] text-center py-0.5 rounded hover:bg-white/5 transition-colors leading-none"
+                          style={{
+                            fontFamily: 'var(--us-sub-actionbuttons-family)',
+                            fontSize:   'var(--us-sub-actionbuttons-size)',
+                            color:      'var(--us-sub-actionbuttons-color)',
+                            fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                            fontStyle:  'var(--us-sub-actionbuttons-style)',
+                          }}
+                          onClick={() => onInsertAfter(segment.id)}
+                          title="Insertar subtítol després (Alt+↓)"
+                        >+↓</button>
+                      )}
+                    </div>
+                  )}
                 </>
+              )}
+              {/* Cas línia única: S, U i ✕ aquí (Col 6 no té fila 2) */}
+              {i === 0 && maxLines === 1 && isEditable && (
+                <div
+                  className={`flex flex-1 gap-0.5 items-center justify-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {onSplit && (
+                    <button
+                      className="w-[1.8em] text-center py-0.5 rounded font-mono text-gray-500 hover:text-amber-300 hover:bg-amber-600/10 transition-colors leading-none"
+                      style={{
+                        fontFamily: 'var(--us-sub-actionbuttons-family)',
+                        fontSize:   'var(--us-sub-actionbuttons-size)',
+                        fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                        fontStyle:  'var(--us-sub-actionbuttons-style)',
+                      }}
+                      onClick={() => onSplit(segment.id)}
+                      title="Dividir segment (Ctrl+K per dividir al cursor)"
+                    >S</button>
+                  )}
+                  {onModifyMerge && (
+                    <button
+                      className="w-[1.8em] text-center py-0.5 rounded font-mono text-gray-500 hover:text-emerald-300 hover:bg-emerald-600/10 transition-colors leading-none"
+                      style={{
+                        fontFamily: 'var(--us-sub-actionbuttons-family)',
+                        fontSize:   'var(--us-sub-actionbuttons-size)',
+                        fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                        fontStyle:  'var(--us-sub-actionbuttons-style)',
+                      }}
+                      onClick={() => onModifyMerge(segment.id)}
+                      title="Fusionar amb el següent"
+                    >U</button>
+                  )}
+                  {onDelete && (
+                    <button
+                      className="w-[1.8em] text-center py-0.5 rounded text-[9px] font-bold transition-colors hover:bg-red-600/20 leading-none"
+                      style={{
+                        color: '#ef4444',
+                        backgroundColor: 'rgba(239,68,68,0.10)',
+                        border: '1px solid rgba(239,68,68,0.25)',
+                        fontFamily: 'var(--us-sub-actionbuttons-family)',
+                        fontSize:   'var(--us-sub-actionbuttons-size)',
+                        fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                        fontStyle:  'var(--us-sub-actionbuttons-style)',
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f87171'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
+                      onClick={() => onDelete(segment.id)}
+                      title="Eliminar subtítol (Shift+Supr)"
+                    >✕</button>
+                  )}
+                </div>
+              )}
+              {/* Cas multi-línia: S i U al row 1 (✕ es mou a Col 6) */}
+              {i === 1 && isEditable && (
+                <div
+                  className={`flex flex-1 gap-0.5 items-center justify-center transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {onSplit && (
+                    <button
+                      className="w-[1.8em] text-center py-0.5 rounded font-mono text-gray-500 hover:text-amber-300 hover:bg-amber-600/10 transition-colors leading-none"
+                      style={{
+                        fontFamily: 'var(--us-sub-actionbuttons-family)',
+                        fontSize:   'var(--us-sub-actionbuttons-size)',
+                        fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                        fontStyle:  'var(--us-sub-actionbuttons-style)',
+                      }}
+                      onClick={() => onSplit(segment.id)}
+                      title="Dividir segment (Ctrl+K per dividir al cursor)"
+                    >S</button>
+                  )}
+                  {onModifyMerge && (
+                    <button
+                      className="w-[1.8em] text-center py-0.5 rounded font-mono text-gray-500 hover:text-emerald-300 hover:bg-emerald-600/10 transition-colors leading-none"
+                      style={{
+                        fontFamily: 'var(--us-sub-actionbuttons-family)',
+                        fontSize:   'var(--us-sub-actionbuttons-size)',
+                        fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
+                        fontStyle:  'var(--us-sub-actionbuttons-style)',
+                      }}
+                      onClick={() => onModifyMerge(segment.id)}
+                      title="Fusionar amb el següent"
+                    >U</button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -585,7 +708,7 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
                   document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
                 }}
                 data-segment-id={segment.id}
-                className={`outline-none whitespace-nowrap transition-colors ${(contentLines[i] || '').length > 0 ? 'w-full block' : 'w-[1ch] inline-block'} ${isEditable ? 'cursor-text px-1.5 py-0.5 focus:ring-1 rounded-sm' : ''}`}
+                className={`outline-none whitespace-nowrap transition-colors ${(contentLines[i] || '').length > 0 ? 'w-full block' : 'w-[1ch] inline-block'} ${isEditable ? 'cursor-text px-1.5 focus:ring-1 rounded-sm' : ''}`}
                 style={{
                   fontFamily: 'var(--us-sub-content-family)',
                   fontSize:   'var(--us-sub-content-size)',
@@ -605,16 +728,36 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
           ))}
         </div>
 
-        {/* Handle de selecció — visible en hover, activa el segment sense donar focus al text */}
+        {/* Col 6: ⠿ selecció (row 0) + ✕ eliminar (row 1 si multi-línia i editable) */}
         <div
-          className={`flex items-center justify-center w-[60px] flex-shrink-0 rounded-sm transition-opacity cursor-pointer hover:bg-white/10 ${isActive ? 'opacity-40' : 'opacity-0 group-hover:opacity-100'}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick(segment.id);
-          }}
-          title="Seleccionar subtítol"
+          className={`flex flex-col w-[60px] flex-shrink-0 transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
         >
-          <span className="select-none text-[11px]" style={{ color: 'var(--th-text-muted, #555)' }}>⠿</span>
+          <div
+            className={`flex items-center justify-center rounded-sm cursor-pointer hover:bg-white/10 flex-shrink-0 ${isActive ? 'opacity-40' : ''}`}
+            style={{ height: 'var(--us-sub-row-height)' }}
+            onClick={(e) => { e.stopPropagation(); onClick(segment.id); }}
+            title="Seleccionar subtítol"
+          >
+            <span className="select-none text-[11px]" style={{ color: 'var(--th-text-muted, #555)' }}>⠿</span>
+          </div>
+          {Array.from({ length: maxLines - 1 }).map((_, rowIdx) => (
+            isEditable && onDelete && rowIdx === 0 ? (
+              <div
+                key={rowIdx}
+                className="flex items-center justify-center rounded-sm cursor-pointer hover:bg-red-600/20 flex-shrink-0"
+                style={{ height: 'var(--us-sub-row-height)' }}
+                onClick={(e) => { e.stopPropagation(); onDelete(segment.id); }}
+                title="Eliminar subtítol (Shift+Supr)"
+              >
+                <span
+                  className="text-[9px] font-bold select-none"
+                  style={{ color: '#ef4444' }}
+                >✕</span>
+              </div>
+            ) : (
+              <div key={rowIdx} style={{ height: 'var(--us-sub-row-height)' }} />
+            )
+          ))}
         </div>
       </div>
 
@@ -656,96 +799,6 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
         </div>
       )}
 
-      {/* Barra d'accions: visible en hover o quan el segment és actiu */}
-      {isEditable && (
-        <div
-          className={`flex items-center gap-0.5 mt-0.5 pt-0.5 border-t border-white/10 transition-opacity ${
-            isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {onInsertBefore && (
-            <button
-              className="px-1.5 py-0.5 rounded hover:bg-white/5 transition-colors"
-              style={{
-                fontFamily: 'var(--us-sub-actionbuttons-family)',
-                fontSize:   'var(--us-sub-actionbuttons-size)',
-                color:      'var(--us-sub-actionbuttons-color)',
-                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
-                fontStyle:  'var(--us-sub-actionbuttons-style)',
-              }}
-              onClick={() => onInsertBefore(segment.id)}
-              title="Insertar subtítol abans (Alt+↑)"
-            >
-              +↑
-            </button>
-          )}
-          {onInsertAfter && (
-            <button
-              className="px-1.5 py-0.5 rounded hover:bg-white/5 transition-colors"
-              style={{
-                fontFamily: 'var(--us-sub-actionbuttons-family)',
-                fontSize:   'var(--us-sub-actionbuttons-size)',
-                color:      'var(--us-sub-actionbuttons-color)',
-                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
-                fontStyle:  'var(--us-sub-actionbuttons-style)',
-              }}
-              onClick={() => onInsertAfter(segment.id)}
-              title="Insertar subtítol després (Alt+↓)"
-            >
-              +↓
-            </button>
-          )}
-          {(onInsertBefore || onInsertAfter) && <div className="w-px h-3 mx-0.5 flex-shrink-0" style={{ backgroundColor: 'var(--th-bg-tertiary)' }} />}
-          {onSplit && (
-            <button
-              className="px-1.5 py-0.5 rounded font-mono text-gray-500 hover:text-amber-300 hover:bg-amber-600/10 transition-colors"
-              style={{
-                fontFamily: 'var(--us-sub-actionbuttons-family)',
-                fontSize:   'var(--us-sub-actionbuttons-size)',
-                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
-                fontStyle:  'var(--us-sub-actionbuttons-style)',
-              }}
-              onClick={() => onSplit(segment.id)}
-              title="Dividir en dos (Ctrl+K)"
-            >
-              Split
-            </button>
-          )}
-          {onModifyMerge && (
-            <button
-              className="px-1.5 py-0.5 rounded font-mono text-gray-500 hover:text-emerald-300 hover:bg-emerald-600/10 transition-colors"
-              style={{
-                fontFamily: 'var(--us-sub-actionbuttons-family)',
-                fontSize:   'var(--us-sub-actionbuttons-size)',
-                fontWeight: 'var(--us-sub-actionbuttons-weight)' as any,
-                fontStyle:  'var(--us-sub-actionbuttons-style)',
-              }}
-              onClick={() => onModifyMerge(segment.id)}
-              title="Fusionar amb el següent"
-            >
-              Merge↓
-            </button>
-          )}
-          <div className="flex-grow" />
-          {onDelete && (
-            <button
-              className="px-1.5 py-0.5 rounded text-[9px] font-bold transition-colors hover:bg-red-600/20"
-              style={{
-                color: '#ef4444',
-                backgroundColor: 'rgba(239,68,68,0.10)',
-                border: '1px solid rgba(239,68,68,0.25)',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#f87171'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
-              onClick={() => onDelete(segment.id)}
-              title="Eliminar subtítol (Shift+Supr)"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 };

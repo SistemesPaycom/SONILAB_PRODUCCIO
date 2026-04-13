@@ -56,8 +56,9 @@ export const TimecodeInput: React.FC<TimecodeInputProps> = ({ value, label, isEd
 
   const labelEl = (
     <span
-      className="px-1 rounded flex-shrink-0 select-none"
+      className="rounded flex-shrink-0 select-none inline-block text-center"
       style={{
+        width: '4ch',
         backgroundColor: 'var(--th-editor-label-bg)',
         fontFamily: 'var(--us-sub-timecode-family)',
         fontSize:   'var(--us-sub-timecode-size)',

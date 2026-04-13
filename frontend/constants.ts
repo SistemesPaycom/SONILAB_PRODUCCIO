@@ -33,6 +33,12 @@ export const LOCAL_STORAGE_KEYS = {
   TASKS_IA_HIDDEN_IDS: 'snlbpro_tasks_ia_hidden_ids',
   /** Historial de subides (Pujades) persistit per l'usuari. Màx. 50 registres done/error. */
   PUJADES_HISTORY: 'snlbpro_pujades_history',
+  /** Pestanya activa de la biblioteca (Files / Media / Projectes). */
+  ACTIVE_PAGE: 'snlbpro_active_page',
+  /** Vista activa de la biblioteca (library / trash). */
+  ACTIVE_VIEW: 'snlbpro_active_view',
+  /** Carpeta activa de la biblioteca (ID de carpeta). No s'escriu durant la Paperera. */
+  ACTIVE_FOLDER: 'snlbpro_active_folder',
 };
 
 export const A4_WIDTH_PX = 794;
@@ -97,3 +103,8 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
     { id: 'sub_set_tc_out', action: 'SET_TC_OUT', label: 'Marcar TC OUT al playhead', combo: 'W' },
   ]
 };
+
+export const AUDIO_ONLY_EXTS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'];
+
+export const isAudioOnly = (sourceType?: string | null): boolean =>
+  AUDIO_ONLY_EXTS.includes((sourceType ?? '').toLowerCase());
