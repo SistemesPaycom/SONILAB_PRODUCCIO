@@ -19,6 +19,7 @@ interface VideoPlaybackAreaProps {
     onTogglePlay: () => void;
     onJumpSegment: (direction: 'prev' | 'next') => void;
     videoFile: File | null;
+    isAudioOnly?: boolean;
     // Waveform-passthrough props (unused here, live at bottom waveform)
     onSegmentUpdate?: (id: Id, newStart: number, newEnd: number) => void;
     onSegmentUpdateEnd?: () => void;
