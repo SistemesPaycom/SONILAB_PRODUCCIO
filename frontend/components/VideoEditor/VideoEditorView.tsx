@@ -13,7 +13,7 @@ import { parseScript } from '../../utils/EditorDeGuions/scriptParser';
 import { scriptToCsv } from '../../utils/EditorDeGuions/csvConverter';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import useLocalStorage from '../../hooks/useLocalStorage';
-import { LOCAL_STORAGE_KEYS } from '../../constants';
+import { LOCAL_STORAGE_KEYS, isAudioOnly } from '../../constants';
 import { useVerticalPanelResize } from '../../hooks/usePanelResize';
 
 type EditorView = 'script' | 'csv';
@@ -203,6 +203,7 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
     isPlaying, currentTime, duration, onSeek, videoRef, src: videoSrc, segments: [], activeSegment: null,
     overlayConfig: { original: { show: false, position: 'top' as const, offsetPx: 10, fontScale: 1 }, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
     onTimeUpdate: setCurrentTime, onDurationChange: setDuration, onPlay: () => setIsPlaying(true), onPause: () => setIsPlaying(false), onTogglePlay, onJumpSegment, videoFile,
+    isAudioOnly: isAudioOnly(currentDoc.sourceType),
   };
 
   return (
@@ -235,7 +236,7 @@ export const VideoEditorView: React.FC<VideoEditorViewProps> = (props) => {
         </main>
       </div>
       {isVideoImportModalOpen && (
-        <ImportFilesModal isOpen={isVideoImportModalOpen} onClose={() => setVideoImportModalOpen(false)} onFilesSelect={(files) => files.length > 0 && handleVideoFileChange(files[0])} accept="video/mp4,video/webm,video/ogg,video/quicktime" title="Importar Vídeo" description="Arrossega un arxiu de vídeo per a la sincronització." />
+        <ImportFilesModal isOpen={isVideoImportModalOpen} onClose={() => setVideoImportModalOpen(false)} onFilesSelect={(files) => files.length > 0 && handleVideoFileChange(files[0])} accept="video/mp4,video/webm,video/ogg,video/quicktime,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,audio/flac,audio/ogg" title="Importar Vídeo/Audio" description="Arrossega un arxiu de vídeo/audio per a la sincronització." />
       )}
     </div>
   );
