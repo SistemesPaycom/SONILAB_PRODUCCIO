@@ -15,6 +15,7 @@ import {
   PopInIcon,
 } from './PlayerIcons';
 import LoadingOverlay from './LoadingOverlay';
+import { AudioOnlyPlaceholder } from './AudioOnlyPlaceholder';
 
 /**
  * Component per renderitzar línies de subtítols interpretant tags de format (b, i, u).
@@ -52,6 +53,7 @@ interface VideoPlayerProps {
   onPause: () => void;
   onTogglePlay: () => void;
   onJumpSegment: (direction: 'prev' | 'next') => void;
+  isAudioOnly?: boolean;
   isFloating?: boolean;
   onToggleFloating?: () => void;
 }
@@ -153,6 +155,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onPause,
   onTogglePlay,
   onJumpSegment,
+  isAudioOnly = false,
   isFloating = false,
   onToggleFloating,
 }) => {
@@ -227,6 +230,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           className="w-full h-full object-contain pointer-events-none"
         />
         {isVideoLoading && <LoadingOverlay />}
+        {isAudioOnly && <AudioOnlyPlaceholder />}
 
         {overlayConfig.original.show &&
           activeSegment &&
