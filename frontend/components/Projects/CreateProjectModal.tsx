@@ -377,7 +377,7 @@ export const CreateProjectModal: React.FC<{
                     }}
                   />
                   <span className="inline-block px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700">
-                    Subir nuevo vídeo
+                    Subir vídeo/audio
                   </span>
                 </label>
               </div>
