@@ -5,6 +5,7 @@ import { VideoPlaybackArea } from './VideoPlaybackArea';
 import { PlayIcon, PauseIcon, PlusIcon, MinusIcon, CursorStationaryIcon, CursorPageIcon } from './PlayerIcons';
 import { Timecode } from './Timecode';
 import * as Icons from '../icons';
+import { isAudioOnly } from '../../constants';
 
 interface MediaPreviewViewProps {
   currentDoc: Document;
@@ -77,9 +78,9 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
     src: videoSrc,
     segments: [],
     activeSegment: null,
-    overlayConfig: { 
-        original: { show: false, position: 'top' as const, offsetPx: 0, fontScale: 1 }, 
-        translated: { show: false, position: 'bottom' as const, offsetPx: 0, fontScale: 1 } 
+    overlayConfig: {
+        original: { show: false, position: 'top' as const, offsetPx: 0, fontScale: 1 },
+        translated: { show: false, position: 'bottom' as const, offsetPx: 0, fontScale: 1 }
     },
     onTimeUpdate: setCurrentTime,
     onDurationChange: setDuration,
@@ -89,7 +90,8 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
     onJumpSegment: () => {},
     videoFile: videoFile,
     autoScroll: autoScrollWave,
-    scrollMode: scrollModeWave
+    scrollMode: scrollModeWave,
+    isAudioOnly: isAudioOnly(currentDoc.sourceType)
   };
 
   return (
