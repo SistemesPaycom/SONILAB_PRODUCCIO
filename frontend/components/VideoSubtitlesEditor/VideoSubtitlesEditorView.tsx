@@ -13,7 +13,7 @@ import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import useLocalStorage from '../../hooks/useLocalStorage';
-import { LOCAL_STORAGE_KEYS } from '../../constants';
+import { LOCAL_STORAGE_KEYS, isAudioOnly } from '../../constants';
 import { useHorizontalPanelResize } from '../../hooks/usePanelResize';
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../context/SubtitleEditorContext';
 import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
@@ -959,6 +959,7 @@ const handleSave = useCallback(() => {
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
     onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay, onPause, onTogglePlay, onJumpSegment,
     videoFile, mediaDocId, onSegmentUpdate: handleSegmentUpdate, onSegmentUpdateEnd: handleSegmentUpdateEnd, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
+    isAudioOnly: isAudioOnly(state.documents.find(d => d.id === mediaDocId)?.sourceType),
   };
 
   return (

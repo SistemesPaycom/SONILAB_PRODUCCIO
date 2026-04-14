@@ -13,7 +13,7 @@ import SubtitleAIOperationsModal from './SubtitleAIOperationsModal';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import useLocalStorage from '../../hooks/useLocalStorage';
-import { LOCAL_STORAGE_KEYS } from '../../constants';
+import { LOCAL_STORAGE_KEYS, isAudioOnly } from '../../constants';
 import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import { api } from '../../services/api';
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../context/SubtitleEditorContext';
@@ -381,6 +381,7 @@ useEffect(() => {
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
     onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay, onPause, onTogglePlay, onJumpSegment,
     videoFile, mediaDocId, onSegmentUpdate: handleSegmentUpdate, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
+    isAudioOnly: isAudioOnly(state.documents.find(d => d.id === mediaDocId)?.sourceType),
   };
 
   return (
