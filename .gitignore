@@ -8,16 +8,17 @@ Thumbs.db
 **/.nestjs/
 **/*.log
 **/cache/
+
 # Env
 **/.env
 **/.env.*.local
 **/.env.local
 
 # Media / storage
-./subtitleedit-main/
-./Software_padre/
-./Info_para_Claude/
-./backend_nest_mvp/SonilabData
+/subtitleedit-main/
+/Software_padre/
+/Info_para_Claude/
+/backend_nest_mvp/SonilabData/
 
 # Python
 **/__pycache__/
@@ -37,6 +38,8 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Large model / binary files
 *.bin
 *.pt
 *.safetensors
