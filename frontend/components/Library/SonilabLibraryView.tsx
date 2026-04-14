@@ -118,7 +118,7 @@ const MEDIA_EXTS = ['mp4', 'mov', 'webm', 'wav', 'mp3', 'ogg', 'm4a'];
   const [nameColWidth, setNameColWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_NAME_COL_WIDTH, 200);
   const [formatColWidth, setFormatColWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_FORMAT_COL_WIDTH, 100);
   const [dateColWidth, setDateColWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_DATE_COL_WIDTH, 140);
-  const { addJob, updateJob, completeJob } = useUploadContext();
+  const { addJob, updateJob, completeJob, registerAbort } = useUploadContext();
   const [duplicateNotice, setDuplicateNotice] = useState<{ fileName: string; existingName: string; existingDocId: string; folderPath: string; file: File; targetParentId: string | null; tentative?: boolean } | null>(null);
   const [clipboard, setClipboard] = useState<{ itemIds: string[]; mode: 'copy' | 'cut' } | null>(null);
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -327,9 +327,12 @@ const goTrash = () => {
       _uploadJobId = crypto.randomUUID();
       addJob(_uploadJobId, file.name);
 
-      const uploadResult = await api.uploadMedia(file, (pct) => {
+      const { promise: uploadPromise, abort: uploadAbort } = api.uploadMedia(file, (pct) => {
         updateJob(_uploadJobId!, pct);
       }, null);
+      registerAbort(_uploadJobId, uploadAbort);
+
+      const uploadResult = await uploadPromise;
 
       completeJob(_uploadJobId, true);
       _uploadJobId = undefined;
@@ -377,8 +380,10 @@ const goTrash = () => {
 }
     } catch (error) {
       if (_uploadJobId) completeJob(_uploadJobId, false, (error as any)?.message || 'error desconegut');
-      console.error(`Error important arxiu ${file.name}:`, error);
-      setUploadBlockError(`Error important ${file.name}: ${(error as any)?.message || 'error desconegut'}`);
+      if ((error as any)?.message !== 'Cancel·lat') {
+        console.error(`Error important arxiu ${file.name}:`, error);
+        setUploadBlockError(`Error important ${file.name}: ${(error as any)?.message || 'error desconegut'}`);
+      }
     }
   };
 
@@ -391,7 +396,9 @@ const goTrash = () => {
     const jobId = crypto.randomUUID();
     addJob(jobId, file.name);
     try {
-      const uploadResult = await api.uploadMedia(file, (pct) => updateJob(jobId, pct), targetParentId);
+      const { promise: uploadPromise, abort: uploadAbort } = api.uploadMedia(file, (pct) => updateJob(jobId, pct), targetParentId);
+      registerAbort(jobId, uploadAbort);
+      const uploadResult = await uploadPromise;
       completeJob(jobId, true);
       if (uploadResult.duplicated) {
         // Backend confirmed real duplicate by SHA-256 — show definitive modal (no tentative)
@@ -411,9 +418,11 @@ const goTrash = () => {
       }
     } catch (err) {
       completeJob(jobId, false, (err as any)?.message || 'error desconegut');
-      console.error('Error en continue upload:', err);
-      // Restore modal with error so user doesn't lose context silently
-      setDuplicateNotice(savedNotice);
+      if ((err as any)?.message !== 'Cancel·lat') {
+        console.error('Error en continue upload:', err);
+        // Restore modal with error so user doesn't lose context silently
+        setDuplicateNotice(savedNotice);
+      }
     }
   };
 

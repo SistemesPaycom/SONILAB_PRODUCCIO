@@ -70,6 +70,7 @@ export interface Document {
   originalName?: string;
   sourceType?: string;
   refTargetId?: string | null;
+  media?: any | null;
   linkedMediaId?: string | null;
   characters: any[];
   takes: any[];

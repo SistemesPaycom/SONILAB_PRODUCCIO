@@ -71,9 +71,12 @@ export class MediaController {
     // Start periodic cleanup check every 30 minutes
     this.cleanupTimer = setInterval(() => {
       this.tryNightlyCleanup();
+      this.cleanOrphanTmpFiles();
     }, 30 * 60 * 1000);
     // Also run once at startup if in window
     setTimeout(() => this.tryNightlyCleanup(), 5000);
+    // Clean up any tmp files left by previous server crashes
+    setTimeout(() => this.cleanOrphanTmpFiles(), 3000);
   }
 
   private tryNightlyCleanup() {
@@ -107,10 +110,13 @@ export class MediaController {
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (_req, _file, cb) => {
+          // Must compute mediaRootAbs here — Multer runs this callback before
+          // the upload() method body executes, so method-scope variables are unavailable.
           const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
-          const dest = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
-          ensureDirSync(dest);
-          cb(null, dest);
+          const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
+          const tmpDir = path.join(mediaRootAbs, 'tmp');
+          ensureDirSync(tmpDir);
+          cb(null, tmpDir);
         },
         filename: (_req, file, cb) => {
           const ext = extFromOriginalname(file.originalname);
@@ -127,58 +133,55 @@ export class MediaController {
     const sourceType = sourceTypeFromExt(ext);
     const mimeType = (mime.lookup(file.path) || file.mimetype || 'application/octet-stream') as string;
     const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
-const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
+    const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
 
-const absPath = path.resolve(file.path);
-const relPathPosix = path.relative(mediaRootAbs, absPath).split(path.sep).join('/');
-const sha256 = await sha256File(file.path);
-const existing = await this.library.findMediaBySha256(user.userId, sha256, file.size);
+    // 1. Validate extension
+    const allowedExt = new Set(['mp4', 'mov', 'm4v', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg']);
+    const extClean = ext.replace('.', '').toLowerCase();
+    if (!allowedExt.has(extClean)) {
+      try { fs.unlinkSync(file.path); } catch {}
+      throw new BadRequestException(`Unsupported file extension: .${extClean}`);
+    }
 
-const allowedExt = new Set(['mp4', 'mov', 'm4v', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg']);
-const extClean = ext.replace('.', '').toLowerCase();
+    // 2. Validate mime type
+    const allowedMime = new Set([
+      'video/mp4',
+      'video/quicktime',
+      'audio/wav',
+      'audio/x-wav',
+      'audio/wave',
+      'audio/vnd.wave',
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/mp4',
+      'audio/aac',
+      'audio/flac',
+      'audio/ogg',
+    ]);
+    if (!allowedMime.has(mimeType)) {
+      try { fs.unlinkSync(file.path); } catch {}
+      throw new BadRequestException(`Unsupported mime type: ${mimeType}`);
+    }
 
-if (!allowedExt.has(extClean)) {
-  try { fs.unlinkSync(file.path); } catch {}
-  throw new BadRequestException(`Unsupported file extension: .${extClean}`);
-}
+    // 3. SHA-256 + duplicate check
+    const sha256 = await sha256File(file.path);
+    const existing = await this.library.findMediaBySha256(user.userId, sha256, file.size);
+    if (existing) {
+      try { fs.unlinkSync(file.path); } catch {}
+      if (existing.media?.sha256 && existing.media?.path) {
+        this.ensureWaveformCache(existing.media.sha256, existing.media.path, mediaRootAbs);
+      }
+      return { document: existing, duplicated: true };
+    }
 
-const allowedMime = new Set([
-  'video/mp4',
-  'video/quicktime',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/wave',      // Windows reporta WAV com audio/wave
-  'audio/vnd.wave',  // variant addicional de WAV
-  'audio/mpeg',
-  'audio/mp3',       // variant de MP3 en alguns sistemes
-  'audio/mp4',
-  'audio/aac',
-  'audio/flac',
-  'audio/ogg',
-]);
+    // 4. Compute final path (flat storage: nanoid filename IS the relative path)
+    const finalFilename = path.basename(file.path);
+    const finalPath = path.join(mediaRootAbs, finalFilename);
+    const relPathPosix = finalFilename;
 
-if (!allowedMime.has(mimeType)) {
-  // no siempre viene perfecto en Windows, por eso suelo priorizar ext
-  // pero si quieres ser estricto, activa este bloque.
- try { fs.unlinkSync(file.path); } catch {}
- throw new BadRequestException(`Unsupported mime type: ${mimeType}`);
-}
-if (existing) {
-  // borrar el archivo recién subido (duplicado)
-  try { fs.unlinkSync(file.path); } catch {}
-
-  // Ensure waveform cache exists for the existing media (async, non-blocking)
-  if (existing.media?.sha256 && existing.media?.path) {
-    this.ensureWaveformCache(existing.media.sha256, existing.media.path, mediaRootAbs);
-  }
-
-  return { document: existing, duplicated: true };
-}
-
-    const finalName = file.originalname;
-
+    // 5. Create DB record with the final path
     const doc = await this.library.createDocument(user.userId, {
-      name: finalName,
+      name: file.originalname,
       parentId: parentId || null,
       sourceType,
       media: {
@@ -190,9 +193,17 @@ if (existing) {
       },
     });
 
-    // Generate waveform cache immediately after import (async, non-blocking).
-    // The response returns to the user right away; waveform generation continues
-    // in background so it's ready when the editor opens.
+    // 6. Move file from tmp/ to STORAGE_ROOT/ (atomic on same filesystem)
+    try {
+      fs.renameSync(file.path, finalPath);
+    } catch (renameErr) {
+      // Edge case: rename failed — hard-delete DB record (not soft) and clean up tmp file
+      try { await this.library.purgeDocument(user.userId, doc.id, [doc.id]); } catch {}
+      try { fs.unlinkSync(file.path); } catch {}
+      throw new BadRequestException('Failed to move uploaded file to storage');
+    }
+
+    // 7. Waveform cache — must run AFTER rename (file is now in STORAGE_ROOT/, not tmp/)
     this.ensureWaveformCache(sha256, relPathPosix, mediaRootAbs);
 
     return { document: doc };
@@ -221,6 +232,26 @@ if (existing) {
       this.logger.warn(`Waveform pre-generation failed for ${sha256.substring(0, 12)}...: ${err.message}`);
     });
   }
+
+  private cleanOrphanTmpFiles() {
+    const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
+    const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
+    const tmpDir = path.join(mediaRootAbs, 'tmp');
+    if (!fs.existsSync(tmpDir)) return;
+
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    for (const filename of fs.readdirSync(tmpDir)) {
+      const filePath = path.join(tmpDir, filename);
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.mtimeMs < oneHourAgo) {
+          fs.unlinkSync(filePath);
+          this.logger.log(`Cleaned orphan tmp file: ${filename}`);
+        }
+      } catch { /* silently skip */ }
+    }
+  }
+
   @Delete('/delete/:docId')
   async delete(@CurrentUser() user: RequestUser, @Param('docId') docId: string) {
     return this.library.updateDocument(user.userId, docId, { isDeleted: true } as any);

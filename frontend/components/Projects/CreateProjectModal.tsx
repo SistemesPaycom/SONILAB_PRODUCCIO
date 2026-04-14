@@ -39,7 +39,7 @@ export const CreateProjectModal: React.FC<{
   onOpenDocument: (docId: string | null, mode: OpenMode | null, edit: boolean) => void;
 }> = ({ open, onClose, onOpenDocument }) => {
   const { state, reloadTree, dispatch } = useLibrary();
-  const { addJob, updateJob, completeJob } = useUploadContext();
+  const { addJob, updateJob, completeJob, registerAbort } = useUploadContext();
 
   const [tab, setTab] = useState<'transcribe' | 'importSrt'>('transcribe');
 
@@ -301,7 +301,9 @@ export const CreateProjectModal: React.FC<{
       const jobId = crypto.randomUUID();
       addJob(jobId, file.name);
       try {
-        const r = await api.uploadMedia(file, (pct) => updateJob(jobId, pct));
+        const { promise: uploadPromise, abort: uploadAbort } = api.uploadMedia(file, (pct) => updateJob(jobId, pct));
+        registerAbort(jobId, uploadAbort);
+        const r = await uploadPromise;
         completeJob(jobId, true);
         const newId = r?.document?.id;
         await reloadTree();

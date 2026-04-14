@@ -17,6 +17,7 @@ Thumbs.db
 ./subtitleedit-main/
 ./Software_padre/
 ./Info_para_Claude/
+./backend_nest_mvp/SonilabData
 
 # Python
 **/__pycache__/

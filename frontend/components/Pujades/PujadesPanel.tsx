@@ -9,7 +9,7 @@ interface PujadesPanelProps {
 }
 
 const PujadesPanel: React.FC<PujadesPanelProps> = ({ onClose }) => {
-  const { jobs, clearHistory } = useUploadContext();
+  const { jobs, clearHistory, cancelJob } = useUploadContext();
   const [tab, setTab] = useState<TabFilter>('active');
 
   const activeJobs = jobs.filter(j => j.status === 'uploading');
@@ -155,11 +155,20 @@ const PujadesPanel: React.FC<PujadesPanelProps> = ({ onClose }) => {
 
                   {job.status === 'uploading' && (
                     <div className="mt-2">
-                      <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-300"
-                          style={{ width: `${Math.max(job.pct, 2)}%`, backgroundColor: 'var(--th-accent)' }}
-                        />
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{ width: `${Math.max(job.pct, 2)}%`, backgroundColor: 'var(--th-accent)' }}
+                          />
+                        </div>
+                        <button
+                          onClick={() => cancelJob(job.id)}
+                          className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full text-gray-500 hover:text-red-400 hover:bg-red-900/20 transition-colors text-xs font-bold"
+                          title="Cancel·lar pujada"
+                        >
+                          ✕
+                        </button>
                       </div>
                       <div className="flex justify-between mt-1">
                         <span className="text-[10px] text-gray-500">Pujant...</span>

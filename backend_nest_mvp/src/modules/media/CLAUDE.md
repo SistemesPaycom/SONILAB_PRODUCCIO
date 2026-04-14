@@ -21,7 +21,8 @@ Media es el repositorio canónico de assets audiovisuales.
 - Devuelve `{ exists: boolean; document?: any }`.
 
 ### Upload real (`POST /media/upload`)
-1. Multer guarda el archivo en disco con nombre aleatorio.
+1. Multer guarda el archivo en `STORAGE_ROOT/tmp/` con nombre aleatorio (directorio de tránsito).
+1b. Tras la validación y creación del documento en BD, el archivo se mueve con `fs.renameSync` a `STORAGE_ROOT/<nanoid><ext>`. Solo en ese momento pasa a almacenamiento definitivo.
 2. Se valida extensión (`mp4, mov, m4v, mp3, wav, m4a, aac, flac, ogg`) y mime type.
 3. Se calcula SHA-256 del archivo recién subido.
 4. Se busca documento existente por SHA-256 en BD.
@@ -31,7 +32,7 @@ Media es el repositorio canónico de assets audiovisuales.
 ### Lo que NO debe existir
 - `forceDuplicate`: eliminado. No lo reintroduzcas.
 - `nameOverride`: eliminado. El nombre siempre es `file.originalname`.
-- Subdirectorios dentro de `STORAGE_ROOT`: el almacenamiento es siempre plano.
+- Subdirectorios permanentes dentro de `STORAGE_ROOT`: el almacenamiento definitivo siempre es plano. `tmp/` es la única excepción y es un directorio de tránsito — los archivos solo residen allí durante la subida activa. Al arrancar el servidor, `cleanOrphanTmpFiles()` elimina los archivos en `tmp/` con más de 1 hora de antigüedad.
 
 ## 3. Parámetros del endpoint de upload
 

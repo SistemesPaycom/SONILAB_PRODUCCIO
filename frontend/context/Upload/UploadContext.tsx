@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { LOCAL_STORAGE_KEYS } from '../../constants';
 
 export interface UploadJob {
@@ -17,6 +17,8 @@ interface UploadContextValue {
   updateJob: (id: string, pct: number) => void;
   completeJob: (id: string, success: boolean, error?: string) => void;
   clearHistory: () => void;
+  registerAbort: (id: string, abortFn: () => void) => void;
+  cancelJob: (id: string) => void;
 }
 
 const UploadContext = createContext<UploadContextValue | null>(null);
@@ -40,12 +42,23 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   });
 
+  const abortHandles = useRef<Map<string, () => void>>(new Map());
+
   // Sincronitzar amb localStorage cada vegada que canvien els jobs (només done/error, màx MAX_HISTORY)
   useEffect(() => {
     const toSave = jobs.filter(j => j.status !== 'uploading').slice(-MAX_HISTORY);
     try {
       localStorage.setItem(LOCAL_STORAGE_KEYS.PUJADES_HISTORY, JSON.stringify(toSave));
     } catch { /* silently fail */ }
+  }, [jobs]);
+
+  useEffect(() => {
+    const hasActive = jobs.some(j => j.status === 'uploading');
+    if (!hasActive) return;
+
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
   }, [jobs]);
 
   const addJob = (id: string, name: string) => {
@@ -63,6 +76,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const completeJob = (id: string, success: boolean, error?: string) => {
+    abortHandles.current.delete(id);
     setJobs(prev => prev.map(j =>
       j.id === id
         ? { ...j, status: success ? 'done' : 'error', pct: success ? 100 : j.pct, finishedAt: new Date().toISOString(), ...(error ? { error } : {}) }
@@ -74,8 +88,19 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setJobs(prev => prev.filter(j => j.status === 'uploading'));
   };
 
+  const registerAbort = (id: string, abortFn: () => void) => {
+    abortHandles.current.set(id, abortFn);
+  };
+
+  const cancelJob = (id: string) => {
+    const abortFn = abortHandles.current.get(id);
+    if (!abortFn) return; // no-op: job already completed
+    abortHandles.current.delete(id);
+    abortFn();
+  };
+
   return (
-    <UploadContext.Provider value={{ jobs, addJob, updateJob, completeJob, clearHistory }}>
+    <UploadContext.Provider value={{ jobs, addJob, updateJob, completeJob, clearHistory, registerAbort, cancelJob }}>
       {children}
     </UploadContext.Provider>
   );

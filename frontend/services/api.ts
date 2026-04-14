@@ -187,15 +187,16 @@ async listProjects() {
     return request<any>(`/documents/${targetDocId}/ref`, { method: 'POST', body: { parentId } });
   },
 
- async uploadMedia(file: File, onProgress?: (pct: number) => void, parentId?: string | null) {
-  const token = getToken(); // tu helper actual
+  uploadMedia(file: File, onProgress?: (pct: number) => void, parentId?: string | null): { promise: Promise<{ document: any; duplicated?: boolean }>, abort: () => void } {
+  const token = getToken();
 
   const fd = new FormData();
   fd.append('file', file);
   if (parentId) fd.append('parentId', parentId);
 
-  return await new Promise<{ document: any; duplicated?: boolean }>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
+  const xhr = new XMLHttpRequest();
+
+  const promise = new Promise<{ document: any; duplicated?: boolean }>((resolve, reject) => {
     xhr.open('POST', `${API_URL}/media/upload`, true);
 
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -207,6 +208,7 @@ async listProjects() {
     };
 
     xhr.onerror = () => reject(new Error('Upload failed (network error)'));
+    xhr.onabort = () => reject(new Error('Cancel·lat'));
 
     xhr.onload = () => {
       const ok = xhr.status >= 200 && xhr.status < 300;
@@ -237,6 +239,8 @@ async listProjects() {
 
     xhr.send(fd);
   });
+
+  return { promise, abort: () => xhr.abort() };
 },
   async listMedia() {
     return request<any[]>(`/media/list`);

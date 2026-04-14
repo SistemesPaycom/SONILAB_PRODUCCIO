@@ -475,7 +475,8 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const uploadMediaRemote = async (file: File) => {
-    await api.uploadMedia(file);
+    const { promise } = api.uploadMedia(file);
+    await promise;
     await reloadTree();
   };
 
