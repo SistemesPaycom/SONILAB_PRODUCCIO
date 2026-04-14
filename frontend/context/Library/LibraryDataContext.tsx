@@ -52,6 +52,8 @@ export type LibraryDataAction =
   | { type: 'CLEAR_SYNC_REQUEST' };
 
 const LOCAL_STORAGE_KEY = 'snlbpro_library_v3';
+const ACTIVE_VIEW_KEY = 'snlbpro_active_view';
+const ACTIVE_FOLDER_KEY = 'snlbpro_active_folder';
 
 const initialState: LibraryDataState = {
   folders: [],
@@ -276,7 +278,7 @@ interface LibraryDataContextValue {
   currentFolder: Folder | null;
   getMediaFile: (docId: string) => File | null;
   useBackend: boolean;
-  reloadTree: () => Promise<void>;
+  reloadTree: (opts?: { view?: ViewType; folderId?: string | null }) => Promise<void>;
   createFolderRemote: (name: string, parentId: string | null) => Promise<void>;
   createDocumentRemote: (payload: { name: string; parentId: string | null; content: string; csvContent?: string; originalName?: string; sourceType?: string }) => Promise<void>;
   uploadMediaRemote: (file: File) => Promise<void>;
@@ -345,8 +347,9 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   };
 
-  const reloadTree = async () => {
-    const previousFolderId = state.currentFolderId;
+  const reloadTree = async (opts?: { view?: ViewType; folderId?: string | null }) => {
+    const previousFolderId = opts?.folderId !== undefined ? opts.folderId : state.currentFolderId;
+    const targetView = opts?.view ?? state.view;
     const tree = await api.getTree();
     const normalizedFolders = (tree.folders || []).map(normalizeFolder);
     const folderStillExists =
@@ -360,29 +363,40 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
         documents: (tree.documents || []).map(normalizeDocument),
         selectedIds: new Set(),
         currentFolderId: folderStillExists ? previousFolderId : null,
+        view: targetView,
       },
     });
   };
 
   // Initial load
   useEffect(() => {
+    const storedView = localStorage.getItem(ACTIVE_VIEW_KEY) as ViewType | null;
+    const restoredView: ViewType = storedView === 'trash' ? 'trash' : 'library';
+    const storedFolderId = restoredView !== 'trash' ? localStorage.getItem(ACTIVE_FOLDER_KEY) : null;
     if (!useBackend) {
       try {
         const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState, ...parsed, selectedIds: new Set() } });
+          const folderStillExists = storedFolderId &&
+            parsed.folders?.some((f: any) => f.id === storedFolderId && !f.isDeleted);
+          dispatch({ type: 'SET_INITIAL_STATE', payload: {
+            ...initialState, ...parsed, selectedIds: new Set(),
+            view: restoredView,
+            currentFolderId: folderStillExists ? storedFolderId : null,
+          }});
         } else {
-          dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
+          dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState, view: restoredView } });
         }
       } catch {
         dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
       }
       return;
     }
-    reloadTree().catch(() => {
-      dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
-    });
+    reloadTree({ view: restoredView, folderId: storedFolderId || null })
+      .catch(() => {
+        dispatch({ type: 'SET_INITIAL_STATE', payload: { ...initialState } });
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useBackend]);
 
@@ -394,6 +408,22 @@ export const LibraryDataProvider: React.FC<{ children: React.ReactNode }> = ({ c
       documents: state.documents,
     }));
   }, [state.folders, state.documents, state.isLoading, useBackend]);
+
+  // Persistir la vista activa (library / trash)
+  useEffect(() => {
+    if (state.isLoading) return;
+    localStorage.setItem(ACTIVE_VIEW_KEY, state.view);
+  }, [state.view, state.isLoading]);
+
+  // Persistir la carpeta activa (no durant la Paperera per no sobreescriure la última posició)
+  useEffect(() => {
+    if (state.isLoading || state.view === 'trash') return;
+    if (state.currentFolderId) {
+      localStorage.setItem(ACTIVE_FOLDER_KEY, state.currentFolderId);
+    } else {
+      localStorage.removeItem(ACTIVE_FOLDER_KEY);
+    }
+  }, [state.currentFolderId, state.view, state.isLoading]);
 
   const currentItems = useMemo(() => {
     const { folders, documents, currentFolderId, view, sortBy, sortOrder } = state;

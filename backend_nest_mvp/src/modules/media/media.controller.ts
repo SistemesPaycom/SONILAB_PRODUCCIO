@@ -147,7 +147,10 @@ const allowedMime = new Set([
   'video/quicktime',
   'audio/wav',
   'audio/x-wav',
+  'audio/wave',      // Windows reporta WAV com audio/wave
+  'audio/vnd.wave',  // variant addicional de WAV
   'audio/mpeg',
+  'audio/mp3',       // variant de MP3 en alguns sistemes
   'audio/mp4',
   'audio/aac',
   'audio/flac',

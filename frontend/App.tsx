@@ -280,7 +280,7 @@ const MainAppContent: React.FC = () => {
     return () => { if (bc) bc.close(); };
   }, []);
 
-const [page, setPage] = useState<'library' | 'media' | 'projects'>('library');
+const [page, setPage] = useLocalStorage<'library' | 'media' | 'projects'>(LOCAL_STORAGE_KEYS.ACTIVE_PAGE, 'library');
   const [isLibraryCollapsed, setIsLibraryCollapsed] = useState(false);
   const [libraryWidth, setLibraryWidth] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.LIBRARY_WIDTH, 420);
   const [layout, setLayout] = useState<Layout>('cols');

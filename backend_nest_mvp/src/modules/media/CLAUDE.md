@@ -48,8 +48,10 @@ No hay ni debe haber `forceDuplicate` ni `nameOverride`.
 
 ```
 Extensiones: mp4, mov, m4v, mp3, wav, m4a, aac, flac, ogg
-MIME:        video/mp4, video/quicktime, audio/wav, audio/x-wav,
-             audio/mpeg, audio/mp4, audio/aac, audio/flac, audio/ogg
+MIME:        video/mp4, video/quicktime,
+             audio/wav, audio/x-wav, audio/wave, audio/vnd.wave,  ← variantes WAV (Windows reporta audio/wave)
+             audio/mpeg, audio/mp3,                                ← variantes MP3
+             audio/mp4, audio/aac, audio/flac, audio/ogg
 ```
 
 Cualquier archivo fuera de estos valores debe rechazarse y el archivo debe borrarse del disco.
