@@ -36,13 +36,7 @@ export class ProjectsController {
 
   @Post('/from-existing')
   createFromExisting(@CurrentUser() user: RequestUser, @Body() dto: CreateProjectFromExistingDto) {
-    return this.projects.createProjectFromExisting(
-      user.userId,
-      dto.name,
-      dto.mediaDocumentId,
-      dto.srtText,
-      dto.settings ?? {},
-    );
+    return this.projects.createProjectFromExisting(user.userId, dto);
   }
 
   // ✅ IMPORTANTE: estas rutas deben ir ANTES que /:id

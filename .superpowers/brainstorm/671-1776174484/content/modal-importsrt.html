@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8"/>
+<title>Importar SRT</title>
+<style>
+  body { background:#0a0a0a; color:#e5e7eb; font-family:ui-sans-serif,system-ui,sans-serif; margin:0; padding:24px; }
+  h2 { font-size:15px; font-weight:900; color:white; margin:0 0 4px; }
+  .subtitle { font-size:11px; color:#6b7280; margin:0 0 24px; }
+
+  .modal { background:#111827; border-radius:10px; padding:20px 22px; font-size:12px; color:#e5e7eb; max-width:520px; }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .modal-title { font-weight:900; font-size:14px; color:white; }
+  .close { color:#6b7280; font-size:18px; }
+  .tabs { display:flex; gap:5px; }
+  .tab-active { background:#7c3aed; color:white; padding:2px 9px; border-radius:6px; font-size:10px; font-weight:700; }
+  .tab-inactive { background:#1f2937; color:#9ca3af; padding:2px 9px; border-radius:6px; font-size:10px; font-weight:700; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+  .col { display:flex; flex-direction:column; gap:12px; }
+  .field { display:flex; flex-direction:column; gap:4px; }
+  .label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:.05em; }
+  .label-opt { font-size:9px; font-weight:400; color:#6b7280; }
+  .inp { background:#1f2937; border:1px solid #374151; border-radius:7px; padding:7px 10px; color:#6b7280; font-size:11px; }
+  .row-btn { display:flex; gap:6px; align-items:center; }
+  .icon-btn { width:32px; height:32px; min-width:32px; background:#1f2937; border:1px solid #374151; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:14px; cursor:pointer; flex-shrink:0; }
+
+  .srt-drop { background:#1f2937; border:1.5px dashed #374151; border-radius:7px; padding:14px 10px; color:#6b7280; font-size:10px; text-align:center; cursor:pointer; transition:border-color .15s; }
+  .srt-drop:hover { border-color:#7c3aed; color:#a78bfa; }
+
+  .footer { border-top:1px solid #374151; padding-top:12px; display:flex; justify-content:flex-end; gap:8px; }
+  .btn-cancel { background:#1f2937; color:#d1d5db; padding:6px 13px; border-radius:7px; border:none; font-size:11px; font-weight:600; cursor:pointer; }
+  .btn-primary { background:#7c3aed; color:white; padding:6px 15px; border-radius:7px; border:none; font-size:11px; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<h2>Importar SRT — modal net</h2>
+<p class="subtitle">Sense Perfil Whisper ni Whisper avançat. Només el que és rellevant per a la importació.</p>
+
+<div class="modal">
+  <div class="modal-header">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="modal-title">Crear proyecto</span>
+      <div class="tabs">
+        <span class="tab-inactive">Transcribir</span>
+        <span class="tab-active">Importar SRT</span>
+      </div>
+    </div>
+    <span class="close">×</span>
+  </div>
+
+  <div class="grid2">
+    <!-- COL IZQ: Nombre -->
+    <div class="col">
+      <div class="field">
+        <span class="label">NOMBRE</span>
+        <div class="inp" style="color:#e5e7eb;">Proyecto 01</div>
+      </div>
+    </div>
+
+    <!-- COL DCH: Vídeo + Guió + SRT -->
+    <div class="col">
+      <div class="field">
+        <span class="label">VÍDEO / AUDIO</span>
+        <div class="row-btn">
+          <div class="inp" style="flex:1;">Selecciona...</div>
+          <div class="icon-btn" title="Subir nuevo archivo">↑</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">GUIÓ <span class="label-opt">(opcional)</span></span>
+        <div class="row-btn">
+          <div class="inp" style="flex:1;">Sin guió seleccionat</div>
+          <div class="icon-btn" title="Seleccionar DOCX/PDF">📄</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">ARXIU SRT</span>
+        <div class="srt-drop">
+          Arrossega aquí o fes clic per seleccionar <strong>.srt</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <button class="btn-cancel">Cancelar</button>
+    <button class="btn-primary">Importar SRT</button>
+  </div>
+</div>
+
+</body>
+</html>

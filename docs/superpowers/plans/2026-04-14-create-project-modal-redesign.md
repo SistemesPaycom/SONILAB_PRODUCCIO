@@ -1,3 +1,751 @@
+# CreateProjectModal Redesign & Whisper Presets — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Redesign CreateProjectModal with collapsible advanced Whisper section + per-user preset persistence, add SRT-from-platform import with "Eliminar original" checkbox, and add auto-LNK creation inside the project folder at project creation.
+
+**Architecture:** Backend adds a new `UserSettings` MongoDB collection for per-user Whisper presets with three REST endpoints. `ProjectsService` gets two new behaviors: auto-LNK creation (non-fatal `try/catch`) and `sourceSrtDocumentId` import flow (reads SRT content from an existing platform document). Frontend gets a completely redesigned modal: 2-column layout, collapsible "Whisper avançat" section with preset selection and save, and a cleaned-up "Importar SRT" tab with platform SRT picker + always-visible "Eliminar original" checkbox.
+
+**Tech Stack:** NestJS + Mongoose (backend), React + TypeScript + TailwindCSS (frontend). No existing unit tests — verification via TypeScript compilation (`tsc --noEmit`).
+
+**Spec:** `docs/superpowers/specs/2026-04-14-create-project-modal-redesign.md`
+
+---
+
+## File map
+
+| Action | File |
+|--------|------|
+| Modify | `frontend/appTypes.ts` |
+| Modify | `frontend/services/api.ts` |
+| Full rewrite | `frontend/components/Projects/CreateProjectModal.tsx` |
+| **Create** | `backend_nest_mvp/src/modules/settings/user-settings.schema.ts` |
+| **Create** | `backend_nest_mvp/src/modules/settings/user-settings.service.ts` |
+| Modify | `backend_nest_mvp/src/modules/settings/settings.module.ts` |
+| Modify | `backend_nest_mvp/src/modules/settings/settings.controller.ts` |
+| Modify | `backend_nest_mvp/src/modules/projects/dto/create-project-from-existing.dto.ts` |
+| Modify | `backend_nest_mvp/src/modules/projects/projects.service.ts` |
+| Modify | `backend_nest_mvp/src/modules/projects/projects.controller.ts` |
+
+---
+
+## Task 1: Add `WhisperConfig` type to `appTypes.ts`
+
+**Files:**
+- Modify: `frontend/appTypes.ts`
+
+- [ ] **Step 1: Add the interface** — append at the end of the file, before the last export if any
+
+```typescript
+export interface WhisperConfig {
+  engine: string;
+  model: string;
+  language: string;
+  batchSize: number;
+  device: 'cpu' | 'cuda';
+  timingFix: boolean;
+  diarization: boolean;
+  minSubGapMs: number;
+  enforceMinSubGap: boolean;
+}
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `frontend/`:
+```
+npx tsc --noEmit
+```
+Expected: no errors related to `WhisperConfig`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add frontend/appTypes.ts
+git commit -m "feat: add WhisperConfig type to appTypes"
+```
+
+---
+
+## Task 2: Create `user-settings.schema.ts`
+
+**Files:**
+- Create: `backend_nest_mvp/src/modules/settings/user-settings.schema.ts`
+
+- [ ] **Step 1: Create the file**
+
+```typescript
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument } from 'mongoose';
+
+export interface WhisperConfig {
+  engine: string;
+  model: string;
+  language: string;
+  batchSize: number;
+  device: 'cpu' | 'cuda';
+  timingFix: boolean;
+  diarization: boolean;
+  minSubGapMs: number;
+  enforceMinSubGap: boolean;
+}
+
+@Schema({ timestamps: true })
+export class UserSettings {
+  @Prop({ required: true, unique: true, index: true })
+  userId: string;
+
+  @Prop({ type: Object, default: {} })
+  whisperPresets: Record<string, WhisperConfig>;
+}
+
+export type UserSettingsDocument = HydratedDocument<UserSettings>;
+export const UserSettingsSchema = SchemaFactory.createForClass(UserSettings);
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/settings/user-settings.schema.ts
+git commit -m "feat: add UserSettings schema for per-user Whisper presets"
+```
+
+---
+
+## Task 3: Create `user-settings.service.ts`
+
+**Files:**
+- Create: `backend_nest_mvp/src/modules/settings/user-settings.service.ts`
+
+- [ ] **Step 1: Create the file**
+
+```typescript
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { UserSettings, UserSettingsDocument, WhisperConfig } from './user-settings.schema';
+
+const RESERVED_NAMES = ['ve', 'vcat'];
+
+@Injectable()
+export class UserSettingsService {
+  constructor(
+    @InjectModel(UserSettings.name)
+    private readonly model: Model<UserSettingsDocument>,
+  ) {}
+
+  async getWhisperPresets(userId: string): Promise<Record<string, WhisperConfig>> {
+    const doc = await this.model.findOne({ userId }).lean();
+    return (doc?.whisperPresets as Record<string, WhisperConfig>) ?? {};
+  }
+
+  async saveWhisperPreset(
+    userId: string,
+    name: string,
+    config: WhisperConfig,
+  ): Promise<void> {
+    const trimmed = name.trim();
+    if (!trimmed) throw new BadRequestException('El nom del preset no pot ser buit');
+    if (RESERVED_NAMES.includes(trimmed.toLowerCase())) {
+      throw new BadRequestException(`"${trimmed}" és un nom reservat (preset de fàbrica)`);
+    }
+    await this.model.findOneAndUpdate(
+      { userId },
+      { $set: { [`whisperPresets.${trimmed}`]: config } },
+      { upsert: true, new: true },
+    );
+  }
+
+  async deleteWhisperPreset(userId: string, name: string): Promise<void> {
+    const trimmed = name.trim();
+    if (RESERVED_NAMES.includes(trimmed.toLowerCase())) {
+      throw new BadRequestException(
+        `"${trimmed}" és un preset de fàbrica i no es pot eliminar`,
+      );
+    }
+    // Idempotent: no error if preset does not exist
+    await this.model.updateOne(
+      { userId },
+      { $unset: { [`whisperPresets.${trimmed}`]: '' } },
+    );
+  }
+}
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/settings/user-settings.service.ts
+git commit -m "feat: add UserSettingsService for Whisper preset CRUD"
+```
+
+---
+
+## Task 4: Register `UserSettings` in `settings.module.ts`
+
+**Files:**
+- Modify: `backend_nest_mvp/src/modules/settings/settings.module.ts`
+
+- [ ] **Step 1: Replace the entire file**
+
+```typescript
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { GlobalSettings, GlobalSettingsSchema } from './settings.schema';
+import { UserSettings, UserSettingsSchema } from './user-settings.schema';
+import { SettingsService } from './settings.service';
+import { UserSettingsService } from './user-settings.service';
+import { SettingsController } from './settings.controller';
+import { RolesGuard } from '../../common/guards/roles.guard';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: GlobalSettings.name, schema: GlobalSettingsSchema },
+      { name: UserSettings.name, schema: UserSettingsSchema },
+    ]),
+  ],
+  providers: [SettingsService, UserSettingsService, RolesGuard],
+  controllers: [SettingsController],
+  exports: [SettingsService, UserSettingsService],
+})
+export class SettingsModule {}
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/settings/settings.module.ts
+git commit -m "feat: register UserSettings schema and service in SettingsModule"
+```
+
+---
+
+## Task 5: Add whisper-preset endpoints to `settings.controller.ts`
+
+**Files:**
+- Modify: `backend_nest_mvp/src/modules/settings/settings.controller.ts`
+
+- [ ] **Step 1: Replace the entire file**
+
+```typescript
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { SettingsService } from './settings.service';
+import { UserSettingsService } from './user-settings.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequestUser } from '../../common/types/request-user';
+
+@Controller('/settings')
+export class SettingsController {
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly userSettingsService: UserSettingsService,
+  ) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Get('/global-styles')
+  async getGlobalStyles() {
+    return this.settingsService.getGlobalStyles();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Patch('/global-styles')
+  async updateGlobalStyles(
+    @Body() body: { scope: 'scriptEditor' | 'subtitleEditor' | 'home'; styles: any },
+  ) {
+    await this.settingsService.updateGlobalStylesScope(body.scope, body.styles);
+    return { ok: true };
+  }
+
+  // ── Whisper presets (per-user) ──────────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Get('/whisper-presets')
+  async getWhisperPresets(@CurrentUser() user: RequestUser) {
+    return this.userSettingsService.getWhisperPresets(user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Post('/whisper-presets')
+  async saveWhisperPreset(
+    @CurrentUser() user: RequestUser,
+    @Body() body: { name: string; config: any },
+  ) {
+    await this.userSettingsService.saveWhisperPreset(user.userId, body.name, body.config);
+    return { ok: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('/whisper-presets/:name')
+  async deleteWhisperPreset(
+    @CurrentUser() user: RequestUser,
+    @Param('name') name: string,
+  ) {
+    await this.userSettingsService.deleteWhisperPreset(user.userId, name);
+    return { ok: true };
+  }
+}
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 3: Manual smoke test** — start backend and verify endpoints respond:
+
+```bash
+# GET — returns {} for a fresh user
+curl -H "Authorization: Bearer <token>" http://localhost:8000/settings/whisper-presets
+# Expected: {}
+
+# POST — saves a preset
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"name":"MiPreset","config":{"engine":"faster-whisper","model":"large-v3","language":"ca","batchSize":8,"device":"cpu","timingFix":true,"diarization":false,"minSubGapMs":160,"enforceMinSubGap":true}}' \
+  http://localhost:8000/settings/whisper-presets
+# Expected: {"ok":true}  (HTTP 200)
+
+# GET again — returns the saved preset
+curl -H "Authorization: Bearer <token>" http://localhost:8000/settings/whisper-presets
+# Expected: {"MiPreset":{...}}
+
+# DELETE
+curl -X DELETE -H "Authorization: Bearer <token>" \
+  http://localhost:8000/settings/whisper-presets/MiPreset
+# Expected: {"ok":true}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/settings/settings.controller.ts
+git commit -m "feat: add GET/POST/DELETE whisper-presets endpoints to SettingsController"
+```
+
+---
+
+## Task 6: Extend `CreateProjectFromExistingDto`
+
+**Files:**
+- Modify: `backend_nest_mvp/src/modules/projects/dto/create-project-from-existing.dto.ts`
+
+- [ ] **Step 1: Replace the entire file**
+
+```typescript
+import {
+  IsBoolean,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+
+export class CreateProjectFromExistingDto {
+  @IsString()
+  @MaxLength(120)
+  name: string;
+
+  @IsString()
+  mediaDocumentId: string;
+
+  // Flux A: SRT de plataforma (nou)
+  @IsOptional()
+  @IsString()
+  sourceSrtDocumentId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  deleteOriginalSrt?: boolean;  // default false — mai esborrar per omissió
+
+  // Flux B: SRT extern (retrocompatible)
+  @IsOptional()
+  @IsString()
+  srtText?: string;
+
+  @IsOptional()
+  @IsObject()
+  settings?: Record<string, any>;
+}
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/projects/dto/create-project-from-existing.dto.ts
+git commit -m "feat: extend CreateProjectFromExistingDto with sourceSrtDocumentId and deleteOriginalSrt"
+```
+
+---
+
+## Task 7: Update `ProjectsService.createProjectFromExisting`
+
+Add `sourceSrtDocumentId` flow + non-fatal LNK creation + soft-delete of original SRT.
+
+**Files:**
+- Modify: `backend_nest_mvp/src/modules/projects/projects.service.ts`
+
+- [ ] **Step 1: Add import for `BadRequestException` and `CreateProjectFromExistingDto` at top**
+
+The service already imports `Injectable` and `NotFoundException`. Add `BadRequestException` to the `@nestjs/common` import:
+
+```typescript
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+```
+
+Also add the DTO import (if not already present):
+```typescript
+import { CreateProjectFromExistingDto } from './dto/create-project-from-existing.dto';
+```
+
+- [ ] **Step 2: Replace the `createProjectFromExisting` method** (currently lines 29–71)
+
+Find and replace the existing method with:
+
+```typescript
+async createProjectFromExisting(
+  ownerId: string,
+  dto: CreateProjectFromExistingDto,
+) {
+  const {
+    name,
+    mediaDocumentId,
+    sourceSrtDocumentId,
+    deleteOriginalSrt = false,
+    srtText: rawSrtText,
+    settings = {},
+  } = dto;
+
+  // Exactly one SRT source must be provided
+  if (!sourceSrtDocumentId && !rawSrtText) {
+    throw new BadRequestException('Cal proporcionar sourceSrtDocumentId o srtText');
+  }
+  // If both arrive simultaneously, sourceSrtDocumentId takes priority
+  const useDocSource = !!sourceSrtDocumentId;
+
+  // Validate media exists
+  const mediaDoc = await this.library.getDocument(ownerId, mediaDocumentId);
+  if (!mediaDoc.media?.path) throw new NotFoundException('Media document not found or has no media');
+
+  // Resolve SRT text
+  let srtText = rawSrtText ?? '';
+  if (useDocSource) {
+    const srtSourceDoc = await this.library.getDocument(ownerId, sourceSrtDocumentId!);
+    if (!srtSourceDoc || (srtSourceDoc as any).isDeleted) {
+      throw new NotFoundException(`SRT document "${sourceSrtDocumentId}" not found`);
+    }
+    // SRT content lives in contentByLang._unassigned (or first available key)
+    const langs = (srtSourceDoc as any).contentByLang ?? {};
+    srtText = langs['_unassigned'] ?? Object.values(langs)[0] ?? '';
+  }
+
+  // Create project folder
+  const folder = await this.library.createFolder(ownerId, name);
+
+  // Create SRT document inside the project folder
+  const srtDoc = await this.library.createDocument(ownerId, {
+    name: `${name}.srt`,
+    parentId: folder.id,
+    sourceType: 'srt',
+    contentByLang: { _unassigned: srtText },
+    isLocked: false,
+  } as any);
+
+  // Create project record
+  const project = await this.projectModel.create({
+    ownerId,
+    folderId: folder.id,
+    mediaDocumentId,
+    srtDocumentId: srtDoc.id,
+    status: 'ready',
+    settings,
+    lastError: null,
+  });
+
+  // Create LNK pointing to the media asset inside the project folder (non-fatal)
+  try {
+    await this.library.createMediaRef(ownerId, mediaDocumentId, folder.id);
+  } catch (e) {
+    console.warn('[createProjectFromExisting] LNK creation failed (non-fatal):', e);
+  }
+
+  // Soft-delete the original SRT document if requested
+  if (useDocSource && deleteOriginalSrt === true) {
+    try {
+      await this.library.softDeleteDocument(ownerId, sourceSrtDocumentId!);
+    } catch (e) {
+      console.warn('[createProjectFromExisting] Soft-delete of original SRT failed (non-fatal):', e);
+    }
+  }
+
+  return {
+    project: { ...project.toObject(), id: project._id.toString() },
+    folder,
+    srtDocument: srtDoc,
+  };
+}
+```
+
+- [ ] **Step 3: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/projects/projects.service.ts
+git commit -m "feat: add sourceSrtDocumentId flow and auto-LNK creation to createProjectFromExisting"
+```
+
+---
+
+## Task 8: Add auto-LNK creation to `ProjectsService.createProject`
+
+**Files:**
+- Modify: `backend_nest_mvp/src/modules/projects/projects.service.ts`
+
+- [ ] **Step 1: Locate the end of `createProject`** — the `return` statement after `queue.add` (currently around line 186–198)
+
+Find the return block:
+```typescript
+    return {
+      project: { ...project.toObject(), id: projectId },
+      folder,
+      srtDocument: srtDoc,
+      job: { ...dbJob.toObject(), id: jobId },
+    };
+```
+
+**Insert the LNK creation block immediately before the `return`:**
+
+```typescript
+    // Create LNK pointing to the media asset inside the project folder (non-fatal)
+    try {
+      await this.library.createMediaRef(ownerId, mediaDocumentId, folder.id);
+    } catch (e) {
+      console.warn('[createProject] LNK creation failed (non-fatal):', e);
+    }
+
+    return {
+      project: { ...project.toObject(), id: projectId },
+      folder,
+      srtDocument: srtDoc,
+      job: { ...dbJob.toObject(), id: jobId },
+    };
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/projects/projects.service.ts
+git commit -m "feat: add non-fatal auto-LNK creation to createProject"
+```
+
+---
+
+## Task 9: Update `projects.controller.ts` — pass DTO to service
+
+The controller currently calls `createProjectFromExisting` with 5 positional args. After Task 7, the service takes `(ownerId, dto)`.
+
+**Files:**
+- Modify: `backend_nest_mvp/src/modules/projects/projects.controller.ts`
+
+- [ ] **Step 1: Find the `createFromExisting` method** (currently lines 37–46) and replace the service call:
+
+Find:
+```typescript
+  @Post('/from-existing')
+  createFromExisting(@CurrentUser() user: RequestUser, @Body() dto: CreateProjectFromExistingDto) {
+    return this.projects.createProjectFromExisting(
+      user.userId,
+      dto.name,
+      dto.mediaDocumentId,
+      dto.srtText,
+      dto.settings ?? {},
+    );
+  }
+```
+
+Replace with:
+```typescript
+  @Post('/from-existing')
+  createFromExisting(@CurrentUser() user: RequestUser, @Body() dto: CreateProjectFromExistingDto) {
+    return this.projects.createProjectFromExisting(user.userId, dto);
+  }
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `backend_nest_mvp/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 3: Smoke test** — create a project from an external SRT file (retrocompatibility check):
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"name":"TestRetro","mediaDocumentId":"<existing-media-id>","srtText":"1\n00:00:01,000 --> 00:00:02,000\nTest\n"}' \
+  http://localhost:8000/projects/from-existing
+# Expected: JSON with project, folder, srtDocument
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend_nest_mvp/src/modules/projects/projects.controller.ts
+git commit -m "refactor: update createFromExisting controller to pass full DTO to service"
+```
+
+---
+
+## Task 10: Update `api.ts` — new preset methods + extended `createProjectFromExisting`
+
+**Files:**
+- Modify: `frontend/services/api.ts`
+
+- [ ] **Step 1: Import `WhisperConfig` type at the top of the file**
+
+Add at the top of `frontend/services/api.ts` (after any existing imports):
+```typescript
+import type { WhisperConfig } from '../appTypes';
+```
+
+- [ ] **Step 2: Extend `createProjectFromExisting` signature**
+
+Find:
+```typescript
+  async createProjectFromExisting(payload: { name: string; mediaDocumentId: string; srtText: string; settings?: any }) {
+    return request<any>(`/projects/from-existing`, { method: 'POST', body: payload });
+  },
+```
+
+Replace with:
+```typescript
+  async createProjectFromExisting(payload: {
+    name: string;
+    mediaDocumentId: string;
+    settings?: any;
+    srtText?: string;
+    sourceSrtDocumentId?: string;
+    deleteOriginalSrt?: boolean;
+  }) {
+    return request<any>(`/projects/from-existing`, { method: 'POST', body: payload });
+  },
+```
+
+- [ ] **Step 3: Add 3 whisper-preset methods** — insert after `createProjectFromExisting`:
+
+```typescript
+  async getWhisperPresets(): Promise<Record<string, WhisperConfig>> {
+    return request<Record<string, WhisperConfig>>(`/settings/whisper-presets`);
+  },
+
+  async saveWhisperPreset(name: string, config: WhisperConfig): Promise<void> {
+    await request<any>(`/settings/whisper-presets`, {
+      method: 'POST',
+      body: { name, config },
+    });
+  },
+
+  async deleteWhisperPreset(name: string): Promise<void> {
+    await request<any>(`/settings/whisper-presets/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+  },
+```
+
+- [ ] **Step 4: Verify TypeScript compiles**
+
+Run from `frontend/`:
+```
+npx tsc --noEmit
+```
+Expected: no new errors.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/services/api.ts
+git commit -m "feat: extend createProjectFromExisting and add whisper-preset methods to api.ts"
+```
+
+---
+
+## Task 11: Redesign `CreateProjectModal.tsx`
+
+This is a full rewrite. Read the spec (`docs/superpowers/specs/2026-04-14-create-project-modal-redesign.md`) and the visual mockups in `.superpowers/brainstorm/671-1776174484/content/` before implementing.
+
+**Files:**
+- Full rewrite: `frontend/components/Projects/CreateProjectModal.tsx`
+
+- [ ] **Step 1: Write the complete new component**
+
+Replace the entire file with:
+
+```typescript
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
@@ -42,6 +790,10 @@ const ENGINE_LABELS: Record<string, string> = {
 // isCanonicalMedia — definició canònica (CLAUDE.md §4)
 function isCanonicalMedia(d: Document): boolean {
   return d.type === 'document' && !!d.media && !d.refTargetId;
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -128,11 +880,6 @@ export const CreateProjectModal: React.FC<{
     setSavePresetError(null);
     setSavePresetName('');
     setSrtFile(null);  // sync reset — must be outside async block
-    setGuionFile(null);
-    setGuionPreviewText('');
-    setGuionConverting(false);
-    setGuionConvertErr(null);
-    guionConvertedRef.current = null;
 
     void (async () => {
       try {
@@ -290,12 +1037,8 @@ export const CreateProjectModal: React.FC<{
         const r = await uploadPromise;
         completeJob(jobId, true);
         const newId = r?.document?.id;
+        await reloadTree();
         if (newId) setMediaId(newId);
-        try {
-          await reloadTree();
-        } catch (treeErr) {
-          console.warn('[handleUploadNewMedia] reloadTree failed (non-fatal):', treeErr);
-        }
       } catch (e: any) {
         completeJob(jobId, false, e?.message || 'Error subiendo vídeo');
         setErr(e?.message || 'Error subiendo vídeo');
@@ -362,7 +1105,6 @@ export const CreateProjectModal: React.FC<{
         onClose();
       } catch (e: any) {
         setErr(e?.message || 'Error creando proyecto');
-      } finally {
         setBusy(false);
       }
     })();
@@ -416,19 +1158,8 @@ export const CreateProjectModal: React.FC<{
       className="fixed inset-0 z-[900] bg-black/70 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <style>{`
-        .cpmodal select {
-          -webkit-appearance: none;
-          appearance: none;
-          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%239ca3af'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3E%3C/svg%3E");
-          background-repeat: no-repeat;
-          background-position: right 8px center;
-          background-size: 16px 16px;
-          padding-right: 2rem;
-        }
-      `}</style>
       <div
-        className="cpmodal w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-2xl px-7 py-6 flex flex-col min-h-[420px]"
+        className="w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-2xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -463,7 +1194,7 @@ export const CreateProjectModal: React.FC<{
         {/* ── 2-column grid ── */}
         <div className="grid grid-cols-2 gap-4 mb-3">
           {/* Left column */}
-          <div className="space-y-3 min-w-0">
+          <div className="space-y-3">
             {/* Nombre */}
             <div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Nombre</div>
@@ -507,16 +1238,16 @@ export const CreateProjectModal: React.FC<{
               /* Arxiu SRT */
               <div>
                 <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Arxiu SRT</div>
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 items-center mb-2">
                   {srtFile ? (
                     /* External file selected — show filename badge */
-                    <div className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-green-400 text-xs font-mono truncate">
+                    <div className="flex-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-green-400 text-xs font-mono truncate">
                       📂 {srtFile.name}
                     </div>
                   ) : (
                     /* Platform SRT dropdown */
                     <select
-                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm"
+                      className="flex-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm"
                       style={{ color: srtDocId ? 'var(--th-text, #e5e7eb)' : '#6b7280' }}
                       value={srtDocId}
                       onChange={(e) => {
@@ -565,18 +1296,49 @@ export const CreateProjectModal: React.FC<{
                     </button>
                   )}
                 </div>
+                {/* Eliminar original — always visible, changes style based on state */}
+                {isDeleteOriginalEnabled ? (
+                  <label
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
+                    style={{ background: '#2d1515', border: '1px solid #7f1d1d' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={deleteOriginalSrt}
+                      onChange={(e) => setDeleteOriginalSrt(e.target.checked)}
+                      style={{ accentColor: '#ef4444', width: 12, height: 12 }}
+                    />
+                    <span className="text-xs font-semibold" style={{ color: '#fca5a5' }}>
+                      Eliminar original
+                    </span>
+                  </label>
+                ) : (
+                  <label
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg opacity-40 cursor-default"
+                    style={{ background: '#161616', border: '1px solid #252525' }}
+                  >
+                    <input
+                      type="checkbox"
+                      disabled
+                      style={{ accentColor: '#6b7280', width: 12, height: 12 }}
+                    />
+                    <span className="text-xs font-semibold text-gray-500">
+                      Eliminar original
+                    </span>
+                  </label>
+                )}
               </div>
             )}
           </div>
 
           {/* Right column */}
-          <div className="space-y-3 min-w-0">
+          <div className="space-y-3">
             {/* Vídeo / Audio */}
             <div>
               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Vídeo / Audio</div>
-              <div className="flex gap-2 items-center min-w-0">
+              <div className="flex gap-2 items-center">
                 <select
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm"
+                  className="flex-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm"
                   style={{ color: mediaId ? 'var(--th-text, #e5e7eb)' : '#6b7280' }}
                   value={mediaId}
                   onChange={(e) => setMediaId(e.target.value)}
@@ -612,7 +1374,7 @@ export const CreateProjectModal: React.FC<{
               </div>
               <div className="flex gap-2 items-center">
                 <div
-                  className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-xs truncate"
+                  className="flex-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-xs truncate"
                   style={{ color: guionFile ? '#34d399' : '#4b5563' }}
                 >
                   {guionFile ? guionFile.name : 'Sin guió'}
@@ -659,10 +1421,10 @@ export const CreateProjectModal: React.FC<{
           </div>
         </div>
 
-        {/* ── Options slot — Whisper Avançat (transcribe) or Eliminar original (importSrt) ── */}
-        <div className="border-t border-gray-700" />
-        {tab === 'transcribe' ? (
+        {/* ── Whisper avançat (Transcribir tab only) ── */}
+        {tab === 'transcribe' && (
           <>
+            <div className="border-t border-gray-700 mb-0" />
             {/* Toggle row */}
             <div
               className="flex items-center justify-between px-1 py-2 cursor-pointer select-none"
@@ -889,40 +1651,6 @@ export const CreateProjectModal: React.FC<{
               </div>
             )}
           </>
-        ) : (
-          /* Eliminar original — same py-2 as Whisper toggle row to keep modal height consistent */
-          <div className="flex items-center px-1 py-2">
-            {isDeleteOriginalEnabled ? (
-              <label
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
-                style={{ background: '#2d1515', border: '1px solid #7f1d1d' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={deleteOriginalSrt}
-                  onChange={(e) => setDeleteOriginalSrt(e.target.checked)}
-                  style={{ accentColor: '#ef4444', width: 12, height: 12 }}
-                />
-                <span className="text-xs font-semibold" style={{ color: '#fca5a5' }}>
-                  Eliminar original
-                </span>
-              </label>
-            ) : (
-              <label
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg opacity-40 cursor-default"
-                style={{ background: '#161616', border: '1px solid #252525' }}
-              >
-                <input
-                  type="checkbox"
-                  disabled
-                  style={{ accentColor: '#6b7280', width: 12, height: 12 }}
-                />
-                <span className="text-xs font-semibold text-gray-500">
-                  Eliminar original
-                </span>
-              </label>
-            )}
-          </div>
         )}
 
         {/* ── Script-Align field (only when engine = script-align, Transcribir tab) ── */}
@@ -964,7 +1692,7 @@ export const CreateProjectModal: React.FC<{
         )}
 
         {/* ── Footer ── */}
-        <div className="border-t border-gray-700 mt-auto pt-3">
+        <div className="border-t border-gray-700 mt-3 pt-3">
           {busy && (
             <div className="mb-2">
               <div className="h-1.5 w-full bg-gray-700 rounded overflow-hidden">
@@ -986,7 +1714,7 @@ export const CreateProjectModal: React.FC<{
             </button>
             {tab === 'transcribe' ? (
               <button
-                disabled={busy || guionConverting}
+                disabled={busy}
                 onClick={createByTranscribe}
                 className="px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-60"
                 style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
@@ -995,7 +1723,7 @@ export const CreateProjectModal: React.FC<{
               </button>
             ) : (
               <button
-                disabled={busy || guionConverting}
+                disabled={busy}
                 onClick={createFromExistingSrt}
                 className="px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-60"
                 style={{ backgroundColor: 'var(--th-btn-primary-bg)', color: 'var(--th-btn-primary-text)' }}
@@ -1009,3 +1737,49 @@ export const CreateProjectModal: React.FC<{
     </div>
   );
 };
+```
+
+- [ ] **Step 2: Verify TypeScript compiles**
+
+Run from `frontend/`:
+```
+npx tsc --noEmit
+```
+Expected: no errors. If `isCanonicalMedia` complains about `d.type`, verify the `Document` interface in `appTypes.ts` has `type: 'document'` (it does, at line 65).
+
+- [ ] **Step 3: Manual UI verification**
+
+Start the frontend dev server and open the Create Project modal:
+1. **Transcribir tab** — verify 2-column layout: left col shows Nombre + Perfil Whisper dropdown; right col shows Vídeo/Audio + Guió
+2. **Whisper avançat** — click the divider row; section expands showing Motor, Modelo, Idioma, Batch, Device, checkboxes
+3. **Custom detection** — change Idioma while VE is selected; Perfil dropdown switches to "(custom)" in italic
+4. **Apply preset** — switch back to VCAT; all advanced fields reset to VCAT values
+5. **Guardar perfil** — open advanced, click "Guardar perfil…", type a name, click Guardar; preset appears in dropdown next time modal opens
+6. **Importar SRT tab** — verify left col shows Nombre + Arxiu SRT section; "Eliminar original" always visible
+7. **Eliminar original** — select platform SRT from dropdown → checkbox turns red; select external file via ↑ → checkbox goes gray/disabled; clear dropdown selection → checkbox goes gray again
+8. **Error states** — submit without Nombre → "Falta el nombre del proyecto"; submit without vídeo → "Selecciona un vídeo"
+9. **Create by transcribe** — fill all fields, submit, modal closes, transcription task appears in task panel
+10. **Create from SRT (external)** — select .srt file, submit, project created with status ready
+11. **Create from SRT (platform)** — select platform SRT, submit; verify the original SRT is soft-deleted (if checkbox checked)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add frontend/components/Projects/CreateProjectModal.tsx
+git commit -m "feat: redesign CreateProjectModal — 2-col layout, Whisper presets, SRT from platform"
+```
+
+---
+
+## Post-implementation checklist
+
+After all tasks are complete, verify no regressions:
+
+- [ ] Open Files tab → all documents visible, no crashes
+- [ ] Open Media tab → only canonical media shown (LNK and .srt files absent)
+- [ ] Open Projectes tab → project folders visible
+- [ ] Open an existing project → subtitle editor loads normally
+- [ ] Create a project via Transcribir → job queued, appears in task panel
+- [ ] Create a project via Importar SRT (external file) → project ready immediately, LNK appears in project folder
+- [ ] Create a project via Importar SRT (platform doc, delete enabled) → original SRT document goes to trash
+- [ ] Backend restart → UserSettings collection exists in MongoDB (check via mongo shell or Compass)

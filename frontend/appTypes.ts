@@ -139,3 +139,15 @@ export interface TranscriptionTask {
   error?: string | null;
   timestamp: string;
 }
+
+export interface WhisperConfig {
+  engine: string;
+  model: string;
+  language: string;
+  batchSize: number;
+  device: 'cpu' | 'cuda';
+  timingFix: boolean;
+  diarization: boolean;
+  minSubGapMs: number;
+  enforceMinSubGap: boolean;
+}

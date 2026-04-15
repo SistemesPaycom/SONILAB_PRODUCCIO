@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8"/>
+<title>Modal states</title>
+<style>
+  body { background:#0a0a0a; color:#e5e7eb; font-family:ui-sans-serif,system-ui,sans-serif; margin:0; padding:24px; }
+  h2 { font-size:15px; font-weight:900; color:white; margin:0 0 4px; }
+  .subtitle { font-size:11px; color:#6b7280; margin:0 0 20px; }
+  .row { display:flex; gap:20px; flex-wrap:wrap; }
+  .panel { flex:1; min-width:320px; max-width:520px; }
+  .panel-label { font-size:10px; font-weight:700; color:#7c3aed; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
+
+  /* Modal base */
+  .modal { background:#111827; border-radius:10px; padding:20px 22px; font-size:12px; color:#e5e7eb; }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .modal-title { font-weight:900; font-size:14px; color:white; }
+  .close { color:#6b7280; font-size:18px; }
+  .tabs { display:flex; gap:5px; }
+  .tab-active { background:#7c3aed; color:white; padding:2px 9px; border-radius:6px; font-size:10px; font-weight:700; }
+  .tab-inactive { background:#1f2937; color:#9ca3af; padding:2px 9px; border-radius:6px; font-size:10px; font-weight:700; }
+
+  /* Fields */
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  .field { display:flex; flex-direction:column; gap:4px; }
+  .label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:.05em; }
+  .label-opt { font-size:9px; font-weight:400; color:#6b7280; }
+  .inp { background:#1f2937; border:1px solid #374151; border-radius:7px; padding:7px 10px; color:#e5e7eb; font-size:11px; width:100%; box-sizing:border-box; }
+  .inp-dim { color:#6b7280; }
+  .row-btn { display:flex; gap:6px; align-items:center; }
+  .icon-btn { width:32px; height:32px; min-width:32px; background:#1f2937; border:1px solid #374151; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:14px; cursor:pointer; }
+
+  /* Divider zone */
+  .divider { border-top:1px solid #374151; }
+  .collapse-bar { display:flex; align-items:center; justify-content:space-between; padding:9px 0; cursor:pointer; color:#a78bfa; font-size:10px; font-weight:700; letter-spacing:.06em; background:transparent; border:none; width:100%; }
+  .collapse-bar .arrow { font-size:13px; color:#6b7280; }
+  .collapse-bar .save-btn { background:#1f2937; border:1px solid #374151; color:#d1d5db; padding:2px 8px; border-radius:5px; font-size:9px; font-weight:600; }
+
+  /* Advanced grid */
+  .adv-panel { background:#0f172a; border:1px solid #1f2937; border-radius:8px; padding:12px; margin-bottom:12px; }
+  .adv-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .adv-label { font-size:9px; color:#6b7280; margin-bottom:3px; }
+  .adv-inp { background:#1f2937; border:1px solid #374151; border-radius:6px; padding:5px 8px; color:#e5e7eb; font-size:10px; width:100%; box-sizing:border-box; }
+  .checks { display:flex; flex-direction:column; gap:5px; }
+  .chk { display:flex; align-items:center; gap:6px; font-size:10px; color:#d1d5db; }
+  input[type=checkbox] { accent-color:#7c3aed; }
+
+  /* Footer */
+  .footer { border-top:1px solid #374151; padding-top:11px; display:flex; justify-content:flex-end; gap:8px; }
+  .btn-cancel { background:#1f2937; color:#d1d5db; padding:6px 13px; border-radius:7px; border:none; font-size:11px; font-weight:600; cursor:pointer; }
+  .btn-primary { background:#7c3aed; color:white; padding:6px 15px; border-radius:7px; border:none; font-size:11px; font-weight:700; cursor:pointer; }
+
+  /* SRT-specific */
+  .srt-file { background:#1f2937; border:1px dashed #374151; border-radius:7px; padding:10px; color:#6b7280; font-size:10px; text-align:center; cursor:pointer; }
+  .custom-tag { font-size:9px; color:#a78bfa; font-style:italic; }
+</style>
+</head>
+<body>
+
+<h2>Estados del modal</h2>
+<p class="subtitle">Izquierda: Transcribir + Whisper avançat abierto &nbsp;|&nbsp; Derecha: pestaña Importar SRT</p>
+
+<div class="row">
+
+  <!-- PANEL 1: Transcribir + avançat abierto -->
+  <div class="panel">
+    <div class="panel-label">Transcribir — Whisper avançat obert</div>
+    <div class="modal">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="modal-title">Crear proyecto</span>
+          <div class="tabs">
+            <span class="tab-active">Transcribir</span>
+            <span class="tab-inactive">Importar SRT</span>
+          </div>
+        </div>
+        <span class="close">×</span>
+      </div>
+
+      <div class="grid2">
+        <!-- IZQ -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div class="field">
+            <span class="label">NOMBRE</span>
+            <div class="inp inp-dim">Proyecto 01</div>
+          </div>
+          <div class="field">
+            <span class="label">PERFIL WHISPER</span>
+            <div class="inp" style="color:#a78bfa;font-style:italic;">custom ▾</div>
+          </div>
+        </div>
+        <!-- DCH -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div class="field">
+            <span class="label">VÍDEO / AUDIO</span>
+            <div class="row-btn">
+              <div class="inp inp-dim" style="flex:1;">Selecciona...</div>
+              <div class="icon-btn">↑</div>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">GUIÓ <span class="label-opt">(opcional)</span></span>
+            <div class="row-btn">
+              <div class="inp inp-dim" style="flex:1;">Sin guió</div>
+              <div class="icon-btn">📄</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider + Whisper avançat OBERT -->
+      <div class="divider">
+        <button class="collapse-bar">
+          <span>WHISPER AVANÇAT</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="save-btn">Guardar perfil…</span>
+            <span class="arrow">▼</span>
+          </div>
+        </button>
+      </div>
+
+      <div class="adv-panel">
+        <div class="adv-grid">
+          <div>
+            <div class="adv-label">MOTOR</div>
+            <select class="adv-inp"><option>Purfview XXL</option></select>
+          </div>
+          <div>
+            <div class="adv-label">MODEL</div>
+            <select class="adv-inp"><option>large-v3</option></select>
+          </div>
+          <div>
+            <div class="adv-label">IDIOMA</div>
+            <input class="adv-inp" value="es" readonly />
+          </div>
+          <div>
+            <div class="adv-label">BATCH</div>
+            <input type="number" class="adv-inp" value="16" readonly />
+          </div>
+          <div>
+            <div class="adv-label">DEVICE</div>
+            <select class="adv-inp"><option>cpu</option></select>
+          </div>
+          <div>
+            <div class="adv-label">MARGE MÍN.</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <input type="number" class="adv-inp" value="160" readonly style="width:60px;"/>
+              <span style="font-size:9px;color:#6b7280;">ms</span>
+            </div>
+          </div>
+        </div>
+        <div class="checks">
+          <label class="chk"><input type="checkbox" checked /> Auto-ajuste de timings (waveform)</label>
+          <label class="chk"><input type="checkbox" /> Diarització (identificar interlocutors)</label>
+        </div>
+      </div>
+
+      <div class="footer">
+        <button class="btn-cancel">Cancelar</button>
+        <button class="btn-primary">Transcribir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: Importar SRT -->
+  <div class="panel">
+    <div class="panel-label">Importar SRT (tab alternatiu)</div>
+    <div class="modal">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="modal-title">Crear proyecto</span>
+          <div class="tabs">
+            <span class="tab-inactive">Transcribir</span>
+            <span class="tab-active">Importar SRT</span>
+          </div>
+        </div>
+        <span class="close">×</span>
+      </div>
+
+      <div class="grid2">
+        <!-- IZQ -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div class="field">
+            <span class="label">NOMBRE</span>
+            <div class="inp inp-dim">Proyecto 01</div>
+          </div>
+          <div class="field">
+            <span class="label">PERFIL WHISPER</span>
+            <div class="inp" style="color:#e5e7eb;">VE — Vídeo España ▾</div>
+          </div>
+        </div>
+        <!-- DCH -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div class="field">
+            <span class="label">VÍDEO / AUDIO</span>
+            <div class="row-btn">
+              <div class="inp inp-dim" style="flex:1;">Selecciona...</div>
+              <div class="icon-btn">↑</div>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">GUIÓ <span class="label-opt">(opcional)</span></span>
+            <div class="row-btn">
+              <div class="inp inp-dim" style="flex:1;">Sin guió</div>
+              <div class="icon-btn">📄</div>
+            </div>
+          </div>
+          <!-- Archivo SRT solo en este tab -->
+          <div class="field">
+            <span class="label">ARXIU SRT</span>
+            <div class="srt-file">
+              Arrossega o fes clic per seleccionar .srt
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider Whisper colapsado (igual que en Transcribir) -->
+      <div class="divider">
+        <button class="collapse-bar">
+          <span>WHISPER AVANÇAT</span>
+          <span class="arrow">▶</span>
+        </button>
+      </div>
+
+      <div class="footer" style="margin-top:12px;">
+        <button class="btn-cancel">Cancelar</button>
+        <button class="btn-primary">Importar SRT</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p style="margin-top:18px;font-size:10px;color:#6b7280;">
+  Nota: en el panel izquierdo el perfil muestra <em style="color:#a78bfa;">custom</em> (en cursiva) porque algún valor avanzado fue modificado manualmente. Al seleccionar VE o VCAT desde el desplegable vuelve a los valores predefinidos.
+</p>
+
+</body>
+</html>

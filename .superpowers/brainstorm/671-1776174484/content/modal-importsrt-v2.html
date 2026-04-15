@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8"/>
+<title>Importar SRT v2</title>
+<style>
+  body { background:#0a0a0a; color:#e5e7eb; font-family:ui-sans-serif,system-ui,sans-serif; margin:0; padding:24px; }
+  h2 { font-size:15px; font-weight:900; color:white; margin:0 0 4px; }
+  .subtitle { font-size:11px; color:#6b7280; margin:0 0 24px; }
+
+  .modal { background:#111827; border-radius:10px; padding:20px 22px; font-size:12px; color:#e5e7eb; max-width:520px; }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .modal-title { font-weight:900; font-size:14px; color:white; }
+  .close { color:#6b7280; font-size:18px; }
+  .tabs { display:flex; gap:5px; }
+  .tab-active { background:#7c3aed; color:white; padding:2px 9px; border-radius:6px; font-size:10px; font-weight:700; }
+  .tab-inactive { background:#1f2937; color:#9ca3af; padding:2px 9px; border-radius:6px; font-size:10px; font-weight:700; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+  .col { display:flex; flex-direction:column; gap:12px; }
+  .field { display:flex; flex-direction:column; gap:4px; }
+  .label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:.05em; }
+  .label-opt { font-size:9px; font-weight:400; color:#6b7280; }
+  .inp { background:#1f2937; border:1px solid #374151; border-radius:7px; padding:7px 10px; color:#6b7280; font-size:11px; width:100%; box-sizing:border-box; }
+  .inp-light { color:#e5e7eb; }
+  .row-btn { display:flex; gap:6px; align-items:center; }
+  .icon-btn { width:32px; height:32px; min-width:32px; background:#1f2937; border:1px solid #374151; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:14px; cursor:pointer; flex-shrink:0; }
+
+  .footer { border-top:1px solid #374151; padding-top:12px; display:flex; justify-content:flex-end; gap:8px; }
+  .btn-cancel { background:#1f2937; color:#d1d5db; padding:6px 13px; border-radius:7px; border:none; font-size:11px; font-weight:600; cursor:pointer; }
+  .btn-primary { background:#7c3aed; color:white; padding:6px 15px; border-radius:7px; border:none; font-size:11px; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<h2>Importar SRT — layout v2</h2>
+<p class="subtitle">Arxiu SRT bajo Nombre (col. izquierda) · desplegable para SRTs de la plataforma + icono para importar externo</p>
+
+<div class="modal">
+  <div class="modal-header">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="modal-title">Crear proyecto</span>
+      <div class="tabs">
+        <span class="tab-inactive">Transcribir</span>
+        <span class="tab-active">Importar SRT</span>
+      </div>
+    </div>
+    <span class="close">×</span>
+  </div>
+
+  <div class="grid2">
+
+    <!-- COL IZQ: Nombre + Arxiu SRT -->
+    <div class="col">
+      <div class="field">
+        <span class="label">NOMBRE</span>
+        <div class="inp inp-light">Proyecto 01</div>
+      </div>
+
+      <div class="field">
+        <span class="label">ARXIU SRT</span>
+        <div class="row-btn">
+          <select style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:7px;padding:7px 10px;color:#6b7280;font-size:11px;">
+            <option value="">Selecciona SRT...</option>
+            <option>episodi_01.srt</option>
+            <option>episodi_02_v2.srt</option>
+            <option>corrected_final.srt</option>
+          </select>
+          <div class="icon-btn" title="Importar SRT extern" style="font-size:12px;">↑</div>
+        </div>
+        <div style="font-size:9px;color:#4b5563;margin-top:1px;">SRTs de la plataforma · o importa un extern amb ↑</div>
+      </div>
+    </div>
+
+    <!-- COL DCH: Vídeo + Guió -->
+    <div class="col">
+      <div class="field">
+        <span class="label">VÍDEO / AUDIO</span>
+        <div class="row-btn">
+          <select style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:7px;padding:7px 10px;color:#6b7280;font-size:11px;">
+            <option value="">Selecciona...</option>
+          </select>
+          <div class="icon-btn" title="Subir nuevo archivo">↑</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">GUIÓ <span class="label-opt">(opcional)</span></span>
+        <div class="row-btn">
+          <div class="inp" style="flex:1;">Sin guió seleccionat</div>
+          <div class="icon-btn" title="Seleccionar DOCX/PDF">📄</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <button class="btn-cancel">Cancelar</button>
+    <button class="btn-primary">Importar SRT</button>
+  </div>
+</div>
+
+</body>
+</html>

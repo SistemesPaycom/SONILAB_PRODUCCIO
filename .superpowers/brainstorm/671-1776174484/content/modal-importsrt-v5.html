@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8"/>
+<title>Importar SRT v5</title>
+<style>
+  body { background:#0a0a0a; color:#e5e7eb; font-family:ui-sans-serif,system-ui,sans-serif; margin:0; padding:24px; }
+  h2 { font-size:15px; font-weight:900; color:white; margin:0 0 4px; }
+  .subtitle { font-size:11px; color:#6b7280; margin:0 0 24px; }
+
+  .panels { display:flex; gap:16px; flex-wrap:wrap; }
+  .panel { flex:1; min-width:280px; max-width:420px; }
+  .panel-label { font-size:9px; font-weight:700; color:#7c3aed; letter-spacing:.08em; margin-bottom:7px; text-transform:uppercase; }
+
+  .modal { background:#111827; border-radius:10px; padding:18px 20px; font-size:12px; color:#e5e7eb; }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:11px; }
+  .modal-title { font-weight:900; font-size:13px; color:white; }
+  .close { color:#6b7280; font-size:17px; }
+  .tabs { display:flex; gap:4px; }
+  .tab-active { background:#7c3aed; color:white; padding:2px 8px; border-radius:5px; font-size:9px; font-weight:700; }
+  .tab-inactive { background:#1f2937; color:#9ca3af; padding:2px 8px; border-radius:5px; font-size:9px; font-weight:700; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+  .col { display:flex; flex-direction:column; gap:9px; }
+  .field { display:flex; flex-direction:column; gap:3px; }
+  .lbl { font-size:8px; font-weight:700; color:#9ca3af; letter-spacing:.05em; }
+  .lbl-opt { font-size:8px; font-weight:400; color:#6b7280; }
+  .inp { background:#1f2937; border:1px solid #374151; border-radius:6px; padding:6px 9px; color:#6b7280; font-size:10px; width:100%; box-sizing:border-box; }
+  .inp-lit { color:#e5e7eb; }
+  .row-btn { display:flex; gap:5px; align-items:center; }
+  .icon-btn { width:29px; height:29px; min-width:29px; background:#1f2937; border:1px solid #374151; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:13px; cursor:pointer; flex-shrink:0; }
+
+  /* Checkbox — activat (vermell suau) */
+  .chk-on { display:flex; align-items:center; gap:6px; padding:4px 8px; background:#2d1515; border:1px solid #7f1d1d; border-radius:6px; cursor:pointer; }
+  .chk-on input { accent-color:#ef4444; width:11px; height:11px; }
+  .chk-on-lbl { font-size:10px; color:#fca5a5; font-weight:600; }
+
+  /* Checkbox — desactivat (gris) */
+  .chk-off { display:flex; align-items:center; gap:6px; padding:4px 8px; background:#1a1a1a; border:1px solid #2d2d2d; border-radius:6px; cursor:pointer; opacity:0.55; }
+  .chk-off input { accent-color:#6b7280; width:11px; height:11px; }
+  .chk-off-lbl { font-size:10px; color:#6b7280; font-weight:600; }
+
+  .footer { border-top:1px solid #374151; padding-top:11px; display:flex; justify-content:flex-end; gap:7px; }
+  .btn-cancel { background:#1f2937; color:#d1d5db; padding:5px 12px; border-radius:6px; border:none; font-size:10px; font-weight:600; cursor:pointer; }
+  .btn-primary { background:#7c3aed; color:white; padding:5px 13px; border-radius:6px; border:none; font-size:10px; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<h2>Importar SRT — tots els estats</h2>
+<p class="subtitle">Esquerra: checkbox activat (per defecte) · Centre: checkbox desactivat (gris) · Dreta: SRT extern (sense checkbox)</p>
+
+<div class="panels">
+
+  <!-- ESTAT 1: SRT seleccionat — Eliminar original ACTIVAT (defecte) -->
+  <div class="panel">
+    <div class="panel-label">✅ SRT de plataforma — eliminar activat (defecte)</div>
+    <div class="modal">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="modal-title">Crear proyecto</span>
+          <div class="tabs"><span class="tab-inactive">Transcribir</span><span class="tab-active">Importar SRT</span></div>
+        </div>
+        <span class="close">×</span>
+      </div>
+      <div class="grid2">
+        <div class="col">
+          <div class="field">
+            <span class="lbl">NOMBRE</span>
+            <div class="inp inp-lit">episodi_01</div>
+          </div>
+          <div class="field">
+            <span class="lbl">ARXIU SRT</span>
+            <div class="row-btn">
+              <select style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 8px;color:#e5e7eb;font-size:10px;">
+                <option>episodi_01.srt</option>
+              </select>
+              <div class="icon-btn" style="font-size:11px;">↑</div>
+            </div>
+            <label class="chk-on">
+              <input type="checkbox" checked />
+              <span class="chk-on-lbl">Eliminar original</span>
+            </label>
+          </div>
+        </div>
+        <div class="col">
+          <div class="field">
+            <span class="lbl">VÍDEO / AUDIO</span>
+            <div class="row-btn">
+              <select style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 8px;color:#6b7280;font-size:10px;"><option value="">Selecciona...</option></select>
+              <div class="icon-btn">↑</div>
+            </div>
+          </div>
+          <div class="field">
+            <span class="lbl">GUIÓ <span class="lbl-opt">(opcional)</span></span>
+            <div class="row-btn">
+              <div class="inp" style="flex:1;">Sin guió</div>
+              <div class="icon-btn">📄</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <button class="btn-cancel">Cancelar</button>
+        <button class="btn-primary">Importar SRT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ESTAT 2: SRT seleccionat — Eliminar original DESACTIVAT (gris) -->
+  <div class="panel">
+    <div class="panel-label">⬜ SRT de plataforma — eliminar desactivat (gris)</div>
+    <div class="modal">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="modal-title">Crear proyecto</span>
+          <div class="tabs"><span class="tab-inactive">Transcribir</span><span class="tab-active">Importar SRT</span></div>
+        </div>
+        <span class="close">×</span>
+      </div>
+      <div class="grid2">
+        <div class="col">
+          <div class="field">
+            <span class="lbl">NOMBRE</span>
+            <div class="inp inp-lit">episodi_01</div>
+          </div>
+          <div class="field">
+            <span class="lbl">ARXIU SRT</span>
+            <div class="row-btn">
+              <select style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 8px;color:#e5e7eb;font-size:10px;">
+                <option>episodi_01.srt</option>
+              </select>
+              <div class="icon-btn" style="font-size:11px;">↑</div>
+            </div>
+            <label class="chk-off">
+              <input type="checkbox" />
+              <span class="chk-off-lbl">Eliminar original</span>
+            </label>
+          </div>
+        </div>
+        <div class="col">
+          <div class="field">
+            <span class="lbl">VÍDEO / AUDIO</span>
+            <div class="row-btn">
+              <select style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 8px;color:#6b7280;font-size:10px;"><option value="">Selecciona...</option></select>
+              <div class="icon-btn">↑</div>
+            </div>
+          </div>
+          <div class="field">
+            <span class="lbl">GUIÓ <span class="lbl-opt">(opcional)</span></span>
+            <div class="row-btn">
+              <div class="inp" style="flex:1;">Sin guió</div>
+              <div class="icon-btn">📄</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <button class="btn-cancel">Cancelar</button>
+        <button class="btn-primary">Importar SRT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ESTAT 3: SRT extern — sense checkbox -->
+  <div class="panel">
+    <div class="panel-label">📂 SRT extern importat — sense checkbox</div>
+    <div class="modal">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="modal-title">Crear proyecto</span>
+          <div class="tabs"><span class="tab-inactive">Transcribir</span><span class="tab-active">Importar SRT</span></div>
+        </div>
+        <span class="close">×</span>
+      </div>
+      <div class="grid2">
+        <div class="col">
+          <div class="field">
+            <span class="lbl">NOMBRE</span>
+            <div class="inp inp-lit">episodi_02</div>
+          </div>
+          <div class="field">
+            <span class="lbl">ARXIU SRT</span>
+            <div class="row-btn">
+              <div class="inp" style="flex:1;color:#34d399;font-size:10px;">📂 episodi_02.srt</div>
+              <div class="icon-btn" style="font-size:11px;">↑</div>
+            </div>
+            <!-- no checkbox: no existeix original a la plataforma -->
+          </div>
+        </div>
+        <div class="col">
+          <div class="field">
+            <span class="lbl">VÍDEO / AUDIO</span>
+            <div class="row-btn">
+              <select style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 8px;color:#6b7280;font-size:10px;"><option value="">Selecciona...</option></select>
+              <div class="icon-btn">↑</div>
+            </div>
+          </div>
+          <div class="field">
+            <span class="lbl">GUIÓ <span class="lbl-opt">(opcional)</span></span>
+            <div class="row-btn">
+              <div class="inp" style="flex:1;">Sin guió</div>
+              <div class="icon-btn">📄</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <button class="btn-cancel">Cancelar</button>
+        <button class="btn-primary">Importar SRT</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

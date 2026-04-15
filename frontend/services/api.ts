@@ -1,4 +1,6 @@
 // frontend/services/api.ts
+import type { WhisperConfig } from '../appTypes';
+
 const FALLBACK_API_URL =
   typeof window !== 'undefined'
     ? `${window.location.protocol}//${window.location.hostname}:8000`
@@ -296,8 +298,31 @@ async listProjects() {
   async createProject(payload: { name: string; mediaDocumentId: string; settings?: any }) {
     return request<any>(`/projects`, { method: 'POST', body: payload });
   },
-  async createProjectFromExisting(payload: { name: string; mediaDocumentId: string; srtText: string; settings?: any }) {
+  async createProjectFromExisting(payload: {
+    name: string;
+    mediaDocumentId: string;
+    settings?: any;
+    srtText?: string;
+    sourceSrtDocumentId?: string;
+    deleteOriginalSrt?: boolean;
+  }) {
     return request<any>(`/projects/from-existing`, { method: 'POST', body: payload });
+  },
+  async getWhisperPresets(): Promise<Record<string, WhisperConfig>> {
+    return request<Record<string, WhisperConfig>>(`/settings/whisper-presets`);
+  },
+
+  async saveWhisperPreset(name: string, config: WhisperConfig): Promise<void> {
+    await request<any>(`/settings/whisper-presets`, {
+      method: 'POST',
+      body: { name, config },
+    });
+  },
+
+  async deleteWhisperPreset(name: string): Promise<void> {
+    await request<any>(`/settings/whisper-presets/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
   },
   async getJob(id: string) {
     return request<any>(`/jobs/${id}`);

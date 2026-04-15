@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +9,7 @@ import { Project, ProjectDocument } from './schemas/project.schema';
 import { Job, JobDocument } from './schemas/job.schema';
 import * as fs from 'fs';
 import * as path from 'path';
+import { CreateProjectFromExistingDto } from './dto/create-project-from-existing.dto';
 
 export const TRANSCRIPTION_QUEUE = 'transcription';
 
@@ -28,23 +29,44 @@ export class ProjectsService {
   ) {}
 async createProjectFromExisting(
   ownerId: string,
-  name: string,
-  mediaDocumentId: string,
-  srtText: string,
-  settings: Record<string, any> = {},
+  dto: CreateProjectFromExistingDto,
 ) {
-  // valida media existe
+  const {
+    name,
+    mediaDocumentId,
+    sourceSrtDocumentId,
+    deleteOriginalSrt = false,
+    srtText: rawSrtText,
+    settings = {},
+  } = dto;
+
+  // Exactly one SRT source must be provided
+  if (!sourceSrtDocumentId && !rawSrtText) {
+    throw new BadRequestException('Cal proporcionar sourceSrtDocumentId o srtText');
+  }
+  // If both arrive simultaneously, sourceSrtDocumentId takes priority
+  const useDocSource = !!sourceSrtDocumentId;
+
+  // Validate media exists
   const mediaDoc = await this.library.getDocument(ownerId, mediaDocumentId);
   if (!mediaDoc.media?.path) throw new NotFoundException('Media document not found or has no media');
 
-  // opcional: evitar duplicado de nombre (si ya lo implementaste)
-  // const exists = await this.library.folderNameExists(ownerId, name, null);
-  // if (exists) throw new ConflictException(`Project "${name}" already exists`);
+  // Resolve SRT text
+  let srtText = rawSrtText ?? '';
+  if (useDocSource) {
+    const srtSourceDoc = await this.library.getDocument(ownerId, sourceSrtDocumentId!);
+    if (!srtSourceDoc || (srtSourceDoc as any).isDeleted) {
+      throw new NotFoundException(`SRT document "${sourceSrtDocumentId}" not found`);
+    }
+    // SRT content lives in contentByLang._unassigned (or first available key)
+    const langs = (srtSourceDoc as any).contentByLang ?? {};
+    srtText = langs['_unassigned'] ?? Object.values(langs)[0] ?? '';
+  }
 
-  // crea folder proyecto
+  // Create project folder
   const folder = await this.library.createFolder(ownerId, name);
 
-  // crea SRT document con texto (NO locked)
+  // Create SRT document inside the project folder
   const srtDoc = await this.library.createDocument(ownerId, {
     name: `${name}.srt`,
     parentId: folder.id,
@@ -53,6 +75,7 @@ async createProjectFromExisting(
     isLocked: false,
   } as any);
 
+  // Create project record
   const project = await this.projectModel.create({
     ownerId,
     folderId: folder.id,
@@ -62,6 +85,22 @@ async createProjectFromExisting(
     settings,
     lastError: null,
   });
+
+  // Create LNK pointing to the media asset inside the project folder (non-fatal)
+  try {
+    await this.library.createMediaRef(ownerId, mediaDocumentId, folder.id);
+  } catch (e) {
+    console.warn('[createProjectFromExisting] LNK creation failed (non-fatal):', e);
+  }
+
+  // Soft-delete the original SRT document if requested
+  if (useDocSource && deleteOriginalSrt === true) {
+    try {
+      await this.library.softDeleteDocument(ownerId, sourceSrtDocumentId!);
+    } catch (e) {
+      console.warn('[createProjectFromExisting] Soft-delete of original SRT failed (non-fatal):', e);
+    }
+  }
 
   return {
     project: { ...project.toObject(), id: project._id.toString() },
@@ -189,6 +228,13 @@ if (exists) {
       jobId,
       settings: finalSettings,
     });
+
+    // Create LNK pointing to the media asset inside the project folder (non-fatal)
+    try {
+      await this.library.createMediaRef(ownerId, mediaDocumentId, folder.id);
+    } catch (e) {
+      console.warn('[createProject] LNK creation failed (non-fatal):', e);
+    }
 
     return {
       project: { ...project.toObject(), id: projectId },

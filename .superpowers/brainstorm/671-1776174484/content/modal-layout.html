@@ -1,0 +1,104 @@
+<h2>Estructura del modal rediseñado</h2>
+<p class="subtitle">Vista del modal en estado "simple" (antes de desplegar Whisper avançat). Haz clic en la opción que prefieras.</p>
+
+<div class="cards">
+
+  <!-- Opción A: Modal vertical compacto -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#111827;border-radius:12px;padding:20px;font-family:monospace;font-size:11px;color:#e5e7eb;min-height:320px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+          <span style="font-weight:900;font-size:14px;">Crear proyecto</span>
+          <span style="color:#6b7280;">×</span>
+        </div>
+        <!-- Tabs -->
+        <div style="display:flex;gap:6px;margin-bottom:14px;">
+          <span style="background:#7c3aed;color:white;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;">Transcribir</span>
+          <span style="background:#1f2937;color:#d1d5db;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;">Importar SRT</span>
+        </div>
+        <!-- Name -->
+        <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">NOMBRE</div>
+        <div style="background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 10px;margin-bottom:10px;color:#6b7280;font-size:10px;">Proyecto 01</div>
+        <!-- Video row with icon button -->
+        <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">VÍDEO / AUDIO</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <div style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 10px;color:#6b7280;font-size:10px;">Selecciona...</div>
+          <div style="width:32px;height:32px;background:#1f2937;border:1px solid #374151;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:14px;">↑</div>
+        </div>
+        <!-- Guion row with icon button -->
+        <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">GUIÓ <span style="font-weight:400;color:#6b7280;">(opcional)</span></div>
+        <div style="display:flex;gap:6px;margin-bottom:14px;">
+          <div style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 10px;color:#6b7280;font-size:10px;">Sin guión seleccionado</div>
+          <div style="width:32px;height:32px;background:#1f2937;border:1px solid #374151;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:14px;">📄</div>
+        </div>
+        <!-- Perfil whisper -->
+        <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">PERFIL WHISPER</div>
+        <div style="background:#1f2937;border:1px solid #374151;border-radius:6px;padding:6px 10px;margin-bottom:8px;color:#e5e7eb;font-size:10px;">VE — Vídeo España ▾</div>
+        <!-- Collapsible -->
+        <div style="border:1px solid #374151;border-radius:6px;padding:7px 10px;margin-bottom:14px;color:#7c3aed;font-size:10px;cursor:pointer;">▶ Whisper avançat</div>
+        <!-- Buttons -->
+        <div style="display:flex;justify-content:flex-end;gap:8px;">
+          <span style="background:#1f2937;color:#d1d5db;padding:5px 12px;border-radius:6px;font-size:10px;">Cancelar</span>
+          <span style="background:#7c3aed;color:white;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;">Transcribir</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Vertical compact</h3>
+      <p>Todo en una sola columna, orden visual limpio: nombre → video → guión → perfil → avançat → acción. Sin grid de 2 columnas. Modal más estrecho (<code>max-w-md</code>).</p>
+    </div>
+  </div>
+
+  <!-- Opción B: 2 columnas (similar al actual pero con top simplificado) -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#111827;border-radius:12px;padding:20px;font-family:monospace;font-size:11px;color:#e5e7eb;min-height:320px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+          <span style="font-weight:900;font-size:14px;">Crear proyecto</span>
+          <span style="color:#6b7280;">×</span>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:14px;">
+          <span style="background:#7c3aed;color:white;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;">Transcribir</span>
+          <span style="background:#1f2937;color:#d1d5db;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;">Importar SRT</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+          <!-- col izquierda -->
+          <div>
+            <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">NOMBRE</div>
+            <div style="background:#1f2937;border:1px solid #374151;border-radius:6px;padding:5px 8px;margin-bottom:8px;color:#6b7280;font-size:10px;">Proyecto 01</div>
+            <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">VÍDEO / AUDIO</div>
+            <div style="display:flex;gap:4px;margin-bottom:8px;">
+              <div style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:5px 8px;color:#6b7280;font-size:9px;">Selecciona...</div>
+              <div style="width:28px;height:28px;background:#1f2937;border:1px solid #374151;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:12px;">↑</div>
+            </div>
+            <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">GUIÓ <span style="font-weight:400;color:#6b7280;">(opc.)</span></div>
+            <div style="display:flex;gap:4px;">
+              <div style="flex:1;background:#1f2937;border:1px solid #374151;border-radius:6px;padding:5px 8px;color:#6b7280;font-size:9px;">Sin guión</div>
+              <div style="width:28px;height:28px;background:#1f2937;border:1px solid #374151;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:12px;">📄</div>
+            </div>
+          </div>
+          <!-- col derecha -->
+          <div>
+            <div style="font-size:9px;color:#9ca3af;margin-bottom:3px;">PERFIL WHISPER</div>
+            <div style="background:#1f2937;border:1px solid #374151;border-radius:6px;padding:5px 8px;margin-bottom:8px;color:#e5e7eb;font-size:10px;">VE — Vídeo España ▾</div>
+            <div style="border:1px solid #374151;border-radius:6px;padding:6px 8px;color:#7c3aed;font-size:10px;margin-bottom:8px;">▶ Whisper avançat</div>
+            <div style="font-size:9px;color:#4b5563;font-style:italic;">Motor, model, idioma,<br/>batch… (ocults)</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+          <span style="background:#1f2937;color:#d1d5db;padding:5px 12px;border-radius:6px;font-size:10px;">Cancelar</span>
+          <span style="background:#7c3aed;color:white;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;">Transcribir</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — 2 columnas (como el actual)</h3>
+      <p>Mantiene el grid de 2 columnas pero simplifica el contenido: izquierda = datos del proyecto, derecha = perfil Whisper + collapsible avançat. Familiar al usuario actual.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <p class="subtitle" style="text-align:left;">💡 En ambas opciones: el bloque "Guió del doblatge" (actualmente un cuadro grande con descripción) se convierte en una fila compacta igual que Vídeo. Los detalles técnicos de Whisper desaparecen del área principal.</p>
+</div>

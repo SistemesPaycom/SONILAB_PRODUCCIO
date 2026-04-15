@@ -1,4 +1,10 @@
-import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateProjectFromExistingDto {
   @IsString()
@@ -8,9 +14,19 @@ export class CreateProjectFromExistingDto {
   @IsString()
   mediaDocumentId: string;
 
+  // Flux A: SRT de plataforma (nou)
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  srtText: string;
+  sourceSrtDocumentId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  deleteOriginalSrt?: boolean;  // default false — mai esborrar per omissió
+
+  // Flux B: SRT extern (retrocompatible)
+  @IsOptional()
+  @IsString()
+  srtText?: string;
 
   @IsOptional()
   @IsObject()
