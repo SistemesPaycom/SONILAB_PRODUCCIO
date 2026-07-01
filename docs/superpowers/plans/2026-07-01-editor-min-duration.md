@@ -235,13 +235,18 @@
 
 - [ ] **Step 4: Replace the two hardcoded `MIN_SEG_DURATION` usages in `handleMouseMove`**
 
-  Find line ~642 (`resize-start` block):
+  Find the block that declares `let ns = origS, ne = origE;` (around line 614), just before the `if (dragTypeRef.current === 'move')` chain. Add `const minDurSec` immediately after `let ns = origS, ne = origE;`:
+  ```typescript
+  let ns = origS, ne = origE;
+  const minDurSec = Math.max(MIN_SEG_DURATION_MS, minDurMsRef.current) / 1000;
+  ```
+
+  Then find line ~642 (`resize-start` block):
   ```typescript
   if (ne - ns < MIN_SEG_DURATION) ns = ne - MIN_SEG_DURATION;
   ```
   Replace with:
   ```typescript
-  const minDurSec = Math.max(MIN_SEG_DURATION_MS, minDurMsRef.current) / 1000;
   if (ne - ns < minDurSec) ns = ne - minDurSec;
   ```
 
@@ -251,11 +256,10 @@
   ```
   Replace with:
   ```typescript
-  const minDurSec2 = Math.max(MIN_SEG_DURATION_MS, minDurMsRef.current) / 1000;
-  if (ne - ns < minDurSec2) ne = ns + minDurSec2;
+  if (ne - ns < minDurSec) ne = ns + minDurSec;
   ```
 
-  > **Note:** Two separate `const` declarations are needed because both are in adjacent `else if`/`else` branches of the same conditional; they do not share scope. Alternatively, hoist a single `const minDurSec` above the entire `if (dragTypeRef.current === 'resize-start')` block if both branches are at the same level — check the exact structure.
+  > **Note:** A single hoisted `const minDurSec` is used in both `resize-start` and `resize-end` branches because both branches are at the same nesting level inside `handleMouseMove`. This avoids the need for `minDurSec2` and reads more clearly.
 
 - [ ] **Step 5: TypeScript check**
 
