@@ -25,6 +25,8 @@ export const LOCAL_STORAGE_KEYS = {
   SRT_EDITOR_MODE: 'snlbpro_srt_editor_mode',
   /** Marge mínim entre subtítols a l'editor (ms). Preferència d'usuari, independent del projecte. */
   EDITOR_MIN_GAP_MS: 'snlbpro_editor_min_gap_ms',
+  /** Durada mínima d'un bloc de subtítol a l'editor (ms). Preferència d'usuari. Default: 1000. */
+  EDITOR_MIN_DURATION_MS: 'snlbpro_editor_min_duration_ms',
   /** Tema de color de la interfície */
   THEME: 'snlbpro_theme',
   /** Tokens del tema personalitzat (fallback local) */
