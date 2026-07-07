@@ -60,16 +60,35 @@ const MAX_ZOOM = 500;
 const DEFAULT_ZOOM = 100;
 
 // Segment interaction constants
-/** Read hold-ms from localStorage; clamp 0–2000, fallback 500 */
+/** Read hold-ms from localStorage; clamp 0–2000, fallback 50 */
 function getHoldMs(): number {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS);
-    if (raw == null) return 500;
+    if (raw == null) return 50;
     const parsed = JSON.parse(raw);
     const n = typeof parsed === 'number' ? parsed : Number(parsed);
-    if (!Number.isFinite(n)) return 500;
+    if (!Number.isFinite(n)) return 50;
     return Math.max(0, Math.min(2000, n));
-  } catch { return 500; }
+  } catch { return 50; }
+}
+/** Read drag dead-zone px from localStorage; clamp 0–40, fallback 6 */
+function getDeadzonePx(): number {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEYS.WAVEFORM_DRAG_DEADZONE_PX);
+    if (raw == null) return 6;
+    const parsed = JSON.parse(raw);
+    const n = typeof parsed === 'number' ? parsed : Number(parsed);
+    if (!Number.isFinite(n)) return 6;
+    return Math.max(0, Math.min(40, n));
+  } catch { return 6; }
+}
+/** Read Ctrl/Cmd-click-seek preference from localStorage; default true */
+function getCtrlClickSeek(): boolean {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEYS.WAVEFORM_CTRL_CLICK_SEEK);
+    if (raw == null) return true;
+    return JSON.parse(raw) !== false;
+  } catch { return true; }
 }
 const EDGE_HIT_PX = 8;        // pixels from segment edge for resize hit zone
 const MIN_SEG_DURATION = MIN_SEG_DURATION_MS / 1000;  // seconds, derivat de constants.ts
@@ -129,6 +148,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const dragSegOrigStartRef = useRef(0);
   const dragSegOrigEndRef = useRef(0);
   const seekDragActiveRef = useRef(false);
+  const dragMovedRef = useRef(false);   // true un cop el punter supera la zona morta després d'armar
+  const deadzonePxRef = useRef(0);      // zona morta (px) capturada al mousedown
   const minDurMsRef = useRef(minDurationMs);
   useEffect(() => { minDurMsRef.current = minDurationMs; }, [minDurationMs]);
 
@@ -567,12 +588,16 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       mouseDownClientRef.current = { x: e.clientX, y: e.clientY };
       mouseDownActiveRef.current = true;
       dragArmedRef.current = false;
+      dragMovedRef.current = false;
+      deadzonePxRef.current = getDeadzonePx();
       dragTypeRef.current = null;
       dragSegIdRef.current = null;
       seekDragActiveRef.current = false;
       clearHold();
 
-      const hit = hitTestSegment(e.clientX);
+      // Ctrl/Cmd + clic (estil Nuendo): tracta l'ona com a espai buit → només seek/scrub, mai un esdeveniment
+      const seekOnly = (e.ctrlKey || e.metaKey) && getCtrlClickSeek();
+      const hit = seekOnly ? null : hitTestSegment(e.clientX);
       if (hit) {
         // Do NOT call onSegmentClick here — it causes a seek via the parent.
         // Selection + seek will happen on mouseUp if it's a short click.
@@ -608,6 +633,14 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     (e: React.MouseEvent) => {
       // ── 1. Segment drag in progress ──
       if (dragArmedRef.current && dragSegIdRef.current && dragTypeRef.current) {
+        // Zona morta: després d'armar, ignora moviments minúsculs (tremolor) fins que
+        // el punter supera el llindar configurat. Evita desplaçar un esdeveniment en un clic.
+        if (!dragMovedRef.current) {
+          const dxAbs = Math.abs(e.clientX - mouseDownClientRef.current.x);
+          if (dxAbs <= deadzonePxRef.current) return;        // dins la zona morta → no moure
+          dragMovedRef.current = true;                        // superada → comença el drag real
+          dragAnchorTimeRef.current = pixelToTime(e.clientX); // reancora al punt de creuament (evita el salt = zona morta)
+        }
         const curT = pixelToTime(e.clientX);
         const delta = curT - dragAnchorTimeRef.current;
         const allowOverlap = e.shiftKey;
@@ -678,9 +711,11 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
 
       // ── 4. Hover cursor feedback (no button held) ──
       if (!mouseDownActiveRef.current) {
-        const hit = hitTestSegment(e.clientX);
         const sc = scrollRef.current;
         if (sc) {
+          // Amb Ctrl/Cmd premut (i toggle actiu) no oferim grab/redimensionar: mode seek pur
+          const seekOnly = (e.ctrlKey || e.metaKey) && getCtrlClickSeek();
+          const hit = seekOnly ? null : hitTestSegment(e.clientX);
           sc.style.cursor = hit
             ? hit.zone === 'body'
               ? 'grab'
@@ -702,26 +737,21 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const handleMouseUp = useCallback(
     (e?: React.MouseEvent) => {
       clearHold();
-      const wasArmed = dragArmedRef.current;
+      const startedInWave = mouseDownActiveRef.current; // el gest ha començat a la zona d'ona (no a la barra superior)
+      const wasDragged = dragMovedRef.current;   // el punter ha superat la zona morta → drag real
       const wasSeekDrag = seekDragActiveRef.current;
 
-      // Finish segment drag
-      if (wasArmed && dragSegIdRef.current) {
+      // Commit del drag només si l'esdeveniment s'ha mogut de veritat
+      if (wasDragged && dragSegIdRef.current) {
         onSegmentUpdateEnd?.();
       }
 
-      // Short click → select segment + seek on mouseUp (only if no drag occurred)
-      if (!wasArmed && !wasSeekDrag && e) {
-        const elapsed = performance.now() - mouseDownTsRef.current;
-        if (elapsed < getHoldMs()) {
-          // If the short click was on a segment, select it now (triggers parent seek too)
-          if (dragSegIdRef.current) {
-            onSegmentClick?.(dragSegIdRef.current);
-          } else {
-            // Empty space: direct seek
-            onSeek(pixelToTime(e.clientX));
-          }
-        }
+      // Clic simple → mou el cursor de transport al punt EXACTE clicat (mai selecciona).
+      // NOMÉS si el gest ha començat dins la zona d'ona (mousedown a scrollRef): així un clic
+      // a la barra superior (Timeline/Audio/undo/mode…) no mou el cursor.
+      // La selecció d'un esdeveniment es fa amb DOBLE clic (estil Subtitle Edit) — veure handleDoubleClick.
+      if (startedInWave && !wasDragged && !wasSeekDrag && e) {
+        onSeek(pixelToTime(e.clientX));
       }
 
       // Flush pending seek from scrub-drag
@@ -739,6 +769,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       // Reset all interaction state
       isDraggingRef.current = false;
       dragArmedRef.current = false;
+      dragMovedRef.current = false;
       dragTypeRef.current = null;
       dragSegIdRef.current = null;
       seekDragActiveRef.current = false;
@@ -746,17 +777,31 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       const sc = scrollRef.current;
       if (sc) sc.style.cursor = '';
     },
-    [clearHold, onSegmentUpdateEnd, onSeek, onSegmentClick, pixelToTime]
+    [clearHold, onSegmentUpdateEnd, onSeek, pixelToTime]
+  );
+
+  // Doble clic sobre un esdeveniment → selecciona'l (estil Subtitle Edit). El clic simple només mou el cursor.
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Només dins la zona d'ona (scrollRef), no a la barra superior
+      if (!scrollRef.current || !scrollRef.current.contains(e.target as Node)) return;
+      // En mode seek pur (Ctrl/Cmd) no seleccionem: coherent amb Fase 2
+      if ((e.ctrlKey || e.metaKey) && getCtrlClickSeek()) return;
+      const hit = hitTestSegment(e.clientX);
+      if (hit) onSegmentClick?.(hit.id);
+    },
+    [hitTestSegment, onSegmentClick]
   );
 
   // Separate handler for mouse leave — cleans up without seeking
   const handleMouseLeave = useCallback(() => {
     clearHold();
-    if (dragArmedRef.current && dragSegIdRef.current) {
+    if (dragMovedRef.current && dragSegIdRef.current) {
       onSegmentUpdateEnd?.();
     }
     isDraggingRef.current = false;
     dragArmedRef.current = false;
+    dragMovedRef.current = false;
     dragTypeRef.current = null;
     dragSegIdRef.current = null;
     seekDragActiveRef.current = false;
@@ -780,6 +825,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       style={{ backgroundColor: 'var(--th-waveform-bg)' }}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      onDoubleClick={handleDoubleClick}
     >
       {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-1 text-xs border-b border-[var(--th-border)] z-10 gap-2" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>

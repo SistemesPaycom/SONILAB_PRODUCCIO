@@ -1,0 +1,10 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e7]: Timeline
+    - generic [ref=e9]:
+      - button "−" [ref=e10] [cursor=pointer]
+      - slider [ref=e11]: "100"
+      - button "+" [ref=e12] [cursor=pointer]
+      - generic [ref=e13]: 100px/s
+  - generic [ref=e14]:
+    - generic: Sense àudio

@@ -1,0 +1,8 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - heading "Iniciar sessió" [level=2] [ref=e4]
+    - button "Crear compte" [ref=e5] [cursor=pointer]
+  - generic [ref=e6]:
+    - textbox "Correu electrònic" [ref=e7]
+    - textbox "Contrasenya" [ref=e8]
+    - button "Entrar" [disabled] [ref=e9]

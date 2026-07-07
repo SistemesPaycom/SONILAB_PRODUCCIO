@@ -1,0 +1,11 @@
+- generic [ref=f1e4]:
+  - heading "Sonilab Studios" [level=1] [ref=f1e5]
+  - paragraph [ref=f1e6]: Gestió de Producció
+  - generic [ref=f1e7]:
+    - generic [ref=f1e8]:
+      - generic [ref=f1e9]: Correu electrònic
+      - textbox "Correu electrònic" [ref=f1e10]
+    - generic [ref=f1e11]:
+      - generic [ref=f1e12]: Contrasenya
+      - textbox "Contrasenya" [ref=f1e13]
+    - button "Entrar" [ref=f1e14]

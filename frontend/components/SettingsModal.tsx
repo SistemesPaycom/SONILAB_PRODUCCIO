@@ -564,7 +564,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [gridOpacity, setGridOpacity] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.SUB_GRID_OPACITY, 0);
   const [editorMinGapMs, setEditorMinGapMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_GAP_MS, 160);
   const [editorMinDurationMs, setEditorMinDurationMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_DURATION_MS, 1000);
-  const [waveformHoldMs, setWaveformHoldMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS, 500);
+  const [waveformHoldMs, setWaveformHoldMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS, 50);
+  const [waveformDeadzonePx, setWaveformDeadzonePx] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_DRAG_DEADZONE_PX, 6);
+  const [waveformCtrlSeek, setWaveformCtrlSeek] = useLocalStorage<boolean>(LOCAL_STORAGE_KEYS.WAVEFORM_CTRL_CLICK_SEEK, true);
 
   // Factory Reset modal state
   const [isFactoryResetModalOpen, setIsFactoryResetModalOpen] = useState(false);
@@ -974,11 +976,45 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                     type="range"
                                     min="0" max="2000" step="50"
                                     value={waveformHoldMs}
-                                    onChange={(e) => setWaveformHoldMs(Math.max(0, Math.min(2000, parseInt(e.target.value, 10) || 500)))}
+                                    onChange={(e) => setWaveformHoldMs(Math.max(0, Math.min(2000, parseInt(e.target.value, 10) || 50)))}
                                     className="w-32 cursor-pointer" style={{ accentColor: 'var(--th-accent)' }}
                                 />
                                 <span className="text-xs font-mono font-bold w-16 text-right" style={{ color: 'var(--th-accent-text)' }}>{waveformHoldMs} ms</span>
                             </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-4 border-t border-[var(--th-border)]/30">
+                            <div>
+                                <p className="font-bold text-gray-200">Marge anti-tremolor per arrossegar</p>
+                                <p className="text-xs text-gray-500 italic">Un cop iniciat el drag, ignora moviments per sota d'aquest marge (px) per no arrossegar un esdeveniment sense voler. 0 = desactivat.</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <input
+                                    type="range"
+                                    min="0" max="40" step="1"
+                                    value={waveformDeadzonePx}
+                                    onChange={(e) => setWaveformDeadzonePx(Math.max(0, Math.min(40, parseInt(e.target.value, 10) || 0)))}
+                                    className="w-32 cursor-pointer" style={{ accentColor: 'var(--th-accent)' }}
+                                />
+                                <span className="text-xs font-mono font-bold w-16 text-right" style={{ color: 'var(--th-accent-text)' }}>{waveformDeadzonePx} px</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-4 border-t border-[var(--th-border)]/30">
+                            <div>
+                                <p className="font-bold text-gray-200">Ctrl/Cmd + clic mou només el cursor</p>
+                                <p className="text-xs text-gray-500 italic">Amb Ctrl (o Cmd a Mac) premut, clicar o arrossegar sobre l'ona mou el cursor de transport i mai un esdeveniment. Estil Nuendo.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setWaveformCtrlSeek((v) => !v)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0"
+                                style={{
+                                    backgroundColor: waveformCtrlSeek ? 'var(--th-accent)' : 'var(--th-bg-tertiary)',
+                                    color: waveformCtrlSeek ? '#fff' : 'var(--th-editor-meta)',
+                                    border: '1px solid var(--th-border)',
+                                }}
+                            >
+                                {waveformCtrlSeek ? 'Activat' : 'Desactivat'}
+                            </button>
                         </div>
                     </div>
                 </div>

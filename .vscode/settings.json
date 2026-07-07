@@ -1,0 +1,7 @@
+{
+    "claudeCode.allowDangerouslySkipPermissions": true,
+    "claudeCode.initialPermissionMode": "bypassPermissions",
+    "claudeCode.environmentVariables": [],
+    "python.terminal.executeInFileDir": false,
+    "python.terminal.activateEnvironment": false
+}

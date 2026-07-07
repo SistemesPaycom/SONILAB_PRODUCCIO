@@ -18,6 +18,10 @@ export const LOCAL_STORAGE_KEYS = {
   MAX_LINES_SUBS: 'snlbpro_max_lines_subs',
   SUB_GRID_OPACITY: 'snlbpro_sub_grid_opacity',
   WAVEFORM_HOLD_MS: 'snlbpro_waveform_hold_ms',
+  /** Marge de moviment (px) a superar per iniciar l'arrossegament d'un esdeveniment (anti-tremolor). Default: 6. 0 = desactivat. */
+  WAVEFORM_DRAG_DEADZONE_PX: 'snlbpro_waveform_drag_deadzone_px',
+  /** Ctrl/Cmd + clic a l'ona mou només el cursor de transport (mai un esdeveniment). Preferència d'usuari. Default: true. */
+  WAVEFORM_CTRL_CLICK_SEEK: 'snlbpro_waveform_ctrl_click_seek',
   AUTOSAVE_SRT: 'snlbpro_autosave_srt',
   TASKS_TRANSLATION: 'snlbpro_tasks_translation',
   TASKS_TRANSCRIPTION: 'snlbpro_tasks_transcription',
@@ -103,6 +107,7 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
 
     { id: 'sub_set_tc_in', action: 'SET_TC_IN', label: 'Marcar TC IN al playhead', combo: 'Q' },
     { id: 'sub_set_tc_out', action: 'SET_TC_OUT', label: 'Marcar TC OUT al playhead', combo: 'W' },
+    { id: 'sub_find', action: 'FIND', label: 'Cercar i substituir', combo: 'Ctrl+F' },
   ]
 };
 

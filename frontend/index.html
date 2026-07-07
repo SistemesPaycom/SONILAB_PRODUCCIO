@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Script Editor Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Scale UI base ~10% — equivalent to browser at 110%.
+       Affects all Tailwind rem-based sizes (text, spacing, gaps, heights).
+       Revert by removing this rule. Does not affect canvas px calculations. */
+    html {
+      font-size: 110%;
+    }
+    body {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    /* Drop target visual feedback during drag */
+    button[data-droptarget="true"].drop-hover {
+      background-color: var(--th-bg-tertiary, rgba(255,255,255,0.15)) !important;
+      outline: 2px solid var(--th-accent, #3b82f6);
+      border-radius: 6px;
+    }
+    /* Prevención de selección accidental — comportament d'app nativa */
+    body {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    /* Excepció: zones d'edició real */
+    input,
+    textarea,
+    [contenteditable]:not([contenteditable="false"]) {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+    /* Cerca a l'editor de subtítols (CSS Custom Highlight API) */
+    ::highlight(srt-search) {
+      background-color: rgba(250, 204, 21, 0.35);
+    }
+    ::highlight(srt-search-active) {
+      background-color: rgba(249, 115, 22, 0.65);
+      color: white;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.7.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "pdfjs-dist": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "mammoth/": "https://aistudiocdn.com/mammoth@^1.11.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
+  }
+}
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+</head>
+<body style="background-color: #0A0A0A">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

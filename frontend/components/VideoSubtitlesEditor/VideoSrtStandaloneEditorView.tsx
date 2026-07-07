@@ -8,6 +8,7 @@ import SubtitlesEditor from './SubtitlesEditor';
 import { useHorizontalPanelResize } from '../../hooks/usePanelResize';
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
+import { computeSmartSplit } from '../../utils/SubtitlesEditor/splitHelpers';
 import SyncLibraryModal from './SyncLibraryModal';
 import SubtitleAIOperationsModal from './SubtitleAIOperationsModal';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
@@ -18,6 +19,7 @@ import { useDocumentHistory } from '../../hooks/useDocumentHistory';
 import { api } from '../../services/api';
 import { SubtitleEditorProvider, useSubtitleEditor } from '../../context/SubtitleEditorContext';
 import { useSubtitleAIOperations } from '../../hooks/useSubtitleAIOperations';
+import { useResumePosition } from '../../hooks/useResumePosition';
 
 interface VideoSrtStandaloneEditorViewProps {
   currentDoc: Document;
@@ -112,11 +114,23 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
 
   const onTogglePlay = useCallback(() => setIsPlaying((p) => !p), []);
   const onPlay = useCallback(() => setIsPlaying(true), []);
-  const onPause = useCallback(() => setIsPlaying(false), []);
+  const onPause = useCallback(() => { resume.flush(); setIsPlaying(false); }, []);
   const onSeek = useCallback((time: number) => {
     if (videoRef.current) videoRef.current.currentTime = time;
     setCurrentTime(time);
   }, []);
+
+  const resume = useResumePosition({
+    docId: currentDoc.id,
+    useBackend,
+    duration,
+    currentTime,
+    activeSegmentId,
+    segments,
+    mediaMissing: linkedMediaMissing,
+    seekTo: onSeek,
+    setActiveSegmentId,
+  });
 
   const onJumpTime = useCallback((seconds: number) => {
     onSeek(Math.max(0, Math.min(duration, currentTime + seconds)));
@@ -167,13 +181,21 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
     if (idx === -1) return;
 
     const target = segments[idx];
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const minDur = Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000;
     let newSeg: Segment;
 
     if (position === 'after') {
       const next = segments[idx + 1];
-      const start = target.endTime + 0.1;
-      const end = next ? Math.min(next.startTime - 0.1, start + 2) : start + 2;
-      newSeg = { id: Date.now(), startTime: start, endTime: Math.max(end, start + 0.5), originalText: '' };
+      const start = target.endTime + gap;
+      // Volem ~minDur (o fins a 2s si hi ha marge) però MAI trepitjar el següent.
+      // Si el buit fins al següent és menor que minDur, la durada queda més curta
+      // (saltarà l'alerta de durada mínima) abans que solapar el subtítol veí.
+      let end = next ? Math.min(next.startTime - gap, start + 2) : start + 2;
+      const minEnd = start + minDur;
+      if (end < minEnd) end = next ? Math.min(minEnd, next.startTime - gap) : minEnd;
+      if (end <= start) end = minEnd; // sense buit lliure: últim recurs
+      newSeg = { id: Date.now(), startTime: Math.max(0, start), endTime: end, originalText: '' };
     } else {
       const prev = idx > 0 ? segments[idx - 1] : null;
       const end = target.startTime - 0.1;
@@ -185,7 +207,48 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
     const newSegments = [...segments];
     newSegments.splice(insertAt, 0, newSeg);
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
-  }, [isEditing, segments, subsHistory]);
+  }, [isEditing, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
+
+  // Insereix un nou subtítol EXACTAMENT al cursor (playhead) amb durada per defecte
+  // = durada mínima configurada (1000ms). Si el cursor és massa a prop del següent
+  // subtítol, desplaça l'inici cap enrere per conservar la durada mínima; si ni així
+  // hi cap sense trepitjar cap veí, escurça la durada (mai solapa).
+  const handleInsertSegmentAtCursor = useCallback(() => {
+    if (!isEditing) return;
+    const t = videoRef.current ? videoRef.current.currentTime : currentTimeRef.current;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const minDur = Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000;
+
+    // Límits del buit lliure al voltant del cursor: cap subtítol pot ser trepitjat.
+    let lowerBound = 0;
+    let upperBound = Infinity;
+    for (const s of segments) {
+      if (s.startTime <= t) lowerBound = Math.max(lowerBound, s.endTime + gap);
+      else upperBound = Math.min(upperBound, s.startTime - gap);
+    }
+
+    let start = t;
+    let end = t + minDur;
+    const freeSpace = upperBound - lowerBound;
+    if (freeSpace >= minDur) {
+      // Hi ha marge per a la durada mínima: col·loca al cursor i desplaça per encaixar.
+      if (end > upperBound) { end = upperBound; start = end - minDur; }
+      if (start < lowerBound) { start = lowerBound; end = start + minDur; }
+    } else if (freeSpace > 0) {
+      // Buit insuficient per a minDur: omple'l (durada < minDur), sense trepitjar.
+      start = lowerBound;
+      end = upperBound;
+    }
+    // else: cap buit lliure → últim recurs, es queda [t, t + minDur].
+    start = Math.max(0, start);
+
+    const newSeg: Segment = { id: Date.now(), startTime: start, endTime: end, originalText: '' };
+    let insertAt = segments.findIndex(s => s.startTime > start);
+    if (insertAt === -1) insertAt = segments.length;
+    const newSegments = [...segments];
+    newSegments.splice(insertAt, 0, newSeg);
+    subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
+  }, [isEditing, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
 
   const handleDeleteSegment = useCallback((id: number) => {
     if (!isEditing || segments.length <= 1) return;
@@ -193,30 +256,58 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
   }, [isEditing, segments, subsHistory]);
 
-  const handleSplitSegmentAtCursor = useCallback(() => {
+  const handleSplitSegmentAtCursor = useCallback((idParam?: number) => {
+    // Consumim el payload sempre: els ids es renumeren a cada commit, i un
+    // payload obsolet s'aplicaria després a un segment equivocat.
     const payload = splitPayloadRef.current;
-    if (!payload) return;
+    splitPayloadRef.current = null;
 
-    const idx = segments.findIndex(s => s.id === payload.id);
+    if (payload && (idParam === undefined || payload.id === idParam)) {
+      const idx = segments.findIndex(s => s.id === payload.id);
+      if (idx === -1) return;
+
+      const target = segments[idx];
+      const splitPoint = target.startTime + ((target.endTime - target.startTime) * payload.splitRatio);
+
+      const newSeg1 = { ...target, endTime: splitPoint, originalText: payload.leftText, richText: payload.leftText };
+      const newSeg2 = {
+        id: Date.now(),
+        startTime: splitPoint + 0.001,
+        endTime: target.endTime,
+        originalText: payload.rightText,
+        richText: payload.rightText,
+      };
+
+      const newSegments = [...segments];
+      newSegments.splice(idx, 1, newSeg1, newSeg2);
+      subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
+      return;
+    }
+
+    const targetId = idParam ?? activeSegmentId;
+    if (!targetId || !isEditing) return;
+
+    const idx = segments.findIndex(s => s.id === targetId);
     if (idx === -1) return;
 
     const target = segments[idx];
-    const splitPoint = target.startTime + ((target.endTime - target.startTime) * payload.splitRatio);
+    const smart = computeSmartSplit(target.originalText || '');
+    if (!smart) return;
+    const splitPoint = target.startTime + (target.endTime - target.startTime) * smart.splitRatio;
 
-    const newSeg1 = { ...target, endTime: splitPoint, originalText: payload.leftText, richText: payload.leftText };
+    const newSeg1 = { ...target, endTime: splitPoint, originalText: smart.leftText, richText: smart.leftText };
     const newSeg2 = {
       id: Date.now(),
       startTime: splitPoint + 0.001,
       endTime: target.endTime,
-      originalText: payload.rightText,
-      richText: payload.rightText,
+      originalText: smart.rightText,
+      richText: smart.rightText,
     };
 
     const newSegments = [...segments];
     newSegments.splice(idx, 1, newSeg1, newSeg2);
-    splitPayloadRef.current = null;
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
-  }, [segments, subsHistory]);
+  }, [segments, subsHistory, activeSegmentId, isEditing]);
 
   // ✅ Save (botón + Ctrl+S)
   const handleSave = useCallback(() => {
@@ -280,11 +371,7 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
       case 'JUMP_PREV_SEGMENT': case 'NAVIGATE_SEGMENT_UP': onJumpSegment('prev'); break;
       case 'SPLIT_SEGMENT': handleSplitSegmentAtCursor(); break;
       case 'MERGE_SEGMENT': handleMergeSegmentWithNext(); break;
-      case 'INSERT_SUBTITLE': {
-        const targetId = activeSegmentId ?? (segments.length > 0 ? segments[segments.length - 1].id as number : null);
-        if (targetId !== null) handleInsertSegment(targetId, 'after');
-        break;
-      }
+      case 'INSERT_SUBTITLE': handleInsertSegmentAtCursor(); break;
       case 'DELETE_ACTIVE_SEGMENT': {
         const active = document.activeElement as HTMLElement | null;
         if (activeSegmentId && !active?.isContentEditable) {
@@ -351,6 +438,20 @@ const VideoSrtStandaloneEditorViewInner: React.FC<VideoSrtStandaloneEditorViewPr
       return prev.map(s => s.id === updated.id ? { ...updated, startTime, endTime } : s);
     });
   };
+
+  // Format en lot des de SubtitlesEditor (selecció múltiple): un únic pas d'undo.
+  const handleSegmentsBatchChange = useCallback((changes: Array<{ id: number; newText: string }>) => {
+    if (!isEditing || changes.length === 0) return;
+    const byId = new Map(changes.map(c => [c.id, c.newText]));
+    subsHistory.commit(
+      subsHistory.present.map(s =>
+        byId.has(s.id as number)
+          ? { ...s, originalText: byId.get(s.id as number)!, richText: '' }
+          : s
+      )
+    );
+  }, [isEditing, subsHistory]);
+
 const segIndexRef = useRef<Map<Id, number>>(new Map());
 
 useEffect(() => {
@@ -397,7 +498,7 @@ useEffect(() => {
       {/* Header */}
       <header className="h-14 flex items-center px-4 justify-between flex-shrink-0" style={{ backgroundColor: 'var(--th-bg-secondary)', borderBottom: '1px solid var(--th-border)' }}>
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400">
+          <button onClick={() => { resume.flush(); onClose(); }} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400">
             <Icons.ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -444,6 +545,7 @@ useEffect(() => {
             onMerge={handleMergeSegmentWithNext}
             onInsert={handleInsertSegment}
             onDelete={handleDeleteSegment}
+            onSegmentsBatchChange={handleSegmentsBatchChange}
           />
         </div>
 

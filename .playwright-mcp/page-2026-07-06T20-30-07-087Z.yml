@@ -1,0 +1,1193 @@
+- generic [ref=f1e3]:
+  - navigation [ref=f1e5]:
+    - generic [ref=f1e6]:
+      - link "N i k s e . d k":
+        - /url: /
+        - generic [ref=f1e7] [cursor=pointer]: "N"
+        - generic [ref=f1e8] [cursor=pointer]: i
+        - generic [ref=f1e9] [cursor=pointer]: k
+        - generic [ref=f1e10] [cursor=pointer]: s
+        - generic [ref=f1e11] [cursor=pointer]: e
+        - generic [ref=f1e12] [cursor=pointer]: .
+        - generic [ref=f1e13] [cursor=pointer]: d
+        - generic [ref=f1e14] [cursor=pointer]: k
+    - list [ref=f1e16]:
+      - listitem [ref=f1e17]:
+        - link "Login" [ref=f1e18] [cursor=pointer]:
+          - /url: /profile
+      - listitem [ref=f1e19]:
+        - link "Register" [ref=f1e20] [cursor=pointer]:
+          - /url: /register
+      - listitem [ref=f1e21]:
+        - link "Donate" [ref=f1e22] [cursor=pointer]:
+          - /url: /donate
+  - generic [ref=f1e23]:
+    - generic [ref=f1e26]:
+      - generic [ref=f1e27]:
+        - text: Services
+        - list [ref=f1e28]:
+          - listitem [ref=f1e29]:
+            - link "Subtitle Edit Online" [ref=f1e30] [cursor=pointer]:
+              - /url: /subtitleedit/online
+      - generic [ref=f1e31]:
+        - text: Software
+        - list [ref=f1e32]:
+          - listitem [ref=f1e33]:
+            - link "Subtitle Edit" [ref=f1e34] [cursor=pointer]:
+              - /url: /subtitleedit
+            - list [ref=f1e35]:
+              - listitem [ref=f1e36]:
+                - link "Help/FAQ" [ref=f1e37] [cursor=pointer]:
+                  - /url: /subtitleedit/help
+              - listitem [ref=f1e38]:
+                - link "Videos" [ref=f1e39] [cursor=pointer]:
+                  - /url: /subtitleedit/video
+          - listitem [ref=f1e40]:
+            - link "Xml Content Translator" [ref=f1e41] [cursor=pointer]:
+              - /url: /xmlcontenttranslator
+      - generic [ref=f1e42]:
+        - text: Subtitle formats
+        - list [ref=f1e43]:
+          - listitem [ref=f1e44]:
+            - link "SubRip" [ref=f1e45] [cursor=pointer]:
+              - /url: /subtitleedit/formats/subrip
+          - listitem [ref=f1e46]:
+            - link "ASSA" [ref=f1e47] [cursor=pointer]:
+              - /url: /subtitleedit/formats/assa
+            - list [ref=f1e48]:
+              - listitem [ref=f1e49]:
+                - link "ASSA override tags" [ref=f1e50] [cursor=pointer]:
+                  - /url: /subtitleedit/formats/assa-override-tags
+      - generic [ref=f1e51]:
+        - text: Download
+        - list [ref=f1e52]:
+          - listitem [ref=f1e53]:
+            - link "Subtitle Edit 5.0.0" [ref=f1e54] [cursor=pointer]:
+              - /url: https://github.com/SubtitleEdit/subtitleedit/releases
+          - listitem [ref=f1e55]:
+            - link "Xml Content Translator 1.12" [ref=f1e56] [cursor=pointer]:
+              - /url: https://github.com/SubtitleEdit/XmlContentTranslator/releases/download/1.12/XmlContentTranslator.zip
+      - generic [ref=f1e57]:
+        - text: About/contact
+        - list [ref=f1e58]:
+          - listitem [ref=f1e59]:
+            - link "About me" [ref=f1e60] [cursor=pointer]:
+              - /url: /about
+          - listitem [ref=f1e61]:
+            - link "Email" [ref=f1e62] [cursor=pointer]:
+              - /url: mailto:nikse.dk@gmail.com
+      - generic [ref=f1e63]:
+        - text: Donate
+        - list [ref=f1e64]:
+          - listitem [ref=f1e65]:
+            - link "Donate" [ref=f1e66] [cursor=pointer]:
+              - /url: /donate
+    - generic [ref=f1e67]:
+      - heading "Help/FAQ" [level=1] [ref=f1e68]
+      - separator [ref=f1e69]
+      - heading "Mini FAQ" [level=2] [ref=f1e70]
+      - text: "Q: When I try to open a video in format \"...\", SE cannot play video or there's no sound. What do I do?"
+      - text: "A: Try"
+      - link "setting up MPV as your video player" [ref=f1e71] [cursor=pointer]:
+        - /url: /subtitleedit/help#settings_video
+      - text: .
+      - text: Also be sure that you have
+      - link "maximized the sound in SE" [ref=f1e72] [cursor=pointer]:
+        - /url: /assets/SubtitleEdit/no_audio1.png
+      - text: and
+      - link "maximized the sound in Windows" [ref=f1e73] [cursor=pointer]:
+        - /url: /assets/SubtitleEdit/no_audio2.png
+      - text: .
+      - text: "Q: Is it possible to move a subtitle to the top of the screen?"
+      - text: "A: Yes, right-click on selected lines in the list view and choose Alignment..., and then choose e.g. Top center."
+      - text: You will only see position changes in SE if you use "mpv" as video player - see Options -> Settings -> Video player .
+      - text: "Note: Not all video players/converters will use this positioning."
+      - text: "Q: Where is the delay tool?"
+      - text: "A: Use Show earlier/later in the Synchronization menu. Shortcut is Ctrl+Shift+A. It's a tool window, so you can keep it open while working - or checking subtitle preview in video player."
+      - text: "Q: Why can't Subtitle Edit change frame rate?"
+      - text: "A: Well, it can. Check Synchronization -> Change frame rate."
+      - text: "Q: Why can't Subtitle Edit split/append subtitles?"
+      - text: "A: Try Tools -> Split/append."
+      - text: "Q: Can Subtitle Edit offset times - but not from the very beginning?"
+      - text: "A: Yes, you can work with a selection of subtitle lines. Select the lines in the list view you want to work on (hint: click on the first line, then shift+click on the last) and then right-click in the list view (context menu) - now you can adjust the selected lines in \"visual sync selected lines\" or just \"show selected lines earlier/later\"."
+      - text: "Q: Can Subtitle Edit play video fullscreen?"
+      - text: "A: Yes, press ALT+ENTER. Use space for play/pause and ALT+ARROW UP/DOWN for next/previous subtitle."
+      - text: "Q: When translating/editing subtitles, can Subtitle Edit navigate quickly to next line?"
+      - text: "A: Yes, press ALT+ARROW UP/DOWN for next previous subtitle - also textbox will keep focus."
+      - text: "Q: Can Subtitle Edit add the subtitles to the video file?"
+      - text: "A: There are two ways of adding subtitles into the video file - hardcoding (cannot be turned off ever, so this might be a bad idea) or embedding (only for some formats like mkv or mp4)."
+      - text: SE can hardcode via the menu "Video" - "Generate video with burned-in subtitle" (requires FFmpeg).
+      - text: SE can softcode via the menu "Video" - "Generate video with added/removed embedded subtitles" (requires FFmpeg).
+      - text: Read more about
+      - link "adding subtitles to video" [ref=f1e74] [cursor=pointer]:
+        - /url: /subtitleedit/AddSubtitlesToVideo
+      - text: or perhaps a tutorial called
+      - link "Using Handbrake to Burn in Subtitles from MKV to MP4 for Apple TV" [ref=f1e75] [cursor=pointer]:
+        - /url: https://www.epinionated.net/handbrake-burn-in-subtitles-mkv-mp4-apple-tv/
+      - text: .
+      - text: "Q: How to make a good GitHub issue?"
+      - text: "A: Please add the following:"
+      - list [ref=f1e76]:
+        - listitem [ref=f1e77]: State where and what you were doing.
+        - listitem [ref=f1e78]: Attach a screen shot (use e.g. Alt+PrtScr or Win+Shift+S, please just use copy-paste and no image hosts) + text also (you can copy the text from an error message box with Ctrl+C)
+        - listitem [ref=f1e79]: Attach a subtitle (either whole or a sample, attach on GitHub as a .zip file)
+        - listitem [ref=f1e80]: Check if the file "error_log.txt" contains useful information (and attach the file on GitHub if relevant)
+        - listitem [ref=f1e81]: Only one bug/request/question in one GitHub issue
+      - separator [ref=f1e82]
+      - heading "Help index" [level=2] [ref=f1e83]
+      - generic [ref=f1e84]:
+        - link "Subtitle Edit main window" [ref=f1e85] [cursor=pointer]:
+          - /url: /subtitleedit/help#main
+        - link "Subtitle Edit main window - resize/un-dock" [ref=f1e86] [cursor=pointer]:
+          - /url: /subtitleedit/help#main_resize
+        - link "Subtitle Edit main window - edit original" [ref=f1e87] [cursor=pointer]:
+          - /url: /subtitleedit/help#main_edit_original
+        - link "Video/wave form modes" [ref=f1e88] [cursor=pointer]:
+          - /url: /subtitleedit/help#video_modes
+        - link "Wave form" [ref=f1e89] [cursor=pointer]:
+          - /url: /subtitleedit/help#waveform
+        - link "Export" [ref=f1e90] [cursor=pointer]:
+          - /url: /subtitleedit/help#export
+        - link "Synchronization" [ref=f1e91] [cursor=pointer]:
+          - /url: /subtitleedit/help#sync
+        - link "Visual sync" [ref=f1e92] [cursor=pointer]:
+          - /url: /subtitleedit/help#visual_sync
+        - link "Translation (auto)" [ref=f1e93] [cursor=pointer]:
+          - /url: /subtitleedit/help#translation
+        - link "Fix common errors" [ref=f1e94] [cursor=pointer]:
+          - /url: /subtitleedit/help#fixcommonerrors
+        - link "Remove text for hearing impaired" [ref=f1e95] [cursor=pointer]:
+          - /url: /subtitleedit/help#remove_text_for_hi
+        - link "Spell check" [ref=f1e96] [cursor=pointer]:
+          - /url: /subtitleedit/help#spellcheck
+        - link "Import/OCR image based subtitles - like DVD Sub/idx or Blu-ray sup" [ref=f1e97] [cursor=pointer]:
+          - /url: /subtitleedit/help#importvobsub
+        - link "Edit Blu-ray sup/TS-images/BdnXml image based subtitles" [ref=f1e98] [cursor=pointer]:
+          - /url: /subtitleedit/help#bdsupedit
+        - link "Settings" [ref=f1e99] [cursor=pointer]:
+          - /url: /subtitleedit/help#settings
+        - link "- Shortcuts" [ref=f1e100] [cursor=pointer]:
+          - /url: /subtitleedit/help#shortcuts
+        - link "- Video player" [ref=f1e101] [cursor=pointer]:
+          - /url: /subtitleedit/help#settings_video
+        - link "- Tools" [ref=f1e102] [cursor=pointer]:
+          - /url: /subtitleedit/help#settings_tools
+        - link "- Appearance" [ref=f1e103] [cursor=pointer]:
+          - /url: /subtitleedit/help#settings_font
+        - link "Bookmarks" [ref=f1e104] [cursor=pointer]:
+          - /url: /subtitleedit/help#bookmarks
+        - link "Generate background box (for Advanced Sub Station Alpha)" [ref=f1e105] [cursor=pointer]:
+          - /url: /subtitleedit/help#assa_bg_box
+        - link "Translating Subtitle Edit to another language" [ref=f1e106] [cursor=pointer]:
+          - /url: /subtitleedit/help#translate
+        - link "Networking - online collaboration" [ref=f1e107] [cursor=pointer]:
+          - /url: /subtitleedit/help#networking
+        - link "Beautify time codes" [ref=f1e108] [cursor=pointer]:
+          - /url: /subtitleedit/help#beautify_time_codes
+        - link "Batch convert via UI" [ref=f1e109] [cursor=pointer]:
+          - /url: /subtitleedit/help#batchconvert
+        - link "Audio to text (Whisper/Vosk)" [ref=f1e110] [cursor=pointer]:
+          - /url: /subtitleedit/help#audio_to_text
+        - link "Text to speech" [ref=f1e111] [cursor=pointer]:
+          - /url: /subtitleedit/help#text_to_speech
+        - link "Command line conversion" [ref=f1e112] [cursor=pointer]:
+          - /url: /subtitleedit/help#commandline
+        - link "Portable version and VLC" [ref=f1e113] [cursor=pointer]:
+          - /url: /subtitleedit/help#portable
+        - link "Make your own plugin" [ref=f1e114] [cursor=pointer]:
+          - /url: /subtitleedit/help#plugins
+        - link "Subtitle Edit on Linux" [ref=f1e115] [cursor=pointer]:
+          - /url: /subtitleedit/help#linux
+        - link "Compiling Subtitle Edit" [ref=f1e116] [cursor=pointer]:
+          - /url: /subtitleedit/help#compile
+        - link "Known issues" [ref=f1e117] [cursor=pointer]:
+          - /url: /subtitleedit/help#issues
+      - separator [ref=f1e118]
+      - heading "Subtitle Edit main window" [level=2] [ref=f1e119]
+      - heading "Menu in main window" [level=3] [ref=f1e120]
+      - text: In the menu you can find many tools like change casing, split, append, spell check, synchronization, change frame rate, Google translate, find, replace, remove text for hearing impaired, and much more!
+      - text: You can import subtitles from Blu-ray sup, transport streams, DVD, vobsub, text and images - even subtitles inside Matroska files can be imported.
+      - img "Menu" [ref=f1e121]
+      - text: "NOTE: Many tools are also available via right click in the list view."
+      - generic [ref=f1e122]:
+        - text: The toolbar can use external images. Create a folder called "Icons" (besides the "Dictionaries" and the "Waveforms" folder).
+        - text: "Png files (32x32 pixels) with these names are used if exists: New, Open, Save, SaveAs, Find, Replace, FixCommonErrors, RemoveTextForHi, VisualSync, SpellCheck, Netflix, AssaStyle, AssaProperties, Settings, Help, WaveformToggle, VideoToggle"
+      - heading "Subtitle/file formats" [level=3] [ref=f1e123]
+      - table [ref=f1e124]:
+        - row [ref=f1e125]:
+          - cell [ref=f1e126]:
+            - img "Subtitle format" [ref=f1e127]
+            - text: In the top menu you can choose format and encoding. The first dropdown list shows subtitle formats. SubRip (extension is ".srt") is the most widely used format today, so it is recommended to save subtitles in this format.
+            - text: Originally SubRip was a text only format, but in recent years html tags have been common. Especially the italic and font tags are widely used. For a list of SubRip support in players
+            - link "check this out" [ref=f1e128] [cursor=pointer]:
+              - /url: https://ale5000.altervista.org/subtitles.htm
+            - text: .
+            - text: File encoding is auto-detected in most cases. ANSI is the old, formerly the most common found format, but it requires your system to have a specific culture setting. UTF-8 is recommended for new subtitles, as it can handle non English letters better than ANSI (UTF-8 subtitles will work on all computers no matter what culture settings a computer has), and can display other symbols like music nodes. The only drawback of using UTF-8 is, that some older programs do not support UTF-8.
+            - text: "If you have an ANSI file in another language than the current culture/language (or you have an invalid UTF/Unicode file) then you can use the menu item: File -> Import subtitle with manual chosen encoding."
+            - text: "Import subtitle with manual chosen encoding with preview:"
+            - img "ChooseEncoding" [ref=f1e129]
+      - heading "Frame rate" [level=3] [ref=f1e130]
+      - table [ref=f1e131]:
+        - 'row "Frame rate Frame rate is not displayed by default, but you can enable it via the menu Options -> Settings: Toolbar: Show frame rate in toolbar. Frame rate is used when converting between subtitle formats based on frames and formats based on time. SubRip is based on time. MicroDvd (widely used 7-9 years ago, and still widely used in some countries) is based on frames. Subtitles based on time is preferred as videos may not have a constant frame rate - which makes working with subtitles based on frames not very flexible at all. To change the frame rate use Synchronization -> Change frame rate - or use one of the other synchronizations tools." [ref=f1e132]':
+          - 'cell "Frame rate Frame rate is not displayed by default, but you can enable it via the menu Options -> Settings: Toolbar: Show frame rate in toolbar. Frame rate is used when converting between subtitle formats based on frames and formats based on time. SubRip is based on time. MicroDvd (widely used 7-9 years ago, and still widely used in some countries) is based on frames. Subtitles based on time is preferred as videos may not have a constant frame rate - which makes working with subtitles based on frames not very flexible at all. To change the frame rate use Synchronization -> Change frame rate - or use one of the other synchronizations tools." [ref=f1e133]':
+            - img "Frame rate" [ref=f1e134]
+            - text: "Frame rate is not displayed by default, but you can enable it via the menu Options -> Settings: Toolbar: Show frame rate in toolbar."
+            - text: Frame rate is used when converting between subtitle formats based on frames and formats based on time. SubRip is based on time. MicroDvd (widely used 7-9 years ago, and still widely used in some countries) is based on frames.
+            - text: Subtitles based on time is preferred as videos may not have a constant frame rate - which makes working with subtitles based on frames not very flexible at all.
+            - text: To change the frame rate use Synchronization -> Change frame rate - or use one of the other
+            - link "synchronizations tools" [ref=f1e135] [cursor=pointer]:
+              - /url: "#sync"
+            - text: .
+      - heading "Subtitle view - List view or source view" [level=3] [ref=f1e136]
+      - paragraph [ref=f1e137]:
+        - text: There are two ways of looking at a subtitle - list view or source view.
+        - text: You can switch between list view and source view with the F2 key or via the context menu.
+      - paragraph [ref=f1e138]: "List view is the default. This view is column based and has customizable columns:"
+      - table [ref=f1e139]:
+        - row "List view" [ref=f1e140]:
+          - cell "List view" [ref=f1e141]:
+            - img "List view" [ref=f1e143]
+        - row "The list view gives an excellent overview of the subtitle - the same for all formats. You can edit text and time codes here, delete and insert lines easily. To select multiple lines in a block, select the first one, and then <Shift+click> on the last line (standard Windows functionality). <Ctrl+a> is \"select all\" and <Ctrl+Shift+i> is \"inverse selection\". <Ctrl+click> adds clicked line to selection." [ref=f1e144]:
+          - cell "The list view gives an excellent overview of the subtitle - the same for all formats. You can edit text and time codes here, delete and insert lines easily. To select multiple lines in a block, select the first one, and then <Shift+click> on the last line (standard Windows functionality). <Ctrl+a> is \"select all\" and <Ctrl+Shift+i> is \"inverse selection\". <Ctrl+click> adds clicked line to selection." [ref=f1e145]:
+            - paragraph [ref=f1e146]:
+              - text: The list view gives an excellent overview of the subtitle - the same for all formats.
+              - text: You can edit text and time codes here, delete and insert lines easily.
+            - paragraph [ref=f1e147]:
+              - text: To select multiple lines in a block, select the first one, and then <Shift+click> on the last line (standard Windows functionality).
+              - text: <Ctrl+a> is "select all" and <Ctrl+Shift+i> is "inverse selection". <Ctrl+click> adds clicked line to selection.
+        - row "It is also possible to select several lines and use tools like Google translate or Visual sync on the selected lines. Listview" [ref=f1e148]:
+          - cell "It is also possible to select several lines and use tools like Google translate or Visual sync on the selected lines. Listview" [ref=f1e149]:
+            - text: It is also possible to select several lines and use tools like Google translate or Visual sync on the selected lines.
+            - img "Listview" [ref=f1e151]
+      - paragraph [ref=f1e152]: "Source view (F2 toggles between source view and list view):"
+      - table [ref=f1e153]:
+        - row "Source view This is how the subtitle file actually looks - different for all formats. You can edit text and time codes here, but be careful - it's easy to mess things up. You can make Subtitle Edit start in Source view under Settings." [ref=f1e154]:
+          - cell "Source view" [ref=f1e155]:
+            - img "Source view" [ref=f1e156]
+          - cell "This is how the subtitle file actually looks - different for all formats. You can edit text and time codes here, but be careful - it's easy to mess things up. You can make Subtitle Edit start in Source view under Settings." [ref=f1e157]:
+            - text: This is how the subtitle file actually looks - different for all formats.
+            - text: You can edit text and time codes here, but be careful - it's easy to mess things up.
+            - text: You can make Subtitle Edit start in Source view under Settings.
+      - table [ref=f1e158]:
+        - row "Text box Above the text box where you can type the actual subtitle is a label called \"Chars/sec\". If it's higher than your max CPS (CPS=Characters Per Second, e.g. 25), it will be colored red. Text box Below the text box is a label called \"Single line length\". First line is 32 characters and second line is 28 characters. If this label turns red, then one of the lines has exceeded your single line max length. This single line max length value can be adjusted in Options - Settings - General via \"Single line max length\" (43 is default). SE will default only allow one line break with the normal 'Enter' key - if you want more line breaks you must use 'Ctrl+Enter'. You can change the max number of lines to e.g. 3 in Options - Settings - General via \"Max. number of lines\"." [ref=f1e159]:
+          - cell "Text box Above the text box where you can type the actual subtitle is a label called \"Chars/sec\". If it's higher than your max CPS (CPS=Characters Per Second, e.g. 25), it will be colored red. Text box Below the text box is a label called \"Single line length\". First line is 32 characters and second line is 28 characters. If this label turns red, then one of the lines has exceeded your single line max length. This single line max length value can be adjusted in Options - Settings - General via \"Single line max length\" (43 is default). SE will default only allow one line break with the normal 'Enter' key - if you want more line breaks you must use 'Ctrl+Enter'. You can change the max number of lines to e.g. 3 in Options - Settings - General via \"Max. number of lines\"." [ref=f1e160]:
+            - heading "Text box" [level=3] [ref=f1e161]
+            - paragraph [ref=f1e162]:
+              - text: Above the text box where you can type the actual subtitle is a label called "Chars/sec".
+              - text: If it's higher than your max CPS (CPS=Characters Per Second, e.g. 25), it will be colored red.
+            - img "Text box" [ref=f1e163]
+            - text: Below the text box is a label called "Single line length". First line is 32 characters and second line is 28 characters.
+            - text: If this label turns red, then one of the lines has exceeded your single line max length.
+            - text: This single line max length value can be adjusted in Options - Settings - General via "Single line max length" (43 is default).
+            - text: SE will default only allow one line break with the normal 'Enter' key - if you want more line breaks you must use 'Ctrl+Enter'.
+            - text: You can change the max number of lines to e.g. 3 in Options - Settings - General via "Max. number of lines".
+        - row
+        - row "Show video and/or waveform/spectrogram The main window can show video and/or wave form. Video controls can even be un-docked - nice if you have two monitors! The horizontal/vertical red lines shows where you can resize inside the main window (via splitters). Main window - with video/waveform" [ref=f1e164]:
+          - cell "Show video and/or waveform/spectrogram The main window can show video and/or wave form. Video controls can even be un-docked - nice if you have two monitors! The horizontal/vertical red lines shows where you can resize inside the main window (via splitters). Main window - with video/waveform" [ref=f1e165]:
+            - heading "Show video and/or waveform/spectrogram" [level=3] [ref=f1e166]
+            - text: The main window can show video and/or wave form. Video controls can even be un-docked - nice if you have two monitors!
+            - text: The horizontal/vertical red lines shows where you can resize inside the main window (via splitters).
+            - img "Main window - with video/waveform" [ref=f1e167]
+        - row "You can edit both new translation and original subtitle at the same time. You can make the original read-only Options -> Settings:General:Allow edit of original subtitle. When editing both original and translated subtitle, changing start time/duration/deleting/inserting will affect both subtitles! In Options - Settings - Shortcuts, you can find shortcuts for toggle original subtitle and switching translated / original subtitle. Main window - with video/waveform" [ref=f1e168]:
+          - cell "You can edit both new translation and original subtitle at the same time. You can make the original read-only Options -> Settings:General:Allow edit of original subtitle. When editing both original and translated subtitle, changing start time/duration/deleting/inserting will affect both subtitles! In Options - Settings - Shortcuts, you can find shortcuts for toggle original subtitle and switching translated / original subtitle. Main window - with video/waveform" [ref=f1e169]:
+            - text: You can edit both new translation and original subtitle at the same time. You can make the original read-only Options -> Settings:General:Allow edit of original subtitle.
+            - text: When editing both original and translated subtitle, changing start time/duration/deleting/inserting will affect both subtitles!
+            - text: In Options - Settings - Shortcuts, you can find shortcuts for toggle original subtitle and switching translated / original subtitle.
+            - img "Main window - with video/waveform" [ref=f1e170]
+      - heading "Play rate (speed)" [level=3] [ref=f1e171]
+      - paragraph [ref=f1e172]:
+        - text: The play rate can be adjusted from a slow 50% to a very fast 300% via the green double arrow in the waveform controls or via shortcuts.
+        - text: The play rate will not be remembered when re-starting Subtitle Edit.
+        - text: "When the play rate is not 100% (which is normal speed), the green double arrow will have a darker background - like this:"
+        - img "Play rate changed" [ref=f1e173]
+        - text: .
+      - img "Play rate" [ref=f1e174]
+      - separator [ref=f1e175]
+      - heading "Search" [level=3] [ref=f1e176]
+      - paragraph [ref=f1e177]: You can search by pressing Ctrl+F (F3 is find next). Regular expression search is available for nerds ;)
+      - img "Search" [ref=f1e178]
+      - separator [ref=f1e179]
+      - heading "Find and replace" [level=3] [ref=f1e180]
+      - paragraph [ref=f1e181]: You can find and replace by pressing Ctrl+H. Regular expression search is available for nerds ;)
+      - paragraph [ref=f1e182]: To change something to a new line via the replace string use "\n".
+      - separator [ref=f1e183]
+      - heading "Multiple Replace" [level=3] [ref=f1e184]
+      - paragraph [ref=f1e185]:
+        - text: In Edit -> Multiple replace you can create your own rules for fixing a subtitle - even advanced rules using
+        - link "regular expressions" [ref=f1e186] [cursor=pointer]:
+          - /url: https://en.wikipedia.org/wiki/Regular_expression
+        - text: "!"
+      - generic [ref=f1e187]:
+        - text: When writing regular expressions grouping and backreferences are very useful. Parts of a regular expression inside parentheses are groups and can be referenced in the replace string where $1 is a reference to the first group and $2 is a reference to the second and so on.
+        - table [ref=f1e188]:
+          - 'row "Example 1: ^J( .+) + replace string ♪ $1 Only the starting \"J\" will be replaced, so if the text is \"J Music Playing J\" it will become \"♪ Music Playing J\"" [ref=f1e189]':
+            - cell "Example 1:" [ref=f1e190]
+            - cell "^J( .+) + replace string ♪ $1" [ref=f1e191]
+            - cell "Only the starting \"J\" will be replaced, so if the text is \"J Music Playing J\" it will become \"♪ Music Playing J\"" [ref=f1e192]
+          - 'row "Example 2: ([a-z]+)([0-9]+) + replace string $2$1 Two groupings that will be switched, so if the text is \"number26\" it will become \"26number\"." [ref=f1e193]':
+            - cell "Example 2:" [ref=f1e194]
+            - cell "([a-z]+)([0-9]+) + replace string $2$1" [ref=f1e195]
+            - cell "Two groupings that will be switched, so if the text is \"number26\" it will become \"26number\"." [ref=f1e196]
+          - 'row "Example 3: [.\\s\\S]*www.addsite.com[.\\s\\S]* + empty replace string Will remove any subtitles containing \"www.addsite.org\"" [ref=f1e197]':
+            - cell "Example 3:" [ref=f1e198]
+            - cell "[.\\s\\S]*www.addsite.com[.\\s\\S]* + empty replace string" [ref=f1e199]
+            - cell "Will remove any subtitles containing \"www.addsite.org\"" [ref=f1e200]
+          - 'row "Example 4: \\p{L} + empty replace string Will remove all Unicode letters (e.g. also Danish letter like æ, ø, and å). \\p{Lu} will match an uppercase letter that has a lowercase variant \\p{Ll} will match a lowercase letter that has an uppercase variant" [ref=f1e201]':
+            - cell "Example 4:" [ref=f1e202]
+            - 'cell "\\p{L} + empty replace string" [ref=f1e203]'
+            - 'cell "Will remove all Unicode letters (e.g. also Danish letter like æ, ø, and å). \\p{Lu} will match an uppercase letter that has a lowercase variant \\p{Ll} will match a lowercase letter that has an uppercase variant" [ref=f1e204]':
+              - text: Will remove all Unicode letters (e.g. also Danish letter like æ, ø, and å).
+              - text: "\\p{Lu} will match an uppercase letter that has a lowercase variant"
+              - text: "\\p{Ll} will match a lowercase letter that has an uppercase variant"
+          - 'row "Example 5: <[^>]*> + empty replace string Will remove all html tags." [ref=f1e205]':
+            - cell "Example 5:" [ref=f1e206]
+            - cell "<[^>]*> + empty replace string" [ref=f1e207]
+            - cell "Will remove all html tags." [ref=f1e208]
+          - 'row "Example 6: \\A + replace string {\\an8} \\A will match only first line in each subtitle (unlike ^ that will match all lines). E.g. \"Hello world\" will become \"{\\an8}Hello world\" and \"Hello\\r\\nworld\" will become \"{\\an8}Hello\\r\\nworld\"." [ref=f1e209]':
+            - cell "Example 6:" [ref=f1e210]
+            - 'cell "\\A + replace string {\\an8}" [ref=f1e211]'
+            - 'cell "\\A will match only first line in each subtitle (unlike ^ that will match all lines). E.g. \"Hello world\" will become \"{\\an8}Hello world\" and \"Hello\\r\\nworld\" will become \"{\\an8}Hello\\r\\nworld\"." [ref=f1e212]':
+              - text: \A will match only first line in each subtitle (unlike ^ that will match all lines).
+              - text: "E.g. \"Hello world\" will become \"{\\an8}Hello world\" and \"Hello\\r\\nworld\" will become \"{\\an8}Hello\\r\\nworld\"."
+          - 'row "Example 7: (.+)\\n(.+) + replace string $1 E.g. \"Hello world new-line Bye world\" will become \"Hello world\"." [ref=f1e213]':
+            - cell "Example 7:" [ref=f1e214]
+            - cell "(.+)\\n(.+) + replace string $1" [ref=f1e215]
+            - cell "E.g. \"Hello world new-line Bye world\" will become \"Hello world\"." [ref=f1e216]
+        - text: You can test/build regular expressions on many web pages, like
+        - link "http://regexstorm.net" [ref=f1e217] [cursor=pointer]:
+          - /url: http://regexstorm.net/tester
+        - text: .
+        - text: If the result of a replace rule is an empty string, the subtitle will be removed.
+      - img "Multiple replace" [ref=f1e218]
+      - separator [ref=f1e219]
+      - heading "Video/wave form modes" [level=2] [ref=f1e220]
+      - text: "When using video and/or wave form three different modes (tabs) are available: Translate, Create, and Adjust."
+      - heading "Translate mode" [level=3] [ref=f1e221]
+      - img "Translate mode" [ref=f1e222]
+      - text: In translate mode you can translate a subtitle from one language to another manually (or correct a machine translated subtitle) while watching the video - and hearing the audio.
+      - text: If "Auto repeat" is on, then the subtitle will be repeated x-times while you are typing in the correct text.
+      - text: Use File -> Open original subtitle (translator mode) to also display the original text.
+      - text: "Hint: Do use the <alt+arrow up/down> for going to previous/next subtitle."
+      - heading "Create mode" [level=3] [ref=f1e223]
+      - img "Create/adjust lines" [ref=f1e224]
+      - text: This is the place to create subtitle lines from scratch or manually adjust existing lines.
+      - text: To create subtitle lines from scratch, pause the video file where the subtitle line should start and press the button "Insert new subtitle at video pos". Then enter the text - duration is auto suggested. Now press the button "Play from just before text" and if the text does not start exactly when the speech starts, then adjust "Start time" via the up/down arrows until it does. The duration can be set via the button "Set end time" while the video is playing or via the "Duration up/down arrows.
+      - text: To insert a subtitle right after the current line, press the Insert button (while the list view is focused).
+      - text: You can also right click on the audio wave form or in the list view to insert/merge/split/delete lines.
+      - heading "Adjust mode" [level=3] [ref=f1e225]
+      - img "Adjust mode" [ref=f1e226]
+      - text: This is the place to adjust existing lines.
+      - text: To adjust subtitle lines manually one by one starting from the top. Use the buttons "Set start and offset the rest" (F9) and "Set end & go to next" (F10). Fine-tuning of "Start time" and "Duration" should be done by using the up/down arrows.
+      - text: You can also right click on the audio wave form or in the list view to insert/merge/split/delete lines.
+      - separator [ref=f1e227]
+      - heading "Wave form" [level=2] [ref=f1e228]
+      - text: The wave form control makes it easy to see exactly where speech starts/ends.
+      - img "Wave form" [ref=f1e229]
+      - text: With the right click menu, you can split/merge/delete subtitles.
+      - img "Wave form - right click menu" [ref=f1e230]
+      - text: To create a new paragraph, make a new selection with the mouse and press Enter
+      - text: (or right click + choose "Add text here").
+      - img "Wave form - new selection" [ref=f1e231]
+      - heading "Wave form mouse/keys usage:" [level=3] [ref=f1e232]
+      - list [ref=f1e233]:
+        - listitem [ref=f1e234]: "Mouse single click: Go to position"
+        - listitem [ref=f1e235]: "Mouse double click on existing subtitle: Select clicked subtitle"
+        - listitem [ref=f1e236]: "Mark area + right click on marked area: Prompt for add new paragraph / play current selection"
+        - listitem [ref=f1e237]: Mouse drag left/right border of subtitles (adjusting start or end time)
+        - listitem [ref=f1e238]: Move/drag on middle of subtitle (adjusting both start and end time - but not duration)
+        - listitem [ref=f1e239]: Mouse right click can either add new subtitle or perform delete/split/merge on existing subtitle line
+        - listitem [ref=f1e240]: Mouse wheel scrolls waveform forward/back
+        - listitem [ref=f1e241]: alt+arrow left/right moves video position
+        - listitem [ref=f1e242]: alt+arrow up/down goes previous/next subtitle
+        - listitem [ref=f1e243]: Numeric +/- will zoom in/out
+        - listitem [ref=f1e244]: Mouse single click+Shift will set start for selected line (not moving end time)
+        - listitem [ref=f1e245]: Mouse single click+Ctrl will set end for selected line (not moving start time)
+        - listitem [ref=f1e246]: Mouse single click+Alt will set start for selected line (and keep duration)
+        - listitem [ref=f1e247]: Mouse double click on non-paragraph - toggle play
+        - listitem [ref=f1e248]: Mouse single click+Ctrl+Shift will set of start selected line + offset all lines after selected line (keeping durations)
+        - listitem [ref=f1e249]:
+          - text: Holding down ALT when moving start/end will move nearest subtitle start/end too if it's closer than 500 milliseconds -
+          - link "like this." [ref=f1e250] [cursor=pointer]:
+            - /url: /assets/SubtitleEdit/WaveformMoveNextPrev.gif
+      - heading "Waveform extraction" [level=3] [ref=f1e251]
+      - text: The extracting of wave data can be done with FFmpeg (configure in Options - Settings - Waveform) or
+      - link "VLC" [ref=f1e252] [cursor=pointer]:
+        - /url: https://www.videolan.org/
+      - text: ", and then a very small wave file (with a VERY low sample rate) is generated and saved in the \"WaveForms\" folder."
+      - text: "Note: You cannot use waveform without the video or the audio."
+      - separator [ref=f1e253]
+      - heading "Export" [level=2] [ref=f1e254]
+      - text: Subtitle Edit can save via "Save as..." in many different text formats, but if you want to save a subtitle in a binary format (like pac or 890) or an image based format (like png or Blu-ray sup) you must use File -> Export.
+      - text: Many settings like font, colors and also box style can be chosen.
+      - text: "These tags are preserved when exporting a subtitle to an image based format:"
+      - list [ref=f1e255]:
+        - listitem [ref=f1e256]: i - for setting font to italic
+        - listitem [ref=f1e257]: font color - for setting the font color
+        - listitem [ref=f1e258]: "&123;\\an1&125;-&123;\\an9&125; - alignment tags"
+        - listitem [ref=f1e259]: ASSA (Advanced Sub Station alpha) or SSA styles like color, font size and box (only ASSA has color alpha/translucency)
+      - img "Export screenshot" [ref=f1e260]
+      - text: "Note: Arabic might require \"Simple rendering\"."
+      - text: "Note: SE requires TTS fonts, and does not support OTF font files."
+      - separator [ref=f1e261]
+      - heading "Synchronization" [level=2] [ref=f1e262]
+      - table [ref=f1e263]:
+        - row "Sync menu" [ref=f1e264]:
+          - cell "Sync menu" [ref=f1e265]:
+            - img "Sync menu" [ref=f1e266]
+        - 'row "Subtitle Edit offers several ways to synchronize subtitles. Adjust all times (show earlier/later): This is useful if you for example need to show all texts 3 seconds earlier. Visual sync: Sync by matching start/end scene (more below). Point sync: This allows synchronization by using 2 or more points - sync point time codes can be entered manually which makes it easy to use time codes from another subtitle already in sync. Point sync via other subtitle: If you have another subtitle in sync (perhaps in another language - it helps if you can understand it a bit) you can match one of the first lines, match one of the last lines, sync, and then all lines should be in sync. Change frame rate: This makes it easy to match text from a video with one frame rate to a video with another frame rate (can also be done by visual sync or point sync)." [ref=f1e267]':
+          - 'cell "Subtitle Edit offers several ways to synchronize subtitles. Adjust all times (show earlier/later): This is useful if you for example need to show all texts 3 seconds earlier. Visual sync: Sync by matching start/end scene (more below). Point sync: This allows synchronization by using 2 or more points - sync point time codes can be entered manually which makes it easy to use time codes from another subtitle already in sync. Point sync via other subtitle: If you have another subtitle in sync (perhaps in another language - it helps if you can understand it a bit) you can match one of the first lines, match one of the last lines, sync, and then all lines should be in sync. Change frame rate: This makes it easy to match text from a video with one frame rate to a video with another frame rate (can also be done by visual sync or point sync)." [ref=f1e268]':
+            - text: Subtitle Edit offers several ways to synchronize subtitles.
+            - paragraph [ref=f1e269]: "Adjust all times (show earlier/later): This is useful if you for example need to show all texts 3 seconds earlier."
+            - paragraph [ref=f1e270]:
+              - link "Visual sync" [ref=f1e271] [cursor=pointer]:
+                - /url: "#visual_sync"
+              - text: ": Sync by matching start/end scene (more below)."
+            - paragraph [ref=f1e272]: "Point sync: This allows synchronization by using 2 or more points - sync point time codes can be entered manually which makes it easy to use time codes from another subtitle already in sync."
+            - paragraph [ref=f1e273]: "Point sync via other subtitle: If you have another subtitle in sync (perhaps in another language - it helps if you can understand it a bit) you can match one of the first lines, match one of the last lines, sync, and then all lines should be in sync."
+            - paragraph [ref=f1e274]: "Change frame rate: This makes it easy to match text from a video with one frame rate to a video with another frame rate (can also be done by visual sync or point sync)."
+      - heading "Visual sync" [level=2] [ref=f1e275]
+      - table [ref=f1e276]:
+        - row "Visual Sync controls" [ref=f1e277]:
+          - cell "Visual Sync controls" [ref=f1e278]:
+            - img "Visual Sync controls" [ref=f1e279]
+        - row "Visual sync is a really easy way to synchronize a subtitle with a video file. Match one of the first subtitle lines with the start scene. Then match one of the last subtitle lines with the end scene. Press \"Sync!\" - and that's it :) There are a few helper buttons which will help find the right place in the video where the subtitle should start (just about where the first word comes out). The \"Play 1 sec and back\" button is a test button, so you can easily verify that the current position really is correct. Also check the Shortcuts. In some cases a subtitle is impossible to synchronize because one or more scenes have been removed/added. In these cases you can select a number of subtitles in the subtitle list view, right click and choose Visual sync selected lines. This way you can adjust the subtitle in smaller parts." [ref=f1e280]:
+          - cell [ref=f1e281]
+          - cell "Visual sync is a really easy way to synchronize a subtitle with a video file. Match one of the first subtitle lines with the start scene. Then match one of the last subtitle lines with the end scene. Press \"Sync!\" - and that's it :) There are a few helper buttons which will help find the right place in the video where the subtitle should start (just about where the first word comes out). The \"Play 1 sec and back\" button is a test button, so you can easily verify that the current position really is correct. Also check the Shortcuts. In some cases a subtitle is impossible to synchronize because one or more scenes have been removed/added. In these cases you can select a number of subtitles in the subtitle list view, right click and choose Visual sync selected lines. This way you can adjust the subtitle in smaller parts." [ref=f1e282]:
+            - text: Visual sync is a really easy way to synchronize a subtitle with a video file.
+            - text: Match one of the first subtitle lines with the start scene. Then match one of the last subtitle lines with the end scene. Press "Sync!" - and that's it :)
+            - text: There are a few helper buttons which will help find the right place in the video where the subtitle should start (just about where the first word comes out). The "Play 1 sec and back" button is a test button, so you can easily verify that the current position really is correct. Also check the
+            - link "Shortcuts" [ref=f1e283] [cursor=pointer]:
+              - /url: "#shortcuts"
+            - text: .
+            - text: In some cases a subtitle is impossible to synchronize because one or more scenes have been removed/added. In these cases you can select a number of subtitles in the subtitle
+            - link "list view" [ref=f1e284] [cursor=pointer]:
+              - /url: "#listview"
+            - text: ", right click and choose Visual sync selected lines. This way you can adjust the subtitle in smaller parts."
+      - separator [ref=f1e285]
+      - heading "Translation (auto)" [level=2] [ref=f1e286]
+      - text: Subtitle Edit can translate a subtitle by using
+      - link "Google translate" [ref=f1e287] [cursor=pointer]:
+        - /url: https://translate.google.com
+      - text: ","
+      - link "Bing Microsoft translator" [ref=f1e288] [cursor=pointer]:
+        - /url: https://www.bing.com/translator
+      - text: ", or"
+      - link "Facebook's NLLB (No Language Left Behind)" [ref=f1e289] [cursor=pointer]:
+        - /url: https://huggingface.co/docs/transformers/model_doc/nllb
+      - text: .
+      - text: "Automatic translation works fairly well, but translated subtitles will still need manual correction (hint: use main window"
+      - link "translate mode" [ref=f1e290] [cursor=pointer]:
+        - /url: "#video_modes"
+      - text: ).
+      - text: For Google translate you need to set up a
+      - link "Google Cloud API key" [ref=f1e291] [cursor=pointer]:
+        - /url: https://www.google.com/search?q=google+cloud+get+api+key
+      - text: (or use the limited free quota) and for Microsoft translate you need to setup a
+      - link "cognitive services 'Translator Text' key" [ref=f1e292] [cursor=pointer]:
+        - /url: https://docs.microsoft.com/en-us/azure/cognitive-services/translator/translator-text-how-to-signup
+      - text: and be sure to use the correct
+      - link "token endpoint" [ref=f1e293] [cursor=pointer]:
+        - /url: https://github.com/MicrosoftDocs/azure-docs/blob/master/includes/cognitive-services-speech-service-endpoints-token-service.md
+      - text: .
+      - text: Note that if you do get an API key for Google Cloud (read more
+      - link "here" [ref=f1e294] [cursor=pointer]:
+        - /url: https://github.com/SubtitleEdit/subtitleedit/discussions/6773#discussioncomment-5417761
+      - text: ) you need to add billing info - even for the free trial period.
+      - text: After getting the key, you need to paste it into the "API Key" field for "Google translate" via the menu Options - Settings - Tools.
+      - text: Running Facebook's NLLB (with support for 200 languages) works via
+      - link "nllb-serve" [ref=f1e295] [cursor=pointer]:
+        - /url: https://github.com/thammegowda/nllb-serve
+      - text: or
+      - link "nllb-api" [ref=f1e296] [cursor=pointer]:
+        - /url: https://github.com/winstxnhdw/nllb-api
+      - text: "running as a local web API:"
+      - link "nllb-serve" [ref=f1e297] [cursor=pointer]:
+        - /url: https://github.com/thammegowda/nllb-serve
+      - text: requires
+      - link "git" [ref=f1e298] [cursor=pointer]:
+        - /url: https://www.google.com/search?q=git+download
+      - text: and
+      - link "Python/pip" [ref=f1e299] [cursor=pointer]:
+        - /url: https://www.google.com/search?q=python+download
+      - text: .
+      - text: "Install with these commands:"
+      - generic [ref=f1e300]:
+        - text: git clone https://github.com/thammegowda/nllb-serve
+        - text: cd nllb-serve
+        - text: pip install -e .
+      - text: "Run with this command line:"
+      - generic [ref=f1e301]: nllb-serve
+      - link "nllb-api" [ref=f1e302] [cursor=pointer]:
+        - /url: https://github.com/winstxnhdw/nllb-api
+      - text: requires
+      - link "Docker" [ref=f1e303] [cursor=pointer]:
+        - /url: https://www.google.com/search?q=Docker+download
+      - text: ". Start the docker container with this command line:"
+      - generic [ref=f1e304]: docker run --rm -e SERVER_PORT=5000 -e APP_PORT=7860 -p 7860:7860 -v C:\Windows\Temp\cache.bin:/home/user/.cache ghcr.io/winstxnhdw/nllb-api:main
+      - text: Running
+      - link "LibreTranslate" [ref=f1e305] [cursor=pointer]:
+        - /url: https://libretranslate.com/
+      - text: works via a local web API (requires
+      - link "Python/pip" [ref=f1e306] [cursor=pointer]:
+        - /url: https://www.google.com/search?q=python+download
+      - text: "):"
+      - text: "Install with this commands:"
+      - generic [ref=f1e307]: pip install libretranslate
+      - text: "Run with this command line:"
+      - generic [ref=f1e308]: libretranslate
+      - text: Running
+      - link "Ollama" [ref=f1e309] [cursor=pointer]:
+        - /url: https://github.com/ollama/ollama
+      - text: works via a large language models locally.
+      - text: "Install their program and pull the model you want to use via cmd line:"
+      - generic [ref=f1e310]: ollama pull llama3
+      - text: Also do check the translate plug-ins, see File -> Plugins.
+      - img "Create/add lines" [ref=f1e311]
+      - separator [ref=f1e312]
+      - heading "Fix common errors" [level=2] [ref=f1e313]
+      - img "Fix common errors" [ref=f1e314]
+      - text: Some subtitles have a lot of errors (often these subtitles are created using OCR software).
+      - text: "\"Tools -> Fix common errors\" provides an easy way to fix a lot of these errors."
+      - text: The first window shows a list of actions to fix, just tick the checkboxes you want fixed and click "Next".
+      - img "Fix common errors" [ref=f1e315]
+      - text: Now you can choose which fixes to apply. Selected fixes are will be remembered in future sessions.
+      - text: The log tab gives an overview of what will be done - and what was not possible to fix.
+      - text: The "Apply selected fixes" button applies the fixes.
+      - separator [ref=f1e316]
+      - generic [ref=f1e317]: Remove text for hearing impaired
+      - text: Many subtitles include text for hearing impaired (also known as "
+      - link "SDH" [ref=f1e318] [cursor=pointer]:
+        - /url: https://en.wikipedia.org/wiki/Subtitle_%28captioning%29#SDH
+      - text: "\" in the American movie industry which is an initialism for \"Subtitles for the deaf or hard-of-hearing\")."
+      - text: For people with perfect hearing (and no noisy kids) these texts can be annoying - and easily removed with Tools -> Remove text for hearing impaired.
+      - text: SE offers many options for configuring removal of text for HI and in the preview you can see what changes will be made - and skip any wrongly made removals.
+      - text: You can also remove
+      - link "interjections" [ref=f1e319] [cursor=pointer]:
+        - /url: https://en.wikipedia.org/wiki/Interjection
+      - text: and you can maintain your own interjections. Interjections are not case sensitive and SE will try to remove them by descending text length.
+      - img "Remove text for hearing impaired" [ref=f1e320]
+      - separator [ref=f1e321]
+      - generic [ref=f1e322]: Spell check
+      - text: Spell check uses
+      - link "Hunspell" [ref=f1e323] [cursor=pointer]:
+        - /url: http://hunspell.sourceforge.net/
+      - text: (which is also used by Open/LibreOffice, Firefox, Chrome, and Opera).
+      - text: Only English dictionary is included, but you can easily find more dictionaries via the toolbar menu Spell check -> Get dictionaries...!
+      - text: If you download
+      - link "Open Office 3.x dictionaries" [ref=f1e324] [cursor=pointer]:
+        - /url: http://extensions.services.openoffice.org/en/dictionaries
+      - text: with the extension .oxt, then rename to .zip, and then unpack the .dic file and the .aff file to the Subtitle Edit Dictionary folder.
+      - text: "The spell check will show this window when it encounters an unknown word:"
+      - img "spell check" [ref=f1e325]
+      - generic [ref=f1e326]: Edit whole text
+      - text: will enable editing of the whole text (and not only the current word) - for this one sub only.
+      - generic [ref=f1e327]: Change all / Use always
+      - text: will always change current word - also in future works (saved in the OCR Fix Replace list - take a look at Dictionaries/eng_OCRFixReplaceList.xml to learn more about this file).
+      - generic [ref=f1e328]: Change / Use
+      - text: will change current word just this once.
+      - generic [ref=f1e329]: Add to names/noise list (case sensitive)
+      - text: will remember the name in the edit text box with current casing - also in future works.
+      - generic [ref=f1e330]: Add to user dictionary
+      - text: will remember the word in the edit text box and not prompt for it any more - also in future works. User dictionary is not case sensitive.
+      - text: All buttons in the "Word not found" groupbox will use the word in the "Word not found" textbox.
+      - separator [ref=f1e331]
+      - heading "Import/OCR image based subtitles - like DVD Sub/idx or Blu-ray sup" [level=2] [ref=f1e332]
+      - text: "If you open an image based subtitle like Blu-ray sup or sub/idx (vobsub) this screen will come up:"
+      - img "Import/ocr image based subtitles" [ref=f1e333]
+      - text: "The list view now contains empty subtitle text lines with only timestamps. You can enter the text manually, but it's much easier to let one of the OCR engines do the work:"
+      - list [ref=f1e334]:
+        - listitem [ref=f1e335]:
+          - text: "OCR via binary image compare (recommended): This option does not require any third party software installed, but it does require the user to manually enter letters based on image parts."
+          - text: "\"No of pixels is space\" should be decreased if not all translated words are separated (like \"wearefine.\"), and increased if there are too many separations (like \"w e ar e fi n e.\")."
+        - listitem [ref=f1e336]:
+          - text: "OCR via Tesseract 3.02 (recommended):"
+          - link "Tesseract" [ref=f1e337] [cursor=pointer]:
+            - /url: https://github.com/tesseract-ocr/tesseract
+          - text: is an open source OCR engine.
+          - text: You can find additional language data files at
+          - link "Github" [ref=f1e338] [cursor=pointer]:
+            - /url: https://github.com/tesseract-ocr/tesseract/wiki/Data-Files#data-files-for-version-302
+          - text: . These Tesseract dictionary files need to be unpacked to [Subtitle Edit folder]\Tesseract302\tessdata.
+          - text: "If you right-click in the list view, you will get a context menu with these options:"
+          - img "OCR list view context menu" [ref=f1e339]
+          - generic [ref=f1e340]: Import text with matching time codes...
+          - text: can be used to continue working on an earlier created subtitle.
+          - generic [ref=f1e341]: Save subtitle image as...
+          - text: allows for saving current image as either png, gif, bmp, or tiff.
+          - generic [ref=f1e342]: Save all images with html index
+          - text: display all subtitles images in an html page - for easy proofreading.
+          - text: OCR via Tesseract will work best if you also have
+          - link "spell check" [ref=f1e343] [cursor=pointer]:
+            - /url: "#spellcheck"
+          - text: dictionaries.
+          - img "OCR dictionary" [ref=f1e344]
+          - generic [ref=f1e345]: prompt for unknown words
+          - text: and
+          - generic [ref=f1e346]: Try to guess unknown words
+          - text: will only work if a dictionary is available.
+          - generic [ref=f1e347]: Fix OCR errors
+          - text: will also benefit from a dictionary.
+          - text: If you think Tesseract is too slow, you could set the spell check dictionary to "None" for better performance and then fix errors e.g. via "Fix common errors" plus spell check afterwards.
+          - text: The
+          - generic [ref=f1e348]: prompt for unknown words
+          - text: "will look like this (window is re-sizable):"
+          - img "OCR spell check" [ref=f1e349]
+          - generic [ref=f1e350]: Edit whole text
+          - text: will enable editing of the whole text (and not only the current word) - for this one sub only.
+          - generic [ref=f1e351]: Change all / Use always
+          - text: will change current word always - also in future works (saved in the OCR Fix Replace list - take a look at Dictionaries/eng_OCRFixReplaceList.xml to learn more about this file).
+          - generic [ref=f1e352]: Change / Use
+          - text: will change current word just this once.
+          - generic [ref=f1e353]: Add to names/noise list (case sensitive)
+          - text: will remember this name with current casing - also in future works.
+          - generic [ref=f1e354]: Add to user dictionary
+          - text: will remember this word and not prompt for it any more - also in future works.
+        - listitem [ref=f1e355]:
+          - text: "OCR via Tesseract 5 (recommended for text without italics or languages not available for Tesseract 3.02):"
+          - link "Tesseract" [ref=f1e356] [cursor=pointer]:
+            - /url: https://github.com/tesseract-ocr/tesseract
+          - text: is an open source OCR engine.
+          - text: You can find additional language data files at
+          - link "Github" [ref=f1e357] [cursor=pointer]:
+            - /url: https://github.com/tesseract-ocr/tesseract/wiki/Data-Files#updated-data-files-for-version-400-september-15-2017
+          - text: . These Tesseract dictionary files need to be unpacked to [Subtitle Edit folder]\Tesseract4\tessdata.
+          - text: Tesseract 5 uses a new OCR engine that uses neural network system based on LSTMs.
+          - text: Note that Tesseract 5 is a bit slower and has limited support for detecting italic font style - but it does bring accuracy gains, especially for smaller/unclear fonts.
+          - text: Note that Tesseract works best with black letters on a white background, or white letters on black background (try to avoid an outline).
+          - text: You'll need to install
+          - link "Visual C++ 2017 runtime" [ref=f1e358] [cursor=pointer]:
+            - /url: https://aka.ms/vs/15/release/vc_redist.x86.exe
+          - text: to run Tesseract 5 (otherwise SE will complain about a missing VCOMP140.dll file).
+        - listitem [ref=f1e359]:
+          - text: OCR via
+          - link "nOCR" [ref=f1e361] [cursor=pointer]:
+            - /url: /subtitleedit/nocr
+          - text: (recommended for larger subtitles like Blu-ray .sup)
+          - text: You can train nOCR with our own fonts fairly easy/quick.
+        - listitem [ref=f1e362]:
+          - text: OCR via
+          - link "Paddle OCR" [ref=f1e364] [cursor=pointer]:
+            - /url: https://github.com/PaddlePaddle/PaddleOCR
+          - text: (recommended for Chinese/English/Japanese/Korean)
+          - text: Even works well with complex images, e.g. from hard-coded subtitles.
+          - text: "Read more:"
+          - link "https://github.com/SubtitleEdit/subtitleedit/issues/9204" [ref=f1e365] [cursor=pointer]:
+            - /url: https://github.com/SubtitleEdit/subtitleedit/issues/9204
+      - text: Select one of the OCR methods and click on the button "Start OCR".
+      - text: When you are done just click "OK" and do remember that an OCR'ed subtitle most likely contains some errors that need correction.
+      - text: If a VobSub/TS subtitle contains more than one language, you will be prompted for language.
+      - separator [ref=f1e366]
+      - heading "Edit Blu-ray sup/TS-images/BdnXml image based subtitles" [level=2] [ref=f1e367]
+      - paragraph [ref=f1e368]:
+        - text: In File - Import - Blu-ray (.sup) subtitle file for edit it's possible to edit and re-save while keeping existing positions.
+        - text: "You can change color/size/alpha/position/forced/sync/duration of lines/insert and even replace a whole image and much more:"
+        - img "Edit Blu-ray sup screenshot" [ref=f1e369]
+        - text: In the preview to the right, you can see subtitles in a black box (the black box only shows the size of the image).
+        - text: The subtitle preview box can be moved with the mouse or via the position number up/down controls.
+        - text: In File - Save as... you can save as Blu-ray sup or BdnXml.
+      - separator [ref=f1e370]
+      - heading "Settings" [level=2] [ref=f1e371]
+      - paragraph [ref=f1e372]:
+        - text: In Settings you can adjust how Subtitle Edit will behave, so it's pretty important to take a look at these settings - especially single line maximum length and maximum characters per second as these settings will be used throughout all functionality, like "Fix common error" and other tools like syntax coloring in the main window list view (see the "Syntax coloring" settings for adjustments).
+        - img "Settings" [ref=f1e373]
+        - text: The most important rules are grouped in a "Profile" - you can use the default, choose one of the pre-defined profiles, or define your own.
+        - img "Settings - profiles" [ref=f1e374]
+      - separator [ref=f1e375]
+      - heading "Settings - Shortcuts" [level=2] [ref=f1e376]
+      - text: "A few of the most important ones are:"
+      - table [ref=f1e377]:
+        - rowgroup [ref=f1e378]:
+          - row "Window Control Shortcuts Function" [ref=f1e379]:
+            - columnheader "Window" [ref=f1e380]
+            - columnheader "Control" [ref=f1e381]
+            - columnheader "Shortcuts" [ref=f1e382]
+            - columnheader "Function" [ref=f1e383]
+        - rowgroup [ref=f1e384]:
+          - row "Main * Ctrl+F (customizable) Open the Find dialog" [ref=f1e385]:
+            - cell "Main" [ref=f1e386]
+            - cell "*" [ref=f1e387]
+            - cell "Ctrl+F (customizable)" [ref=f1e388]
+            - cell "Open the Find dialog" [ref=f1e389]
+          - row "Main (customizable) * F3 Find next" [ref=f1e390]:
+            - cell "Main (customizable)" [ref=f1e391]
+            - cell "*" [ref=f1e392]
+            - cell "F3" [ref=f1e393]
+            - cell "Find next" [ref=f1e394]
+          - row "Main * Ctrl+Z (customizable) Show history/undo" [ref=f1e395]:
+            - cell "Main" [ref=f1e396]
+            - cell "*" [ref=f1e397]
+            - cell "Ctrl+Z (customizable)" [ref=f1e398]
+            - cell "Show history/undo" [ref=f1e399]
+          - row "Main * Ctrl+G (customizable) Go to subtitle number dialog" [ref=f1e400]:
+            - cell "Main" [ref=f1e401]
+            - cell "*" [ref=f1e402]
+            - cell "Ctrl+G (customizable)" [ref=f1e403]
+            - cell "Go to subtitle number dialog" [ref=f1e404]
+          - row "Main * Alt+Arrow up Go one line up in subtitle list view" [ref=f1e405]:
+            - cell "Main" [ref=f1e406]
+            - cell "*" [ref=f1e407]
+            - cell "Alt+Arrow up" [ref=f1e408]
+            - cell "Go one line up in subtitle list view" [ref=f1e409]
+          - row "Main * Alt+Arrow down Go one line down in subtitle list view" [ref=f1e410]:
+            - cell "Main" [ref=f1e411]
+            - cell "*" [ref=f1e412]
+            - cell "Alt+Arrow down" [ref=f1e413]
+            - cell "Go one line down in subtitle list view" [ref=f1e414]
+          - row "Main Subtitle list view Ctrl+A Select all lines" [ref=f1e415]:
+            - cell "Main" [ref=f1e416]
+            - cell "Subtitle list view" [ref=f1e417]
+            - cell "Ctrl+A" [ref=f1e418]
+            - cell "Select all lines" [ref=f1e419]
+      - link "Complete list of shortcuts!" [ref=f1e420] [cursor=pointer]:
+        - /url: /subtitleedit/shortcuts
+      - text: "Shortcuts are configurable via Options -> Settings -> Shortcuts (let me know if you need more):"
+      - img "Configurable shortcuts" [ref=f1e421]
+      - text: "Note: Shortcuts in menus has a stricter validation than hidden shortcuts (e.g. [Shift+N] is not allowed in a menu but is fine for a hidden shortcut)."
+      - separator [ref=f1e422]
+      - heading "Settings - Video player" [level=2] [ref=f1e423]
+      - text: In the "Video player" section you can choose which video player to use inside SE.
+      - img "Settings - video player" [ref=f1e424]
+      - text: Currently "mpv" is recommended as it has precise seeking and on-video-preview.
+      - text: Click on "Download mpv lib" to download and use "mpv".
+      - generic [ref=f1e425]:
+        - text: If you have problems downloading mpv via the download button, you can download the file directly from
+        - link "GitHub" [ref=f1e426] [cursor=pointer]:
+          - /url: https://github.com/SubtitleEdit/support-files/tree/master/mpv
+        - text: .
+        - text: Download the
+        - link "libmpv2-64.zip" [ref=f1e427] [cursor=pointer]:
+          - /url: https://github.com/SubtitleEdit/support-files/raw/master/mpv/libmpv2-64.zip
+        - text: file if you have a 64-bit OS.
+        - text: Unpack the zip file and copy "mpv-2.dll" to the SE data folder (press Ctrl+Shift+Alt+D in the SE main window to open the SE data folder).
+        - text: "You can get cutting edge versions of mpv here:"
+        - link "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/" [ref=f1e428] [cursor=pointer]:
+          - /url: https://sourceforge.net/projects/mpv-player-windows/files/libmpv/
+      - separator [ref=f1e429]
+      - heading "Settings - Tools" [level=2] [ref=f1e430]
+      - text: "Here you can setup/tweak different tools:"
+      - img "Settings - Font" [ref=f1e431]
+      - text: If you often use "Fix common errors" and always use the same fix rules, then enable "Skip step one" to save time.
+      - text: Often people want to customize line split, so many options are available for this incl. do-not-break-after list.
+      - text: The "auto br" line split settings are used in "Fix common errors", the main window "Auto br" button, and the list view context menu "Auto balance selected lines".
+      - text: Note that the "Auto br" button works on selected lines.
+      - separator [ref=f1e432]
+      - heading "Settings - Appearance" [level=2] [ref=f1e433]
+      - text: Here you can set font and other UI properties for the SE interface.
+      - img "Settings - Font" [ref=f1e434]
+      - text: "Use syntax coloring will enable syntax coloring of html tags and optional spelling errors:"
+      - img "Settings - Appearance - Text box syntax coloring" [ref=f1e435]
+      - text: "Dark theme / Dark mode will switch color theme to something like this:"
+      - img "Settings - Appearance - Dark theme" [ref=f1e436]
+      - separator [ref=f1e437]
+      - heading "Bookmarks" [level=2] [ref=f1e438]
+      - text: You can add a bookmark for a line by activating one of the "Toggle bookmark" shortcuts (see Options - Settings - Shortcuts).
+      - text: In the "Add bookmark with comment" window you can enter a comment to the bookmark (use Shift+Enter for more than one line).
+      - text: Bookmarks are saved in a separate file. If you're working on "video.srt", then SE will save the bookmarks in a file called "Video.srt.SE.bookmarks", so you can actually email both files to other people using SE, and they can also see the bookmarks.
+      - img "Bookmark" [ref=f1e439]
+      - text: "Tip 1: You can right click on the bookmark image left of the text box to get a context menu."
+      - text: "Tip 2: You can double click on the yellow text label to edit the text."
+      - separator [ref=f1e440]
+      - heading "Generate background box (for Advanced Sub Station Alpha)" [level=2] [ref=f1e441]
+      - text: Generate a box with e.g. rounded corners behind the text.
+      - text: It's also possible to add a drawing (logo/flag/etc.) to each background box or even instead of the box.
+      - text: "Drawings can use a little scripting inside brackets ([]) with these constants which are calculated from current subtitle text: left, top, right, bottom, width, height"
+      - text: "Example of coordinate: [left+width*0.9],[top+10]"
+      - text: The preview will update if the drawing source file is changed, e.g. if you edit it in notepad.
+      - text: "Important note: Background box should be made when finishing a subtitle. Box sizes will reflect the text at the time of generation!"
+      - img "Generate background box" [ref=f1e442]
+      - separator [ref=f1e443]
+      - heading "Translating Subtitle Edit to another language" [level=2] [ref=f1e444]
+      - text: To translate Subtitle Edit first download
+      - link "the English xml language file" [ref=f1e445] [cursor=pointer]:
+        - /url: https://raw.githubusercontent.com/SubtitleEdit/subtitleedit/main/LanguageBaseEnglish.xml
+      - text: and save it to your "Subtitle Edit\Languages" folder. Translate the content of all tags with an xml editor or just notepad. You can also use
+      - link "Xml Content Translator" [ref=f1e446] [cursor=pointer]:
+        - /url: /XmlContentTranslator
+      - text: "!"
+      - text: Save your edited xml file as 'CultureName'.xml ('CultureName' must be an
+      - link "existing culture name" [ref=f1e447] [cursor=pointer]:
+        - /url: http://msdn.microsoft.com/en-us/library/system.globalization.cultureinfo%28v=vs.80%29.aspx
+      - text: "- and also a tag in the xml file) in the SubtitleEdit\\Languages folder. In Options > Choose language, you can now test your translation by choosing your language as language."
+      - text: Please do send any translations to me, so I can include them in Subtitle Edit - thx :)
+      - text: "Tip 1:"
+      - link "WinMerge" [ref=f1e448] [cursor=pointer]:
+        - /url: http://winmerge.org
+      - text: is an excellent tool for comparing files.
+      - text: "Tip 2: In the About section you can put your email (with \"mailto:\" before to make a clickable link) or homepage."
+      - text: "Tip 3: The help file tag can point to an url where the help is - keep it blank to just point to the English help file."
+      - text: The installer can localized by translating
+      - link "this file" [ref=f1e449] [cursor=pointer]:
+        - /url: https://github.com/SubtitleEdit/subtitleedit/blob/main/installer/Subtitle_Edit_Localization.iss
+      - text: .
+      - separator [ref=f1e450]
+      - heading "Networking - online collaboration" [level=2] [ref=f1e451]
+      - text: If you and a few friends want to translate the same subtitle at the same time over the internet, then do try the "Networking" feature.
+      - text: "First load the subtitle you want translated (and optionally the original subtitle). Then choose \"Start new session\" in the \"Networking\" menu:"
+      - img "Start network session" [ref=f1e452]
+      - text: The "session key" is your subtitle id (can be any text you like) - other people need this in order to join (via menu Networking -> Join session) your session.
+      - text: The "username" will be displayed when updating/inserting/deleting lines and in the chat window
+      - text: The "webservice url" points to a small server program hosting the session (I initially developed this via direct p2p, but decided to use a webservice instead, as it works much better with stuff like firewalls).
+      - link "Source code for this webservice is available" [ref=f1e453] [cursor=pointer]:
+        - /url: /assets/SubtitleEdit/SeNetworkingService.zip
+      - text: and should make it easy to use your own server for hosting the networking session.
+      - text: Subtitle Edit running in networking mode below. In the "User/action" column in the list view you can follow the translation progress - this might sparkle some synergistic effect!
+      - img "Subtitle Edit running in networking mode" [ref=f1e454]
+      - separator [ref=f1e455]
+      - heading "Beautify time codes" [level=2] [ref=f1e456]
+      - text: Beautify time codes can round time codes to frame time codes, and/or put cues on shot changes if they are near enough.
+      - text: With ffprobe (in-program download) you can round time code milliseconds to frame time codes.
+      - text: Snap to shot changes with advanced rules. Shot changes can be generated by ffmpeg (ffmpeg is an in-program download).
+      - img "Beautify time codes UI" [ref=f1e457]
+      - text: "The rules are very configurable, and can e.g. be configured to support Netflix rules:"
+      - img "Beautify time codes UI" [ref=f1e458]
+      - separator [ref=f1e459]
+      - heading "Batch convert via UI" [level=2] [ref=f1e460]
+      - text: Batch convert is accessible via Tools -> Batch convert... or you can start the batch convert directly via SubtitleEdit /batchconvertui
+      - text: Batch convert is a powerful tool that can convert between 300 different subtitle formats with a lot of options.
+      - text: Many formats can also be read from mkv/mp4/ts/m2ts files.
+      - text: "Some of the batch convert options have their own settings, e.g. \"Merge short lines\". To show the settings for \"Merge short lines\", the list box line with the \"Merge short lines\" option should be selected like below (note: it's not enough to click on the check box, a click on the text is needed)."
+      - text: Transport streams (.ts/.m2ts) can only be converted to Blu-ray sup files - check the TS settings if you want to resize or do re-positioning.
+      - img "Batch convert UI" [ref=f1e461]
+      - separator [ref=f1e462]
+      - heading "Audio to text" [level=2] [ref=f1e463]
+      - text: Audio to text (also called "speech to text" or "speech recognition") is accessible via Video -> Audio to text... or you can make a custom shortcut.
+      - generic [ref=f1e464]: Audio to text (Whisper)
+      - text: is a new experimental speech recognition framework that works on around 100 languages.
+      - img "Audio to text" [ref=f1e465]
+      - text: "You can use one of these Whisper versions:"
+      - list [ref=f1e466]:
+        - listitem [ref=f1e467]:
+          - text: The original
+          - link "OpenAI Whisper" [ref=f1e468] [cursor=pointer]:
+            - /url: https://github.com/openai/whisper
+          - text: (requires Python)
+        - listitem [ref=f1e469]:
+          - text: Purfview's
+          - link "Faster-Whisper" [ref=f1e470] [cursor=pointer]:
+            - /url: https://github.com/Purfview/whisper-standalone-win
+          - text: (Windows only)
+        - listitem [ref=f1e471]:
+          - text: A simplified/optimized version called
+          - link "whisper.cpp" [ref=f1e472] [cursor=pointer]:
+            - /url: https://github.com/ggerganov/whisper.cpp
+          - text: (written in C++)
+        - listitem [ref=f1e473]:
+          - text: A GPU optimized version of CPP with
+          - link "cuBLAS support" [ref=f1e474] [cursor=pointer]:
+            - /url: https://github.com/ggerganov/whisper.cpp
+          - text: (written in C++)
+        - listitem [ref=f1e475]:
+          - text: A GPU optimized version called
+          - link "Whisper Const-me" [ref=f1e476] [cursor=pointer]:
+            - /url: https://github.com/Const-me/Whisper
+          - text: (written in C++)
+        - listitem [ref=f1e477]:
+          - text: A optimized version called
+          - link "Faster Whisper with CTranslate2" [ref=f1e478] [cursor=pointer]:
+            - /url: https://github.com/jordimas/whisper-ctranslate2
+          - text: (requires Python)
+        - listitem [ref=f1e479]:
+          - text: Another Python version called
+          - link "stable-ts" [ref=f1e480] [cursor=pointer]:
+            - /url: https://github.com/jianfch/stable-ts
+          - text: (requires Python)
+        - listitem [ref=f1e481]:
+          - text: Another Python version called
+          - link "whisperX" [ref=f1e482] [cursor=pointer]:
+            - /url: https://github.com/m-bain/whisperX
+          - text: (requires Python)
+      - text: To install and run the OpenAI Python version, you will need to follow
+      - link "the installation instructions" [ref=f1e483] [cursor=pointer]:
+        - /url: https://github.com/openai/whisper#setup
+      - text: .
+      - text: Before installing Whisper Python versions, do
+      - link "install Python" [ref=f1e484] [cursor=pointer]:
+        - /url: https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe
+      - text: and remember to check "Add Python to PATH" and you also might need
+      - link "Git" [ref=f1e485] [cursor=pointer]:
+        - /url: https://gitforwindows.org/
+      - text: too.
+      - text: "Manual model download links for OpenAI Python version:"
+      - link "tiny.en" [ref=f1e486] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/d3dd57d32accea0b295c96e26691aa14d8822fac7d9d27d5dc00b4ca2826dd03/tiny.en.pt
+      - link "tiny" [ref=f1e487] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt
+      - link "base.en" [ref=f1e488] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/25a8566e1d0c1e2231d1c762132cd20e0f96a85d16145c3a00adf5d1ac670ead/base.en.pt
+      - link "base" [ref=f1e489] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt
+      - link "small.en" [ref=f1e490] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/f953ad0fd29cacd07d5a9eda5624af0f6bcf2258be67c92b79389873d91e0872/small.en.pt
+      - link "small" [ref=f1e491] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt
+      - link "medium.en" [ref=f1e492] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/d7440d1dc186f76616474e0ff0b3b6b879abc9d1a4926b7adfa41db2d497ab4f/medium.en.pt
+      - link "medium" [ref=f1e493] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt
+      - link "largev2" [ref=f1e494] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/81f7c96c852ee8fc832187b0132e569d6c3065a3252ed18e56effd0b6a73e524/large-v2.pt
+      - link "large (v3)" [ref=f1e495] [cursor=pointer]:
+        - /url: https://openaipublic.azureedge.net/main/whisper/models/e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb/large-v3.pt
+      - text: "Manual model download links for Faster-Whisper versions:"
+      - link "Faster-Whisper models" [ref=f1e496] [cursor=pointer]:
+        - /url: "https://huggingface.co/Systran "
+      - text: "Manual model download links for CPP versions:"
+      - link "tiny.en" [ref=f1e497] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+      - link "tiny" [ref=f1e498] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+      - link "base.en" [ref=f1e499] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+      - link "base" [ref=f1e500] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+      - link "small.en" [ref=f1e501] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
+      - link "small" [ref=f1e502] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+      - link "medium.en" [ref=f1e503] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
+      - link "medium" [ref=f1e504] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
+      - link "largev2" [ref=f1e505] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin
+      - link "large (v3)" [ref=f1e506] [cursor=pointer]:
+        - /url: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
+      - text: "Requirements for \"CPP cuBLAS\": https://developer.nvidia.com/cuda-downloads"
+      - text: "Requirements: Requirements vary depending of Whisper engine and model. The large model can require up to 16 GB of ram."
+      - text: Whisper CPP/Const-me require a newer CPU with AVX instruction set.
+      - text: If you do not want to install Python, Purfview has Whisper OpenAI and Whisper CTranslate2
+      - link "compiled binaries" [ref=f1e507] [cursor=pointer]:
+        - /url: https://github.com/Purfview/whisper-standalone-win/releases
+      - text: .
+      - text: "Note: A whisper log is written to the file \"whisper_log.txt\" in the \"SE data folder\" (press Ctrl+Alt+Shift+D in the SE main window to open the SE data folder)."
+      - text: "Note: You can press F2 in the Whisper windows too see the actual command line output during transcribe."
+      - text: "Note: All Python Whisper can be very difficult to install, so follow the authors installation instructions very carefully. It's probably best to use Python 3.10 and often different Whisper versions cannot requires different versions of the same packages so do use something like"
+      - link "Anaconda" [ref=f1e508] [cursor=pointer]:
+        - /url: https://www.anaconda.com/download
+      - text: .
+      - generic [ref=f1e509]: Audio to text (Vosk/Kaldi)
+      - text: can convert speech to text for more that 20 languages.
+      - text: The resulting quality depends on how clear the speech is and how good the model is.
+      - text: Batch conversion is available and you can also use Audio to text on selected lines in the list view via context menu (right click).
+      - img "Audio to text" [ref=f1e510]
+      - text: Audio to text (Vosk/Kaldi) requires
+      - link "libvosk" [ref=f1e511] [cursor=pointer]:
+        - /url: https://github.com/alphacep/vosk-api
+      - text: and
+      - link "audio to text models" [ref=f1e512] [cursor=pointer]:
+        - /url: https://alphacephei.com/vosk/models
+      - text: as well as
+      - link "FFmpeg" [ref=f1e513] [cursor=pointer]:
+        - /url: https://ffmpeg.org
+      - text: .
+      - text: "libvosk, FFmpeg and models download should be handled by the SE UI, and the folder structure will be like this:"
+      - list [ref=f1e514]:
+        - listitem [ref=f1e515]: "FFmpeg: [SE Data folder]\\ffmpeg (should contain ffmpeg.exe)"
+        - listitem [ref=f1e516]: "libvosk: [SE Data folder]\\Vosk (should contain libvosk.dll etc.)"
+        - listitem [ref=f1e517]: "models: [SE Data folder]\\Vosk\\[model name] (should contain final.mdl in the \"am\" folder)"
+      - img "Audio to text" [ref=f1e518]
+      - text: On Linux you need to
+      - link "install vosk" [ref=f1e519] [cursor=pointer]:
+        - /url: https://github.com/SubtitleEdit/subtitleedit/issues/6071
+      - text: with "pip3 install vosk" and setup a symlink file like "sudo ln -s /usr/local/lib/python3.8/dist-packages/vosk/libvosk.so ~/Downloads/SubtitleEdit/libvosk.so".
+      - separator [ref=f1e520]
+      - heading "Text to speech" [level=2] [ref=f1e521]
+      - text: Text to speech (TTS) is accessible via Video -> Text to speech and add to video... or you can make a custom shortcut.
+      - text: Note that split sentences should be merged before using TTS. Formatting should also be removed.
+      - text: CPS (characters per second) should not be too high or the audio will sound bad (too fast).
+      - text: Will convert all texts from a subtitle and convert to audio and optionally add this new audio track to your video file.
+      - text: For ASSA format, you can assign a voice to each actor.
+      - link "Piper TTS" [ref=f1e523] [cursor=pointer]:
+        - /url: https://github.com/rhasspy/piper
+      - text: ": Requires an in-program download for Windows + requires model downloads. Good quality and speed. Includes many voices."
+      - link "Tortoise TTS" [ref=f1e525] [cursor=pointer]:
+        - /url: https://github.com/neonbjb/tortoise-tts
+      - text: ": Requires an installation via Python. Good but very slow, especially without CUDA."
+      - link "Coqui AI TTS" [ref=f1e527] [cursor=pointer]:
+        - /url: https://github.com/coqui-ai/TTS
+      - text: ": SE will run against the api (tts-server), see"
+      - link "the docker images" [ref=f1e528] [cursor=pointer]:
+        - /url: https://docs.coqui.ai/en/latest/docker_images.html
+      - text: page.
+      - text: Only one voice at a time.
+      - link "ElevenLabs" [ref=f1e530] [cursor=pointer]:
+        - /url: https://elevenlabs.io/api
+      - text: ": Online. Requires an API key. Good quality and many voice."
+      - text: "Microsoft Speech Synthesizer TTS: Old, fast, and very robotic. Included with Windows (probably)."
+      - separator [ref=f1e531]
+      - heading "Subtitle Edit command line conversion" [level=2] [ref=f1e532]
+      - text: Subtitle Edit can do command line conversion between formats listed in the main window format drop down list.
+      - text: "Syntax: SubtitleEdit /convert \"pattern\" \"name-of-format-without-spaces\" [/encoding:?] [/fps:?] [/outputfolder:?]:"
+      - text: "Example 1:"
+      - generic [ref=f1e533]: SubtitleEdit /convert sub1.srt sami
+      - text: "Result: Will convert sub1.srt to sub1.sub to SAMI format"
+      - text: "Example 2:"
+      - generic [ref=f1e534]: SubtitleEdit /convert *.srt adobeencore
+      - text: "Result: Will convert all .srt files to Adobe Encore format"
+      - text: "Example 3:"
+      - generic [ref=f1e535]: SubtitleEdit /convert *.srt adobeencore /encoding:windows-1252
+      - text: "Result: Same as above but using windows-1252 file encoding (see"
+      - link "Info.Name list" [ref=f1e536] [cursor=pointer]:
+        - /url: http://msdn.microsoft.com/en-us/library/system.text.encodinginfo.getencoding.aspx
+      - text: for more encodings)
+      - text: "Example 4:"
+      - generic [ref=f1e537]: SubtitleEdit /convert a.sub subrip /fps:25
+      - text: "Result: Converts frame based a.sub to time based a.srt via a frame rate of 25"
+      - text: "Example 5:"
+      - generic [ref=f1e538]: SubtitleEdit /convert a.sub subrip /outputfolder:C:\Temp
+      - text: "Result: Converts a.sub to C:\\Temp\\a.srt"
+      - text: "Example 6:"
+      - generic [ref=f1e539]: SubtitleEdit /convert a.sub CustomText:MyFormat
+      - text: "Result: Converts a.sub to a.txt in a custom format named \"MyFormat\""
+      - text: "To list supported formats:"
+      - generic [ref=f1e540]: SubtitleEdit /convert /list
+      - text: "Result: Show the more than 300 supported formats in command line conversion!"
+      - separator [ref=f1e541]
+      - heading "Portable version and VLC" [level=2] [ref=f1e542]
+      - text: To use Subtitle Edit portable with VLC portable, download VLC portable (at least version 1.1.0, like
+      - link "VLC 3.0.8 64-bit" [ref=f1e543] [cursor=pointer]:
+        - /url: https://get.videolan.org/vlc/3.0.8/win64/vlc-3.0.8-win64.exe
+      - text: or
+      - link "VLC 3.0.8 32-bit" [ref=f1e544] [cursor=pointer]:
+        - /url: https://get.videolan.org/vlc/3.0.8/win32/vlc-3.0.8-win32.exe
+      - text: ).
+      - text: Now you can unpack to a sub folder in the Subtitle Edit folder called "VLC" or go to Options -> Settings -> Video player and browse to VLC portable version.
+      - text: "Note: You need VLC 64-bit on 64-bit operating systems, and VLC 32-bit on 32-bit operating systems."
+      - separator [ref=f1e545]
+      - heading "Make your own plugin" [level=2] [ref=f1e546]
+      - text: If you can code C# or VB.net you can make your own plugins for SE (SE 3.3 and later).
+      - text: You can
+      - link "visit the GitHub plugin page" [ref=f1e547] [cursor=pointer]:
+        - /url: https://github.com/SubtitleEdit/plugins
+      - text: for more information and download.
+      - text: "\"Haxor\" is a very basic example."
+      - text: "\"Fix Hyphens\" is a more complete example with a form and some basic helper classes."
+      - text: "At the moment it is possible to use plugins here: File, Tools, Sync, Translate, and \"Spell check\"."
+      - text: Compile to "Any CPU" and not x86 or x64.
+      - separator [ref=f1e548]
+      - heading "Subtitle Edit on Linux" [level=2] [ref=f1e549]
+      - text: Even though Subtitle Edit is a Windows program, it runs (mostly) well on Linux via
+      - link "Mono" [ref=f1e550] [cursor=pointer]:
+        - /url: https://www.mono-project.com/docs/gui/winforms/
+      - text: .
+      - text: Note that a dotnet
+      - link "CLI version" [ref=f1e551] [cursor=pointer]:
+        - /url: https://github.com/SubtitleEdit/subtitleedit-cli
+      - text: is also available (no mono).
+      - img "SE running on Linux" [ref=f1e552]
+      - text: Download the portable version of SE (and not the installer).
+      - text: "Packages required for Ubuntu based distros:"
+      - list [ref=f1e553]:
+        - listitem [ref=f1e554]: sudo apt-get install mono-complete
+        - listitem [ref=f1e555]: sudo apt-get install libhunspell-dev
+        - listitem [ref=f1e556]: sudo apt-get install libmpv-dev (libmpv.so)
+        - listitem [ref=f1e557]: sudo apt-get install tesseract-ocr
+        - listitem [ref=f1e558]: sudo apt-get install vlc (already installed on some distros, SE uses (libvlc.so))
+        - listitem [ref=f1e559]: sudo apt-get install ffmpeg (already installed on some distros)
+      - text: "Packages required for Arch based distros (like Manjaro):"
+      - list [ref=f1e560]:
+        - listitem [ref=f1e561]: sudo pacman -S mono
+        - listitem [ref=f1e562]: sudo pacman -S mpv
+        - listitem [ref=f1e563]: sudo pacman -S hunspell
+        - listitem [ref=f1e564]: sudo pacman -S ttf-dejavu (Unicode font)
+        - listitem [ref=f1e565]: sudo pacman -S tesseract
+        - listitem [ref=f1e566]: sudo pacman -S tesseract-data-eng (or install via "sudo mono SubtitleEdit.exe")
+      - text: "Packages required for Fedora:"
+      - list [ref=f1e567]:
+        - listitem [ref=f1e568]: sudo dnf -y install mono-complete hunspell dejavu-sans-fonts tesseract tesseract-langpack-eng vlc vlc-extras ffmpeg
+      - generic [ref=f1e569]:
+        - text: "Fedora: To use libmpv you will need to enable"
+        - link "rpmfusion" [ref=f1e570] [cursor=pointer]:
+          - /url: https://docs.fedoraproject.org/en-US/quick-docs/setup_rpmfusion/
+        - text: and install "mpv mpv-libs" packages + Change "<MpvVideoOutputLinux />" to "<MpvVideoOutputLinux>x11</MpvVideoOutputLinux>" in Settings.xml.
+        - text: "To use spell check you will need to make a symlink link like this: sudo ln -s /usr/lib64/libhunspell-1.7.so.0 ~/Downloads/SubtitleEdit/libhunspell.so"
+      - text: After unpacking SE and installing the packages, you can start SE by running "mono SubtitleEdit.exe" in a terminal.
+      - text: (The "Tesseract302" folder and the two hunspell dll files can be deleted as they are for Windows only.)
+      - text: Tesseract languages must be installed via a package - e.g. on Ubuntu "sudo apt-get install tesseract-ocr-eng".
+      - text: "Note that these lib are required (a symlink file may be needed): libc.so.6, libdl.so (libdl.so.2 in SE 3.5.16) Adding a missing symlink for libvlc could look like this: sudo ln -s /usr/lib/x86_64-linux-gnu/libvlc.so.5.6.0 ~Downloads/SubtitleEdit/libvlc.so"
+      - text: "Known issues:"
+      - list [ref=f1e571]:
+        - listitem [ref=f1e572]: Setting focus on a control programmatically does not work
+        - listitem [ref=f1e573]:
+          - text: The letter è (and some other Unicode characters) will crash SE - read more
+          - link "in this Github issue" [ref=f1e574] [cursor=pointer]:
+            - /url: https://github.com/mono/mono/issues/17029
+        - listitem [ref=f1e575]: Some languages like Chinese or Arabic might require a different font.
+        - listitem [ref=f1e576]: Text to bitmap rendering is not working well. In image exporting try "Simple rendering" if you have problems.
+        - listitem [ref=f1e577]: Winforms layout...
+      - separator [ref=f1e578]
+      - heading "Compiling Subtitle Edit" [level=2] [ref=f1e579]
+      - text: Compiling your own version of Subtitle Edit is not that hard :)
+      - text: If you don't have MS Visual Studio, then download and install
+      - link "MS Visual Studio Community" [ref=f1e580] [cursor=pointer]:
+        - /url: https://visualstudio.microsoft.com/vs/community
+      - text: ". Then download the Subtitle Edit source code and edit the file \"SubtitleEdit.csproj\" and remove the following line:"
+      - generic [ref=f1e581]: <Exec Command="%22$(SolutionDir)..\build_helpers.bat%22 rev %22$(ConfigurationName)%22" />
+      - text: Open "SubtitleEdit.csproj" in Visual Studio, go to Tools -> NuGet Packet Manager -> Manage NuGet packages for Solution... - and click "Restore" (this will download required components).
+      - text: Hit F5 and you should be up and running.
+      - text: Now you can change/add features you want or fix my bugs - if there were any ;)
+      - separator [ref=f1e582]
+      - heading "Known issues" [level=2] [ref=f1e583]
+      - text: Subtitle Edit has a few known problems!
+      - table [ref=f1e584]:
+        - rowgroup [ref=f1e585]:
+          - row "Problem Solution" [ref=f1e586]:
+            - columnheader "Problem" [ref=f1e587]
+            - columnheader "Solution" [ref=f1e588]
+        - rowgroup [ref=f1e589]:
+          - row "Subtitle Edit does not detect VLC in options (it's grayed out) SE requires VLC 64-bit version on 64-bit operating systems (use VLC 32-bit on 32-bit operating systems)" [ref=f1e590]:
+            - cell "Subtitle Edit does not detect VLC in options (it's grayed out)" [ref=f1e591]
+            - cell "SE requires VLC 64-bit version on 64-bit operating systems (use VLC 32-bit on 32-bit operating systems)" [ref=f1e592]
+          - row "Subtitle Edit portable is not working properly in \"Program files\" folder Use the installer if you want to have Subtitle Edit in \"Program files\" (remove portable version before installing) The portable version requires write access to it's own folder." [ref=f1e593]:
+            - cell "Subtitle Edit portable is not working properly in \"Program files\" folder" [ref=f1e594]
+            - cell "Use the installer if you want to have Subtitle Edit in \"Program files\" (remove portable version before installing) The portable version requires write access to it's own folder." [ref=f1e595]:
+              - text: Use the installer if you want to have Subtitle Edit in "Program files" (remove portable version before installing)
+              - text: The portable version requires write access to it's own folder.
+          - 'row "Tesseract 3.0.2 will not run properly You might need the Microsoft Visual C++ 2008 Redistributable Package: https://www.microsoft.com/en-us/download/details.aspx?id=29 If it still don''t work, try to delete \"C:\\Program files\\Subtitle Edit\", \"C:\\Program files (x86)\\Subtitle Edit\" and \"C:\\Users\\[Username]\\App Data\\Roaming\\SubtitleEdit\" before re-installing." [ref=f1e596]':
+            - cell "Tesseract 3.0.2 will not run properly" [ref=f1e597]
+            - 'cell "You might need the Microsoft Visual C++ 2008 Redistributable Package: https://www.microsoft.com/en-us/download/details.aspx?id=29 If it still don''t work, try to delete \"C:\\Program files\\Subtitle Edit\", \"C:\\Program files (x86)\\Subtitle Edit\" and \"C:\\Users\\[Username]\\App Data\\Roaming\\SubtitleEdit\" before re-installing." [ref=f1e598]':
+              - text: "You might need the Microsoft Visual C++ 2008 Redistributable Package:"
+              - link "https://www.microsoft.com/en-us/download/details.aspx?id=29" [ref=f1e599] [cursor=pointer]:
+                - /url: https://www.microsoft.com/en-us/download/details.aspx?id=29
+              - text: If it still don't work, try to delete "C:\Program files\Subtitle Edit", "C:\Program files (x86)\Subtitle Edit" and "C:\Users\[Username]\App Data\Roaming\SubtitleEdit" before re-installing.
+          - row "Subtitle Edit fails to run from a network drive (\"The publisher could not be verified\") If you do not have sufficient access to run Subtitle Edit from a network drive, then copy it to your local hard disk or obtain the needed access" [ref=f1e600]:
+            - cell "Subtitle Edit fails to run from a network drive (\"The publisher could not be verified\")" [ref=f1e601]
+            - cell "If you do not have sufficient access to run Subtitle Edit from a network drive, then copy it to your local hard disk or obtain the needed access" [ref=f1e602]
+          - row "Subtitle Edit fails to display some non-English lines in waveform. Known error" [ref=f1e603]:
+            - cell "Subtitle Edit fails to display some non-English lines in waveform." [ref=f1e604]
+            - cell "Known error" [ref=f1e605]
+          - row "Whisper will not run on some computers. Whisper might require a CPU with AVX support and up to 16GB of free RAM." [ref=f1e606]:
+            - cell "Whisper will not run on some computers." [ref=f1e607]
+            - cell "Whisper might require a CPU with AVX support and up to 16GB of free RAM." [ref=f1e608]
+      - text: Did you not find what you were looking for? Feel free to
+      - link "email me" [ref=f1e609] [cursor=pointer]:
+        - /url: mailto:nikse.dk@gmail.com
+      - text: .
+      - separator [ref=f1e610]
+      - heading "Useful links" [level=3] [ref=f1e611]
+      - text: Do check out the
+      - link "Subtitle Edit videos" [ref=f1e612] [cursor=pointer]:
+        - /url: /subtitleedit/video
+      - text: .
+      - link "VideoHelp subtitle forum" [ref=f1e613] [cursor=pointer]:
+        - /url: https://forum.videohelp.com/forums/42-Subtitle
+      - text: General subtitle forum
+      - link "Subtitle Edit forum thread" [ref=f1e614] [cursor=pointer]:
+        - /url: https://forum.doom9.org/showthread.php?t=162721
+      - text: on doom9.org
+      - text: Forum, mostly related to ripping and encoding
+      - link "Ask me anything about subtitling" [ref=f1e615] [cursor=pointer]:
+        - /url: https://www.proz.com/forum/subtitling/283471-ask_me_anything_about_subtitling.html
+      - text: by Max Deryagin
+      - text: Forum thread about subtitling (mostly related to working as a translator)
+      - link "Sub-Talk.net" [ref=f1e616] [cursor=pointer]:
+        - /url: https://www.sub-talk.net/
+      - text: Forum for
+      - link "Addic7ed" [ref=f1e617] [cursor=pointer]:
+        - /url: https://www.addic7ed.com/
+      - text: "- also has"
+      - link "SE tread" [ref=f1e618] [cursor=pointer]:
+        - /url: https://www.sub-talk.net/topic/107-subtitle-edit-open-source-subtitle-editor/
+      - text: and
+      - link "an interesting thread about sync" [ref=f1e619] [cursor=pointer]:
+        - /url: https://www.sub-talk.net/topic/2827-how-to-resync-subtitles-using-subtitle-edit/?do=findComment&comment=39189

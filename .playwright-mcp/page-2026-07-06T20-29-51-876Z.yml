@@ -1,0 +1,83 @@
+- generic [ref=e3]:
+  - navigation [ref=e5]:
+    - generic [ref=e6]:
+      - link "N i k s e . d k":
+        - /url: /
+        - generic [ref=e7] [cursor=pointer]: "N"
+        - generic [ref=e8] [cursor=pointer]: i
+        - generic [ref=e9] [cursor=pointer]: k
+        - generic [ref=e10] [cursor=pointer]: s
+        - generic [ref=e11] [cursor=pointer]: e
+        - generic [ref=e12] [cursor=pointer]: .
+        - generic [ref=e13] [cursor=pointer]: d
+        - generic [ref=e14] [cursor=pointer]: k
+    - list [ref=e16]:
+      - listitem [ref=e17]:
+        - link "Login" [ref=e18] [cursor=pointer]:
+          - /url: /profile
+      - listitem [ref=e19]:
+        - link "Register" [ref=e20] [cursor=pointer]:
+          - /url: /register
+      - listitem [ref=e21]:
+        - link "Donate" [ref=e22] [cursor=pointer]:
+          - /url: /donate
+  - generic [ref=e26]:
+    - generic [ref=e27]:
+      - text: Services
+      - list [ref=e28]:
+        - listitem [ref=e29]:
+          - link "Subtitle Edit Online" [ref=e30] [cursor=pointer]:
+            - /url: /subtitleedit/online
+    - generic [ref=e31]:
+      - text: Software
+      - list [ref=e32]:
+        - listitem [ref=e33]:
+          - link "Subtitle Edit" [ref=e34] [cursor=pointer]:
+            - /url: /subtitleedit
+          - list [ref=e35]:
+            - listitem [ref=e36]:
+              - link "Help/FAQ" [ref=e37] [cursor=pointer]:
+                - /url: /subtitleedit/help
+            - listitem [ref=e38]:
+              - link "Videos" [ref=e39] [cursor=pointer]:
+                - /url: /subtitleedit/video
+        - listitem [ref=e40]:
+          - link "Xml Content Translator" [ref=e41] [cursor=pointer]:
+            - /url: /xmlcontenttranslator
+    - generic [ref=e42]:
+      - text: Subtitle formats
+      - list [ref=e43]:
+        - listitem [ref=e44]:
+          - link "SubRip" [ref=e45] [cursor=pointer]:
+            - /url: /subtitleedit/formats/subrip
+        - listitem [ref=e46]:
+          - link "ASSA" [ref=e47] [cursor=pointer]:
+            - /url: /subtitleedit/formats/assa
+          - list [ref=e48]:
+            - listitem [ref=e49]:
+              - link "ASSA override tags" [ref=e50] [cursor=pointer]:
+                - /url: /subtitleedit/formats/assa-override-tags
+    - generic [ref=e51]:
+      - text: Download
+      - list [ref=e52]:
+        - listitem [ref=e53]:
+          - link "Subtitle Edit 5.0.0" [ref=e54] [cursor=pointer]:
+            - /url: https://github.com/SubtitleEdit/subtitleedit/releases
+        - listitem [ref=e55]:
+          - link "Xml Content Translator 1.12" [ref=e56] [cursor=pointer]:
+            - /url: https://github.com/SubtitleEdit/XmlContentTranslator/releases/download/1.12/XmlContentTranslator.zip
+    - generic [ref=e57]:
+      - text: About/contact
+      - list [ref=e58]:
+        - listitem [ref=e59]:
+          - link "About me" [ref=e60] [cursor=pointer]:
+            - /url: /about
+        - listitem [ref=e61]:
+          - link "Email" [ref=e62] [cursor=pointer]:
+            - /url: mailto:nikse.dk@gmail.com
+    - generic [ref=e63]:
+      - text: Donate
+      - list [ref=e64]:
+        - listitem [ref=e65]:
+          - link "Donate" [ref=e66] [cursor=pointer]:
+            - /url: /donate

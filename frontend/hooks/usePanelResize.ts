@@ -1,0 +1,99 @@
+import React, { useRef, useState, useCallback } from 'react';
+
+/**
+ * Hook per gestionar el redimensionament vertical d'un panell.
+ * Extret del patró duplicat a VideoSubtitlesEditorView i VideoEditorView.
+ * Usa RAF throttling per evitar rerenders excessius durant el drag.
+ */
+export function useVerticalPanelResize(initial: number, min = 100) {
+  const [height, setHeight] = useState(initial);
+  const isResizingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(0);
+  const rafRef = useRef<number>(0);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingRef.current) return;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      setHeight(Math.max(min, startHeightRef.current + (e.clientY - startYRef.current)));
+      rafRef.current = 0;
+    });
+  }, [min]);
+
+  const handleMouseUp = useCallback(() => {
+    isResizingRef.current = false;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
+    document.body.style.cursor = '';
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseMove]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    startYRef.current = e.clientY;
+    startHeightRef.current = height;
+    document.body.style.cursor = 'row-resize';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, [height, handleMouseMove, handleMouseUp]);
+
+  return { height, setHeight, handleMouseDown };
+}
+
+/**
+ * Hook per gestionar el redimensionament horitzontal d'un panell (en %).
+ * El containerRef ha d'apuntar al contenidor pare dels dos panells.
+ * Usa RAF throttling per evitar rerenders excessius durant el drag.
+ */
+export function useHorizontalPanelResize(
+  containerRef: React.RefObject<HTMLElement>,
+  initial = 50,
+  min = 20,
+  max = 80,
+  /** Ref opcional a l'element que es redimensiona. Si no es passa, usa children[0] del container. */
+  targetRef?: React.RefObject<HTMLElement>,
+) {
+  const [widthPercent, setWidthPercent] = useState(initial);
+  const isResizingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+  const rafRef = useRef<number>(0);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingRef.current || !containerRef.current) return;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      if (!containerRef.current) return;
+      const delta = e.clientX - startXRef.current;
+      const containerWidth = containerRef.current.offsetWidth;
+      const newPercent = ((startWidthRef.current + delta) / containerWidth) * 100;
+      setWidthPercent(Math.max(min, Math.min(max, newPercent)));
+      rafRef.current = 0;
+    });
+  }, [containerRef, min, max]);
+
+  const handleMouseUp = useCallback(() => {
+    isResizingRef.current = false;
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
+    document.body.style.cursor = '';
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseMove]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!containerRef.current) return;
+    isResizingRef.current = true;
+    startXRef.current = e.clientX;
+    // Mesurar l'amplada real de l'element objectiu (targetRef o children[0])
+    const target = targetRef?.current ?? (containerRef.current.children[0] as HTMLElement | null);
+    startWidthRef.current = target?.clientWidth ?? 0;
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, [containerRef, targetRef, handleMouseMove, handleMouseUp]);
+
+  return { widthPercent, setWidthPercent, handleMouseDown };
+}

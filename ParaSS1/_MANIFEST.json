@@ -1,0 +1,222 @@
+{
+    "extractedFrom":  "Sonilab Produccio",
+    "note":  "Copia solo-lectura del subsistema de formato de guion snlbpro. Estructura de carpetas preservada para que los imports relativos resuelvan dentro del paquete. Glue de app NO incluido (ver README seccion 6).",
+    "files":  [
+                  {
+                      "path":  "frontend/utils/EditorDeGuions/scriptParser.ts",
+                      "category":  "format-core",
+                      "role":  "Decodificador canónico snlbpro: parsea texto plano en { preamble, takes: TakeBlock[] }, fusiona continuaciones de texto y agrupa speakers"
+                  },
+                  {
+                      "path":  "frontend/utils/EditorDeGuions/csvConverter.ts",
+                      "category":  "format-core",
+                      "role":  "Puente bidireccional snlbpro \u003c\u003e CSV: scriptToCsv(takes) y csvToSnlbpro(csv) con separador \u0027 | \u0027 (TAKE | SPEAKER | TEXT)"
+                  },
+                  {
+                      "path":  "frontend/utils/EditorDeGuions/timecodeHelpers.ts",
+                      "category":  "format-core",
+                      "role":  "Extrae timecodes internos del texto (SS), (MM:SS), (HH:MM:SS) y los resuelve a segundos absolutos con lógica de wrap"
+                  },
+                  {
+                      "path":  "frontend/utils/EditorDeGuions/takeRanges.ts",
+                      "category":  "format-core",
+                      "role":  "Construye TakeRange[] (takeNum, start, end en segundos) desde el guión, aplicando márgenes, TCs internos y límites de overlap"
+                  },
+                  {
+                      "path":  "frontend/utils/EditorDeGuions/exportUtils.ts",
+                      "category":  "export",
+                      "role":  "Exporta a PDF (impresión nativa vía iframe), TXT, XLSX y CSV (Nuendo CSV1 / Takes CSV2). Depende solo del tipo Document"
+                  },
+                  {
+                      "path":  "frontend/utils/EditorDeGuions/translationPrompt.ts",
+                      "category":  "format-core",
+                      "role":  "Genera el prompt de reglas de traducción IA para guiones de doblaje preservando TAKEs, speakers y timecodes. Lógica pura sin dependencias"
+                  },
+                  {
+                      "path":  "frontend/utils/Import/scriptImportPipeline.ts",
+                      "category":  "import",
+                      "role":  "Orquestador de importación: DOCX/PDF -\u003e TXT canónico snlbpro + CSV derivado. Punto de entrada unificado (importStructuredScriptFromFile)"
+                  },
+                  {
+                      "path":  "frontend/utils/Import/docxImporter.ts",
+                      "category":  "import",
+                      "role":  "Extrae texto de DOCX (mammoth global del CDN), normaliza líneas y aplica heurística de tabulación *NOM* -\u003e *NOM*\\tTEXT"
+                  },
+                  {
+                      "path":  "frontend/utils/Import/pdfImporter.ts",
+                      "category":  "import",
+                      "role":  "Extrae texto de PDF (pdfjs-dist del importmap), detecta negrita/cursiva, elimina números de página y reconstruye líneas por posición Y"
+                  },
+                  {
+                      "path":  "frontend/utils/Import/importShared.ts",
+                      "category":  "import",
+                      "role":  "Interfaz ImportOptions y postProcessImportedText: normalización compartida del texto importado para snlbpro"
+                  },
+                  {
+                      "path":  "frontend/utils/ScriptUtils/indexers.ts",
+                      "category":  "script-utils",
+                      "role":  "Indexa personajes y takes (anchor points) del texto snlbpro. Base para búsqueda e indexado de doblaje. Lógica pura"
+                  },
+                  {
+                      "path":  "frontend/utils/ScriptUtils/search.ts",
+                      "category":  "script-utils",
+                      "role":  "Búsqueda de coincidencias por posición (tipo Match, findMatches) para resaltado y navegación. Lógica pura"
+                  },
+                  {
+                      "path":  "frontend/utils/ScriptUtils/takes.ts",
+                      "category":  "script-utils",
+                      "role":  "Localiza y extrae bloques TAKE con cálculo de rango desde texto snlbpro. Reutilizable directo para doblaje (depende de ./indexers)"
+                  },
+                  {
+                      "path":  "frontend/utils/SubtitlesEditor/srtParser.ts",
+                      "category":  "conversion",
+                      "role":  "Parsea SRT en segmentos y convierte entre segundos y formato de tiempo SRT (HH:MM:SS,mmm). Depende del tipo Segment"
+                  },
+                  {
+                      "path":  "frontend/utils/SubtitlesEditor/srtToSnlbpro.ts",
+                      "category":  "conversion",
+                      "role":  "Convierte SRT -\u003e snlbpro vía CSV intermedio (convertSrtToSnlbpro); parte por duración/líneas y aplica speaker \u0027P\u0027 por defecto"
+                  },
+                  {
+                      "path":  "frontend/utils/SubtitlesEditor/srtToSsrtlsf.ts",
+                      "category":  "conversion",
+                      "role":  "Parsea/serializa SSRTLSF (timecode/personaje/texto) y convierte SRT \u003c\u003e SSRTLSF (parseSsrtlsf, serializeSsrtlsf, SsrtListRow)"
+                  },
+                  {
+                      "path":  "frontend/utils/SubtitlesEditor/segmentTakeLinker.ts",
+                      "category":  "script-utils",
+                      "role":  "Asocia segmentos de subtítulo a TakeRange[] por solapamiento temporal (Regla de Oro: startTime define el take primario)"
+                  },
+                  {
+                      "path":  "frontend/utils/SubtitlesEditor/segmentGuionDiff.ts",
+                      "category":  "script-utils",
+                      "role":  "Compara texto de segmentos contra diálogo del guión (cobertura por bigramas); construye mapa take-\u003ediálogo desde snlbpro"
+                  },
+                  {
+                      "path":  "frontend/types/Subtitles.ts",
+                      "category":  "types",
+                      "role":  "Tipo Segment (y GeneralConfig) requerido por srtParser, srtToSsrtlsf, segmentTakeLinker y segmentGuionDiff"
+                  },
+                  {
+                      "path":  "frontend/components/EditorDeGuions/ColumnView.tsx",
+                      "category":  "viewer",
+                      "role":  "Visor de columnas del guión (TAKE/TC + cabeceras, speaker/diálogo, anchors de salto de página, resaltado). Usa EditorStyles, MAX_SPEAKER_CHARS_PER_LINE y Match"
+                  },
+                  {
+                      "path":  "frontend/components/EditorDeGuions/CsvView.tsx",
+                      "category":  "viewer",
+                      "role":  "Tabla editable CSV (TAKE | SPEAKER | TEXT) con columnas redimensionables y autoajuste. Componente presentacional autocontenido"
+                  },
+                  {
+                      "path":  "frontend/components/EditorDeGuions/Editor.tsx",
+                      "category":  "editor",
+                      "role":  "Editor textarea de texto snlbpro crudo (vista MONO). Componente presentacional simple"
+                  },
+                  {
+                      "path":  "frontend/components/EditorDeGuions/Toolbar.tsx",
+                      "category":  "viewer",
+                      "role":  "Barra de herramientas del editor: layout/idioma/undo-redo y menú de exportación (PDF/TXT/XLSX/CSV). Llama a exportUtils; requiere reconectar useLibrary"
+                  },
+                  {
+                      "path":  "frontend/components/SsrtlsfEditor/SsrtlsfEditorView.tsx",
+                      "category":  "editor",
+                      "role":  "Editor tabular SSRTLSF (timecode | personaje | texto) con exportación a Excel vía XLSX. Usa parseSsrtlsf/serializeSsrtlsf"
+                  },
+                  {
+                      "path":  "frontend/appTypes.ts",
+                      "category":  "types",
+                      "role":  "REFERENCIA: tipos núcleo (Document, EditorStyles, Layout, TranslationTask, OpenMode, Segment-relacionados). Contrato que consumen los módulos del formato"
+                  },
+                  {
+                      "path":  "frontend/constants.ts",
+                      "category":  "constants",
+                      "role":  "REFERENCIA: MAX_SPEAKER_CHARS_PER_LINE (30), A4_WIDTH_PX, SUPPORTED_LANGUAGES, LOCAL_STORAGE_KEYS, márgenes de take. Importa AppShortcuts/Shortcut de appTypes"
+                  },
+                  {
+                      "path":  ".claude/docs/domains/snlbpro-format.md",
+                      "category":  "doc",
+                      "role":  "Especificación del formato snlbpro: pipeline, detección por sourceType, compatibilidad legacy (slsf), puntos de integración"
+                  },
+                  {
+                      "path":  ".claude/docs/domains/script-pdf-export.md",
+                      "category":  "doc",
+                      "role":  "Arquitectura de exportación a PDF: print-to-pdf con iframe, anchors [data-page-break-anchor], preservación de tipografía"
+                  },
+                  {
+                      "path":  ".claude/docs/domains/subtitles.md",
+                      "category":  "doc",
+                      "role":  "Editor de subtítulos y formato SRT: modelo Segment, modos de editor (video-subs vs standalone), gestión de contexto"
+                  },
+                  {
+                      "path":  ".claude/docs/domains/source-types.md",
+                      "category":  "doc",
+                      "role":  "Clasificación de documentos por sourceType: snlbpro, srt, txt, pdf (legacy), tipos de media, legacy slsf"
+                  }
+              ],
+    "externalGlue":  [
+                         {
+                             "path":  "frontend/utils/EditorDeGuions/translator.ts",
+                             "why":  "Importado en App.tsx pero NO existe en disco (eliminado en el working tree); no se puede copiar. La capa de traducción IA debe re-implementarla el integrador usando translationPrompt.ts"
+                         },
+                         {
+                             "path":  "frontend/components/ScriptExternalView.tsx",
+                             "why":  "Ventana de visor externo acoplada a useLibrary, api, UserStylesProvider y BroadcastChannel; consume el formato pero es shell de app, no parte reutilizable"
+                         },
+                         {
+                             "path":  "frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx",
+                             "why":  "Editor híbrido guión+subtítulos atado a useLibrary, api, hooks de localStorage, waveform, SubtitleEditorContext y modales de IA"
+                         },
+                         {
+                             "path":  "frontend/components/VideoEditor/VideoEditorView.tsx",
+                             "why":  "Visor de vídeo con sync de guión atado a useLibrary, VideoPlaybackArea, WaveformTimeline y hooks de panel; solo reutiliza parseScript/buildTakeRangesFromScript"
+                         },
+                         {
+                             "path":  "frontend/components/VideoSubtitlesEditor/ScriptViewPanel.tsx",
+                             "why":  "Panel embebido en el editor de vídeo-subtítulos que depende de api y del shell del editor; usa el pipeline pero no es autocontenido"
+                         },
+                         {
+                             "path":  "frontend/App.tsx",
+                             "why":  "Router raíz de la app (hash routing, dispatch de OpenMode). Específico de Sonilab; el integrador debe cablear sus propias rutas"
+                         },
+                         {
+                             "path":  "frontend/hooks/useHashRoute.ts",
+                             "why":  "Parser de hash #/editor/{mode}/{docId} con VALID_MODES propio de Sonilab; routing es glue de la app"
+                         },
+                         {
+                             "path":  "frontend/components/Library/OpenWithModal.tsx",
+                             "why":  "Detección isSnlbpro/slsf y apertura de documento de la biblioteca de Sonilab; punto de integración, no parte del formato"
+                         },
+                         {
+                             "path":  "frontend/components/Library/SonilabLibraryView.tsx",
+                             "why":  "UI de biblioteca que invoca el pipeline de importación (patrón legacy: llama a pdfImporter/docxImporter directamente). Glue de app"
+                         },
+                         {
+                             "path":  "frontend/components/Library/LibraryFileItem.tsx",
+                             "why":  "Fila de la biblioteca que muestra la etiqueta de formato (sourceType || snlbpro); UI específica de Sonilab"
+                         },
+                         {
+                             "path":  "frontend/components/Projects/CreateProjectModal.tsx",
+                             "why":  "Modal de creación de proyecto que llama a importStructuredScriptFromFile; consumidor del pipeline, no parte del core"
+                         },
+                         {
+                             "path":  "frontend/context/Library/SonilabLibraryContext.tsx",
+                             "why":  "Estado global de biblioteca (hook useLibrary) sobre backend NestJS; el integrador debe proveer su propia fuente de Document"
+                         },
+                         {
+                             "path":  "frontend/context/Library/LibraryDataContext.tsx",
+                             "why":  "Gestión de estado de documentos con comparador de orden; estado compartido de la app"
+                         },
+                         {
+                             "path":  "frontend/context/UserStyles/UserStylesContext.tsx",
+                             "why":  "Preferencias de estilo del usuario (CSS vars --us-*) que consume ColumnView para tipografía; debe sustituirse por estilos del integrador"
+                         },
+                         {
+                             "path":  "frontend/services/api.ts",
+                             "why":  "Llamadas al backend (getProjectGuion, setProjectGuion, etc.); integración de backend, no parte del formato"
+                         },
+                         {
+                             "path":  "frontend/components/icons/index.ts",
+                             "why":  "Componentes de icono compartidos importados por Toolbar y SsrtlsfEditorView; el integrador debe proveer sus propios iconos o adaptar los imports"
+                         }
+                     ]
+}

@@ -442,7 +442,12 @@ const [page, setPage] = useLocalStorage<'library' | 'media' | 'projects'>(LOCAL_
       const proj = await api.getProjectBySrt(doc.id);
       if (cancelled) return;
 
-      const mediaId = proj?.mediaDocumentId || proj?.mediaDocId;
+      // Prioritza l'últim media vinculat a l'SRT (linkedMediaId), que és el que
+      // l'usuari ha seleccionat per últim. El mediaDocumentId del projecte només
+      // s'estableix a la creació i no s'actualitza en canviar de vídeo, així que
+      // s'usa només com a fallback.
+      const linkedId = (doc as any).linkedMediaId as string | null | undefined;
+      const mediaId = linkedId || proj?.mediaDocumentId || proj?.mediaDocId;
       if (mediaId) {
         dispatch({ type: 'TRIGGER_SYNC_REQUEST', payload: { docId: mediaId, type: 'media' } });
       }
@@ -576,11 +581,11 @@ const [page, setPage] = useLocalStorage<'library' | 'media' | 'projects'>(LOCAL_
     }
 
 if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
-    if (openMode === 'editor-video-subs') return <VideoSubtitlesEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
+    if (openMode === 'editor-video-subs') return <VideoSubtitlesEditorView key={currentDoc.id} {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
     if (openMode === 'editor-ssrtlsf') return <SsrtlsfEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={() => handleOpenDocument(null, null, false)} onUpdateContent={(txt) => handleTextChange(txt, 'script')} />;
     if (openMode === 'editor-srt-standalone') {
       if (!isEditing) return <SrtPreviewView currentDoc={currentDoc} onClose={() => handleOpenDocument(null, null, false)} />;
-      return <VideoSrtStandaloneEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={() => handleOpenDocument(null, null, false)} />;
+      return <VideoSrtStandaloneEditorView key={currentDoc.id} currentDoc={currentDoc} isEditing={isEditing} onClose={() => handleOpenDocument(null, null, false)} />;
     }
 
     // --- CORRECCIÓ: Previsualització multimèdia o de text ---
@@ -802,7 +807,10 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
       try {
         const proj = await api.getProjectBySrt(doc.id);
         if (cancelled) return;
-        const mediaId = proj?.mediaDocumentId || proj?.mediaDocId;
+        // Prioritza l'últim media vinculat a l'SRT (linkedMediaId) sobre el
+        // mediaDocumentId original del projecte (només fallback).
+        const linkedId = (doc as any).linkedMediaId as string | null | undefined;
+        const mediaId = linkedId || proj?.mediaDocumentId || proj?.mediaDocId;
         if (mediaId) dispatch({ type: 'TRIGGER_SYNC_REQUEST', payload: { docId: mediaId, type: 'media' } });
       } catch (e) { console.warn('getProjectBySrt failed', e); }
     })();
@@ -962,9 +970,9 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
     }
 
     if (mode === 'editor-video') return <VideoEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
-    if (mode === 'editor-video-subs') return <VideoSubtitlesEditorView {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
+    if (mode === 'editor-video-subs') return <VideoSubtitlesEditorView key={currentDoc.id} {...toolbarProps} currentDoc={currentDoc} isEditing={isEditing} handleTextChange={handleTextChange} handleEditorBackgroundClick={() => {}} />;
     if (mode === 'editor-ssrtlsf') return <SsrtlsfEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={handleGoHome} onUpdateContent={(txt) => handleTextChange(txt, 'script')} />;
-    if (mode === 'editor-srt-standalone') return <VideoSrtStandaloneEditorView currentDoc={currentDoc} isEditing={isEditing} onClose={handleGoHome} />;
+    if (mode === 'editor-srt-standalone') return <VideoSrtStandaloneEditorView key={currentDoc.id} currentDoc={currentDoc} isEditing={isEditing} onClose={handleGoHome} />;
 
     // Mode 'editor' (guió bàsic)
     return (

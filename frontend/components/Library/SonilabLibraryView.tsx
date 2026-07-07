@@ -1465,19 +1465,7 @@ const selectedItem =
     const effectiveDoc = state.documents.find(d => d.id === effectiveDocId) || doc;
     const isSrt = effectiveDoc && ((effectiveDoc.sourceType || '').toLowerCase() === 'srt' || effectiveDoc.name.toLowerCase().endsWith('.srt'));
     if (isSrt) {
-      // Comprova si hi ha preferència guardada
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SRT_EDITOR_MODE);
-      if (saved === 'editor-video-subs' || saved === 'editor-srt-standalone') {
-        window.open(`${window.location.origin}${window.location.pathname}#/editor/${saved}/${effectiveDocId}`, '_blank');
-      } else {
-        // Mostrar modal de selecció; consultar si el projecte té guió
-        setSrtModeDocId(effectiveDocId);
-        setSrtModeHasGuion(false); // default; actualitzem async
-        setSrtModeModalOpen(true);
-        api.getProjectBySrt(effectiveDocId)
-          .then(p => setSrtModeHasGuion(Boolean(p?.guionDocumentId)))
-          .catch(() => {});
-      }
+      window.open(`${window.location.origin}${window.location.pathname}#/editor/editor-video-subs/${effectiveDocId}`, '_blank');
     } else {
       setOpenWithDocId(effectiveDocId);
     }

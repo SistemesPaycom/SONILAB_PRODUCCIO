@@ -1,0 +1,56 @@
+ESQUEMA D'INTERACCIO - EDITOR DE SUBTITOLS (visualitzador d'ona);;
+Versio consolidada;2026-07-07;
+;;
+A) GESTOS DE RATOLI BASE;;
+Gest;Comportament;Notes
+Clic simple (qualsevol lloc);Mou el cursor de transport al punt exacte clicat. No selecciona.;La vista nomes salta si el punt surt de la finestra (page-follow). Amb sync ON el subtitol sota el cursor passa a actiu.
+Doble clic (sobre subtitol);Selecciona el subtitol (per editar / fixar cues).;
+Arrossegar vora esq./dreta;Ajusta inici / final.;Respecta durada minima i limits.
+Arrossegar el cos;Mou tot el bloc (mante durada). NO permet solapament.;
+Shift + arrossegar el cos;Mou tot el bloc PERMETENT solapament.;
+Arrossegar a zona buida;Marca un rang nou. Enter insereix el subtitol (Esc cancel-la).;
+Alt+Shift + arrossegar;Scrub: mou el cursor seguint el ratoli. Mai toca cap event.;Modificador sense accio de clic -> segur si el drag es queda curt.
+;;
+B) MODIFICADOR + CLIC = FIXAR CUE (sobre la linia SELECCIONADA - cal doble-clic previ);;
+Gest;Comportament;Notes
+Shift + clic;Fixa l'INICI (no toca el final).;Paritat Subtitle Edit.
+Ctrl/Cmd + clic;Fixa el FINAL (no toca l'inici).;Paritat Subtitle Edit.
+Alt + clic;Fixa l'INICI mantenint la durada (mou tot l'event alla).;Paritat Subtitle Edit.
+Ctrl/Cmd + Shift + clic;Fixa l'inici i desplaca la resta de linies mantenint durades (ripple).;Paritat Subtitle Edit.
+ESC;Deselecciona qualsevol subtitol seleccionat.;
+;;
+C) ARROSSEGAR AMB MODIFICADOR - SNAPPING - SOLAPAMENT - LIMITS;;
+Gest / Cosa;Comportament;Notes
+Alt + arrossegar vora;Mou tambe la vora del vei mes proper si es a menys de 500 ms.;Enllaca events adjacents (paritat SE).
+Shift + arrossegar vora;Bypassa l'enganxada automatica a canvis de pla.;FUTUR (quan hi hagi snapping).
+Snapping a canvis de pla;Les vores s'enganxen als canvis de pla.;FUTUR (deteccio amb PySceneDetect).
+Permetre solapament;Shift + arrossegar el cos.;
+Min. gap entre subtitols;Ajustos > General (ms). Default 160 ms.;
+Min. duration;Ajustos > General (ms). Default 1000 ms.;Presets per frames (TV/Cine) = FUTUR.
+;;
+D) DRECERES DE TECLAT (totes personalitzables);;
+Accio;Drecera;Notes
+Play / pausa;Ctrl+Space;
+Cursor 1 s enrere / endavant;Fletxa esq. / dreta;Pas gruixut configurable (default 1 s).
+Cursor 1 frame enrere / endavant;Ctrl + Fletxa esq. / dreta;Pas fi configurable (default 1 frame; permet 0.5 frame etc.).
+Inici del/s subtitol/s seleccionat/s 1 frame;Alt + Fletxa esq. / dreta;Nudge estil Nuendo. Funciona amb multi-seleccio.
+Final del/s subtitol/s seleccionat/s 1 frame;Alt+Shift + Fletxa esq. / dreta;Nudge estil Nuendo. Funciona amb multi-seleccio.
+Linia anterior / seguent;Alt + Fletxa amunt / avall;Si cap seleccionada selecciona primer la mes propera al cursor.
+Fixar inici / final (a la posicio del cursor);F11 / F12;Paritat SE.
+Fixar inici i desplacar la resta;F9;Paritat SE.
+Fixar final i anar a la seguent;F10;Paritat SE.
+Inserir subtitol a la posicio de video;Shift+F9;Paritat SE.
+Fusionar subtitols seleccionats;Ctrl+Shift+M;Paritat SE.
+Dividir subtitol al cursor;Ctrl+Alt+V;Paritat SE.
+;;
+E) COMPORTAMENT GENERAL / BASE TECNICA;;
+Tema;Regla;Per que
+Autodesplacament;Mode PAGINA unic: nomes salta quan el cursor surt de la finestra visible. MAI recentra en un clic manual.;Arregla el doble clic i l'edicio durant la reproduccio.
+Clic vs arrossegar;Zona morta (default 6 px) distingeix clic de drag.;Hold opcional reduible a 0.
+Marcar subtitol pel cursor;Condicionat al toggle de sincronitzacio subs-timeline.;
+Modificador a Mac;Ctrl es mapeja a Cmd.;
+;;
+F) FEATURES FUTURES (fases propies a dissenyar);;
+Feature;Descripcio;
+Deteccio de canvis de pla;Worker Python amb PySceneDetect (content-aware qualitat tipus Premiere). Render de linies verticals a l'ona + snapping configurable de les vores.;
+Presets de temps per projecte;Min duration / min gap en FRAMES segons perfil (TV 25 fps / Cine 24 fps) escollibles per projecte.;

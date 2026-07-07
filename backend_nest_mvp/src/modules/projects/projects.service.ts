@@ -331,6 +331,26 @@ if (exists) {
     await this.projectModel.updateOne({ _id: projectId }, patch);
   }
 
+  async setResumeState(
+    projectId: string,
+    input: { currentTime: number; activeSegmentId: number | null },
+  ) {
+    const currentTime = Math.max(0, Number(input.currentTime) || 0);
+    const activeSegmentId =
+      input.activeSegmentId == null ? null : Number(input.activeSegmentId);
+    const resumeState = {
+      currentTime,
+      activeSegmentId,
+      updatedAt: new Date().toISOString(),
+    };
+    const res = await this.projectModel.updateOne(
+      { _id: projectId },
+      { $set: { 'settings.resumeState': resumeState } },
+    );
+    if (res.matchedCount === 0) throw new NotFoundException('Project not found');
+    return resumeState;
+  }
+
   async setSrtContent(ownerId: string, srtDocumentId: string, srtText: string) {
     await this.library.updateDocument(ownerId, srtDocumentId, {
       contentByLang: { _unassigned: srtText },

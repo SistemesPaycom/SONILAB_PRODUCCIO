@@ -1,0 +1,5 @@
+{
+  "name": "Script-Editor-Pro-AI-Local-v10.0",
+  "description": "Editor professional de guions i subtítols amb capacitats de transcripció Whisper local, traducció Qwen i revisió de coherència mitjançant IA.",
+  "requestFramePermissions": []
+}

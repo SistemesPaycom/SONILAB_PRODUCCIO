@@ -1,0 +1,92 @@
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { api, getToken, setToken } from '../../services/api';
+import { DEFAULT_SHORTCUTS, LOCAL_STORAGE_KEYS, mergeShortcuts } from '../../constants';
+
+export type AuthReason = 'login' | 'expired';
+
+type AuthContextValue = {
+  authed: boolean;
+  reason: AuthReason;
+  me: any | null;
+  role: string;
+  isAdmin: boolean;
+  refreshMe: () => Promise<void>;
+  markAuthed: () => void;
+  logout: () => void;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [authed, setAuthed] = useState(() => !!getToken());
+  const [reason, setReason] = useState<AuthReason>('login');
+  const [me, setMe] = useState<any | null>(null);
+
+  const refreshMe = useCallback(async () => {
+    if (!getToken()) {
+      setMe(null);
+      return;
+    }
+    try {
+      const profile = await api.me();
+      setMe(profile);
+      // Hidratar dreceres des de preferences del backend (prioritat sobre localStorage)
+      if (profile.preferences?.shortcuts) {
+        const merged = mergeShortcuts(DEFAULT_SHORTCUTS, profile.preferences.shortcuts);
+        localStorage.setItem(LOCAL_STORAGE_KEYS.SHORTCUTS, JSON.stringify(merged));
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: LOCAL_STORAGE_KEYS.SHORTCUTS,
+          newValue: JSON.stringify(merged),
+          storageArea: localStorage,
+        }));
+      }
+      // Notificar ThemeProvider (que està fora d'AuthProvider) amb les preferències
+      window.dispatchEvent(new CustomEvent('USER_PROFILE_LOADED', { detail: profile }));
+    } catch {
+      // no bloquear UX por un /me temporalmente roto
+    }
+  }, []);
+
+  const markAuthed = useCallback(() => {
+    setAuthed(true);
+    setReason('login');
+    void refreshMe();
+  }, [refreshMe]);
+
+  const logout = useCallback(() => {
+    setToken(null);
+    setMe(null);
+    setAuthed(false);
+    setReason('login');
+  }, []);
+
+  useEffect(() => {
+    const onAuthRequired = () => {
+      setAuthed(false);
+      setMe(null);
+      setReason('expired');
+    };
+    window.addEventListener('AUTH_REQUIRED', onAuthRequired);
+    return () => window.removeEventListener('AUTH_REQUIRED', onAuthRequired);
+  }, []);
+
+  useEffect(() => {
+    if (authed) void refreshMe();
+  }, [authed, refreshMe]);
+
+  const role = me?.role ?? 'user';
+  const isAdmin = role === 'admin';
+
+  const value = useMemo<AuthContextValue>(
+    () => ({ authed, reason, me, role, isAdmin, refreshMe, markAuthed, logout }),
+    [authed, reason, me, role, isAdmin, refreshMe, markAuthed, logout],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = (): AuthContextValue => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within <AuthProvider>');
+  return ctx;
+};
