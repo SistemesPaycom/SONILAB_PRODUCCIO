@@ -37,6 +37,9 @@ lerna-debug.log*
 .env.local
 .env.*.local
 
+# --- Notas de trabajo locales -----------------------------------------------
+tasques.md
+
 # --- Datos de runtime / media subida por usuarios (NUNCA versionar) ---------
 # Archivos pesados (vídeos, audios) que superan el límite de 100 MB de GitHub.
 backend_nest_mvp/SonilabData/
