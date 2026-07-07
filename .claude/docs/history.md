@@ -43,6 +43,112 @@ La regla generalizable que se aprende, redactada para que sirva en problemas fut
 
 -->
 
+## 2026-07-07 — Decisió arquitectònica: model d'interacció del visualitzador d'ona (+ Fase 1/2 de drag)
+
+**Tipo:** decisión arquitectónica + hito
+
+**Síntoma / Contexto:**
+Petició inicial: baixar el "temps de hold" per arrossegar esdeveniments a l'ona (els usuaris de proves el trobaven lent, ~0,5 s). Va derivar en una sessió llarga de disseny de tota la interacció del visualitzador d'ona, estudiant el **codi font de Subtitle Edit** (clonat a scratchpad) per buscar paritat + millores de Nuendo. Es van implementar dues fases contingudes i es va tancar el disseny del rediseny complet (→ tareas.md #12).
+
+**Lo que NO funcionó** (carrerons descartats al buscar per què el DOBLE-CLIC sobre un esdeveniment era impossible):
+- **Suposar que el seek es feia al `mousedown`:** fals — ja es feia al `mouseUp` (hi ha el comentari "Don't seek on mouseDown — decision happens on mouseUp"). Canviar down↔up no arreglava res.
+- **"Ctrl per editar" (obligar Ctrl per arrossegar events; ratolí sol = només navegar):** descartat — afegeix fricció a l'operació més freqüent (ajustar temps), deixa la Fase 1 (hold+zona morta) sense ús, i divergeix de SE (que arrossega SENSE modificador).
+- **"Ctrl per moure el cursor" (seek només amb Ctrl+clic):** descartat — trenca el gest més bàsic de SE ("single click: go to position") i, un cop arreglat l'autoscroll, és innecessari (el clic normal ja és segur).
+- **`Ctrl+Shift`+arrossegar per a l'scrub:** descartat — col·lisiona amb `Ctrl+Shift`+clic (ripple, destructiu) via el camí "drag curt < zona morta = clic". Regla: mai barrejar una acció destructiva i una de navegació al mateix modificador. L'scrub va a `Alt+Shift`+arrossegar (sense acció de clic → segur).
+
+**Solución (decisió + implementat):**
+- **Arrel del problema del doble-clic i de l'edició durant playback = l'autoscroll recentrant la vista a cada seek manual.** Verificat al codi font de SE (`AudioVisualizer.cs`): el follow és **page-style** (només scrolla quan el cursor SURT de la finestra visible; no recentra en clic), amb un slop clic/drag de **3 px** i gestos `Tapped`/`DoubleTapped` del framework. **Decisió: adoptar page-follow únic + no recentrar en seek manual** com a base (→ Fase A de tareas.md #12). No cal ni "Ctrl per editar" ni "Ctrl per seek".
+- **Implementat i verificat (harness aïllat amb el component real + esdeveniments sintètics), sense commit:**
+  - *Fase 1:* `WAVEFORM_HOLD_MS` default 500→**50 ms** + nova `WAVEFORM_DRAG_DEADZONE_PX` (6 px, anti-tremolor, amb reancoratge al creuar la zona morta per evitar el "salt").
+  - *Fase 2:* `WAVEFORM_CTRL_CLICK_SEEK` (default true) → Ctrl/Cmd+clic = seek pur, Ctrl/Cmd+drag = scrub. **Es reaprofitarà/substituirà** pel rediseny (amb page-mode el clic ja és segur i `Ctrl+clic` passarà a "fixar final", estil SE).
+  - *Model de clic:* clic simple = seek al punt EXACTE (no a l'inici del bloc); doble clic = seleccionar; guardes perquè els clics a la barra superior no facin seek (`mouseDownActiveRef`) ni el doble-clic seleccioni (`scrollRef.contains`).
+- **Esquema mestre** de tota la interacció (ratolí + dreceres, paritat SE + Nuendo) consolidat a `Shortcuts Subtitols - Consolidat.csv` (arrel).
+
+**Archivos tocados:**
+- `frontend/components/VideoEditor/WaveformTimeline.tsx` (hold, zona morta, reancoratge, seekOnly Ctrl, model clic/doble-clic, guardes de la barra)
+- `frontend/components/SettingsModal.tsx`, `frontend/constants.ts`, `frontend/utils/factoryReset.ts` (claus noves + controls)
+- `backend_nest_mvp/tsconfig.json` (fix col·lateral del warning `baseUrl` deprecat — veure tareas.md TERMINADO T11)
+- Docs: `Shortcuts Subtitols - Consolidat.csv`, specs/plans de Fase 1/2 a `docs/superpowers/`
+
+**Lección:**
+Quan la vista es mou sola (autoscroll) i alhora s'hi vol interactuar amb el ratolí, són forces oposades: la solució no és afegir modificadors al ratolí sinó **desacoblar l'autoscroll de les accions manuals** (seguir només durant playback, mai recentrar en un clic). Abans d'inventar un model d'interacció nou, val la pena llegir com ho resol una eina de referència oberta (SE): va estalviar dos carrerons sencers (Ctrl-per-editar i Ctrl-per-seek). I cap modificador ha de compartir una acció destructiva (ripple) amb una de navegació (scrub) — el llindar clic/drag fa que un drag curt es converteixi en clic.
+
+**Follow-ups (movidos a tareas.md):**
+- Rediseño complet Fases A/B/C (#12), detecció de canvis de pla (#13), presets per frames (#14).
+- Model de ratolí per a estacionari/Duo (#1), presets page/duo (#2).
+- Verificació en navegador i decisió de commit del working tree actual.
+
+---
+
+## 2026-07-07 — Bug: warning fantasma de `baseUrl` deprecat al tsconfig del backend
+
+**Tipo:** bug resuelto (entorn / tooling)
+
+**Síntoma / Contexto:**
+VS Code marcava en vermell `backend_nest_mvp/tsconfig.json:13`: "Option 'baseUrl' is deprecated and will stop functioning in TypeScript 7.0. Specify compilerOption '`"ignoreDeprecations": "6.0"`' to silence this error." Contraintuïtiu: el `tsc` del workspace (**5.9.3**) compilava **net** (`tsc --noEmit` exit 0) i el fitxer ja tenia `"ignoreDeprecations": "5.0"`. El diagnòstic persistia fins i tot després de tancar/obrir el panell Problems.
+
+**Lo que NO funcionó:**
+- **Pujar `ignoreDeprecations` de "5.0" a "6.0"** (el que suggereix el propi missatge): el `tsc` 5.9.3 del workspace el **rebutja** amb `error TS5103: Invalid value for '--ignoreDeprecations'` → trencaria el build real per silenciar un subratllat de l'editor. Descartat.
+- **Reiniciar via el panell Problems / reobrir-lo:** no reinicia el servidor de TS; el diagnòstic ranci persisteix. A més, el comandament "TypeScript: Restart TS Server" NOMÉS apareix amb una pestanya `.ts`/`.js` activa (un `tsconfig.json` és JSON) → cal "Developer: Reload Window" o obrir un `.ts` primer.
+
+**Solución:**
+La causa és que el **TS intern del VS Code és més nou** que el 5.9.3 del workspace i marca `baseUrl` com a deprecat-per-eliminar a TS 7.0 (una onada que el valor `"5.0"` ja no cobreix). Com que `baseUrl` **no s'usa** (cap import no-relatiu a `src/`, cap `paths`, cap `tsconfig-paths` a nest-cli/package), s'**eliminen `baseUrl` i `ignoreDeprecations`** → config vàlida a qualsevol versió de TS, sense silenciadors. `tsc --noEmit` i `nest build` → exit 0.
+
+**Archivos tocados:**
+- `backend_nest_mvp/tsconfig.json` (fora `baseUrl` i `ignoreDeprecations`)
+
+**Lección:**
+Un subratllat de TypeScript al VS Code que el `tsc` de la CLI NO reprodueix és quasi sempre un **desajust de versió** (el TS del VS Code ≠ el del workspace). Abans de silenciar amb `ignoreDeprecations`, comprova que el teu `tsc` accepta el valor (una versió anterior el rebutja) i, si l'opció deprecada no s'usa, **elimina-la** en comptes de silenciar-la — així val a totes les versions. `baseUrl` sense `paths` sol ser vestigial de la plantilla de Nest.
+
+**Follow-ups (movidos a tareas.md):**
+- Cap (tancat; entrada TERMINADO T11).
+
+---
+
+## 2026-07-07 — Hito: Restaurar l'última posició en reobrir un projecte de subtítols
+
+**Tipo:** hito + decisión arquitectónica
+
+**Síntoma / Contexto:**
+L'editor de subtítols sempre obria a 0:00. Petició de l'usuari: en reobrir un projecte, tornar al punt on es va quedar l'últim cop (posició del vídeo + subtítol actiu). Decisió de persistència validada amb l'usuari: **backend** (`project.settings.resumeState`, cross-device) en lloc de localStorage. L'editor es clava en un `document` (l'SRT), no en un projecte; el projecte es resol de forma asíncrona via `getProjectBySrt`. El punt crític del disseny és el timing: `handleSyncMedia` força `currentTime`/`duration` a 0 en carregar el vídeo, així que la restauració ha d'esperar a conèixer la durada real.
+
+**Lo que NO funcionó** (6 iteracions de ralph-loop sobre el DISSENY, abans de codificar; cada troballa és un carreró evitat en execució):
+- **Guard `resumeApplied` acoblat a "hi havia res a restaurar" (crític, it1):** el primer disseny no marcava `resumeApplied` si no hi havia resum previ → per a un projecte nou (cas universal en el primer ús) el desat no arrencava mai → la feature no bootstrapava. Fix: desacoblar "llest per desar" de "hi havia resum"; marcar aplicat també quan l'editor s'estabilitza sense resum.
+- **Branca sense-vídeo morta + cursa de càrrega (majors it1):** l'efecte d'aplicació depenia només de `[duration]` amb un `duration<=0 return` que feia inabastable la branca sense-vídeo; i `pendingResume` en un **ref** no re-disparava l'efecte si el fetch resolia després que `duration` canviés. Fix: `pendingResume`/`resumeLoaded`/`resumeApplied` en **state** (re-avaluen l'efecte), deps completes.
+- **Debounce que mai disparava durant la reproducció (major it1):** un debounce de 1500ms es reiniciava a cada canvi de `currentTime` (~250ms) → no desava mai mentre es reproduïa. Fix: **throttle** de 5s amb flanc principal + un únic timer de cua no reiniciable.
+- **L'efecte de sync-per-temps sobreescrivia l'`activeSegmentId` restaurat (major it1):** a l'standalone, `setActiveSegmentId(restored)` amb `currentTime=0` feia que l'efecte "sync active segment by time" tornés al primer bloc. Fix: cas amb vídeo → NO forcem el segment (es deriva del temps); cas sense vídeo → alineem `currentTime = seg.startTime` perquè l'efecte de sync trobi el mateix segment.
+- **Throttle de cua desava valor obsolet (major it2):** `write()` capturava `t`/`seg` del render que va armar el timer, no del moment de disparar-se. Fix: `commit()` llegeix `latestRef.current` AL DISPAR.
+- **`flush()` sense guards → clobber amb 0 (major it2):** tancar abans d'aplicar la restauració feia un PATCH amb `currentTime: 0` (o a `/projects/null/...`). Fix: `flush()` reutilitza `commit()` i n'hereta els guards (`useBackendRef`, `resumeAppliedRef` — ref, llegible des de cleanups —, `projectIdRef` no-null).
+- **Estat de vídeo residual en canviar de document (major it3):** les vistes reinicien l'estat de vídeo NOMÉS dins `handleSyncMedia`, i `autoLoadAttemptedRef` no es reinicia en canviar de `docId`; sense remuntar, obrir B a la mateixa instància restaurava B contra el vídeo d'A. Fix: `key={currentDoc.id}` a les vistes d'editor (`App.tsx`) → editor net per document; el flush del sortint es fa al desmuntatge.
+- **Premissa falsa "el vídeo no es carrega mai via `project.mediaDocumentId`" (reclassificat it5):** un revisor ho va marcar com a regressió major (delay de 8s). Verificat directament a `App.tsx:450`: l'efecte de sync dispara amb `linkedMediaId || proj.mediaDocumentId || proj.mediaDocId` → el `mediaDocumentId` SÍ és un fallback de càrrega. La "regressió" quedava refutada; residu real = prosa imprecisa (severitat minor). Reclassificat major→minor **verificant, no racionalitzant** (regla de receiving-code-review).
+
+**Solución:**
+- **Backend:** `setResumeState(projectId, {currentTime, activeSegmentId})` a `projects.service.ts` (clamp `currentTime>=0`, `$set` niat `settings.resumeState`, `NotFoundException` si `matchedCount===0` — NO reutilitza `updateProject`, que clobberjaria el bag). Ruta `@Patch('/:id/resume-state')` a `projects.controller.ts` (import `Patch` afegit; validació inline com `setGuion`, el `ValidationPipe` global fa skip dels bodies amb metatype `Object`).
+- **Frontend:** `api.saveResumeState` (PATCH, token per capçalera). Hook compartit `frontend/hooks/useResumePosition.ts`: fetch propi de `getProjectBySrt` (dues vistes idèntiques; tradeoff = 2a lectura a la vista principal), `mediaExpectedRef` del `proj.mediaDocumentId`, `mediaReady=duration>0` derivat, xarxa de seguretat `settleTimeout` de 8s (`forceSettle`) perquè un vídeo que no arriba mai bootstrapi igualment, throttle de desat i `flush` amb guards. Reutilitza el `onSeek` existent de cada vista com a `seekTo` (manté `currentTimeRef`/BroadcastChannel del guió coherents).
+- **Procés:** spec amb tot el pseudocodi → ralph-loop de 6 iteracions (subagents revisors adversarials verificant contra el codi real; sortida per 3 revisions consecutives només-minor) → execució amb subagents (backend + frontend-core en paral·lel, després wiring) → `tsc --noEmit` net a frontend i backend.
+
+**Archivos tocados:**
+- `backend_nest_mvp/src/modules/projects/projects.service.ts` (`setResumeState`)
+- `backend_nest_mvp/src/modules/projects/projects.controller.ts` (ruta PATCH + import `Patch`)
+- `frontend/services/api.ts` (`saveResumeState`)
+- `frontend/hooks/useResumePosition.ts` (nou)
+- `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx` i `VideoSrtStandaloneEditorView.tsx` (consum del hook + flush)
+- `frontend/App.tsx` (`key={currentDoc.id}` a les vistes d'editor)
+- Docs: `docs/superpowers/specs/2026-07-03-resume-editor-position-design.md`, `.claude/ralph-loop-ledger.md`
+
+**Lección:**
+1. En un hook de restauració que depèn de dades asíncrones (fetch del projecte) i d'esdeveniments del media (durada), el que es vol re-avaluar en un efecte ha d'anar en **state**, no en refs; però el que es llegeix des d'un **cleanup** (flush a l'unmount) ha d'anar en **refs** (l'state hi queda capturat al de muntatge). Aquesta tensió state-vs-ref és el nucli de la meitat dels bugs del disseny.
+2. Per desar periòdicament durant un valor que canvia sovint, throttle (flanc principal + cua no reiniciable que llegeix l'últim valor AL DISPAR), mai debounce.
+3. Quan un estat de component depèn de dades que canvien amb el `docId` però la instància es reutilitza (renderitzada sense `key`), qualsevol ref-guard que no es reinicii (`autoLoadAttemptedRef`) filtra estat del document anterior: `key={docId}` és el fix més net.
+4. La revisió adversarial iterativa ha de **verificar les troballes contra el codi real**: un revisor va marcar una regressió major basada en una premissa falsa (mediaDocumentId no carrega vídeo); comprovar `App.tsx:450` la va refutar. Reclassificar una troballa exigeix evidència, no conveniència.
+
+**Follow-ups (movidos a tareas.md):**
+- [SEGURETAT · HIGH] Treure el JWT de la URL de streaming de media (#10) — preexistent, surtat per la revisió de seguretat d'aquesta sessió; no introduït per aquesta feature.
+- Evitar la doble crida `getProjectBySrt` a la vista principal (#11, optimització).
+- Verificació manual en navegador (proves 5-14) + decisió de commit (tareas manuales).
+
+---
+
 ## 2026-07-07 — Hito: Cerca i substitució tipus Word a l'editor de subtítols
 
 **Tipo:** hito + decisión arquitectónica

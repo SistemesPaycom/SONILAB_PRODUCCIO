@@ -78,10 +78,58 @@ Las fechas son SIEMPRE absolutas (YYYY-MM-DD), nunca relativas.
 **Riesgo:** bajo
 **Tamaño:** pequeño
 
+## 10. [SEGURETAT · HIGH] Treure el JWT de la URL de streaming de media *(2026-07-07)*
+
+**Síntoma / Contexto:** La revisió de seguretat automàtica va marcar `api.streamUrlWithToken(docId)` (`frontend/services/api.ts`): passa el JWT com a query param (`?token=...`) al `src` del `<video>`. Els tokens a la query string es filtren a logs d'accés del servidor, historial del navegador, capçaleres `Referer` i proxies. **Preexistent** — no introduït per T7 (resume position); `api.saveResumeState` de T7 usa la capçalera `Authorization`, no la URL. Fora de l'abast de T7 i toca el flux de streaming (zona sensible, requereix canvi coordinat backend+frontend d'autenticació) → tasca a part.
+**Plan:** Opció recomanada (b) menys intrusiva: endpoint que emeti una cookie de només-media (`HttpOnly, SameSite=Lax, Path=/media`) i que el `<video>` usi la URL sense token. Alternativa (a): signed-URLs curtes amb HMAC(docId+expiry). Si es manté el token durant la migració, configurar el servidor perquè no registri el param `token` als logs.
+**Archivos afectados:** `frontend/services/api.ts`, `backend_nest_mvp/src/modules/media/` (nou endpoint/guard), consultar `.claude/docs/domains/` si aplica.
+**Riesgo:** medio (auth)
+**Tamaño:** medio
+
+## 11. Evitar la doble crida `getProjectBySrt` a `VideoSubtitlesEditorView` *(2026-07-07)*
+
+**Síntoma / Contexto:** Tradeoff acceptat de T7: el hook `useResumePosition` fa la seva pròpia crida `api.getProjectBySrt(docId)`, i `VideoSubtitlesEditorView` ja en fa una altra a l'efecte de càrrega del guió → dues lectures en obrir. És barat i es va prioritzar tenir les dues vistes idèntiques, però es podria optimitzar passant el projecte ja carregat al hook (via setter). No bloqueja res.
+**Plan:** Afegir un mecanisme opcional perquè la vista alimenti el projecte ja resolt al hook; l'standalone continuaria fent el fetch propi.
+**Archivos afectados:** `frontend/hooks/useResumePosition.ts`, `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx`.
+**Riesgo:** bajo
+**Tamaño:** pequeño
+
+## 12. Rediseño complet de la interacció del visualitzador d'ona (Fases A/B/C) *(2026-07-07)*
+
+**Síntoma / Contexto:** Sessió de disseny llarga (validada amb l'usuari, estudiant el codi font de Subtitle Edit) per portar la interacció de l'ona a paritat amb SE + millores de Nuendo. Esquema mestre a `Shortcuts Subtitols - Consolidat.csv` (arrel). Arrel tècnica descoberta: el problema del doble-clic i de l'edició durant la reproducció NO és el model de ratolí sinó l'**autoscroll que recentra la vista en cada seek manual**; SE ho evita amb page-follow (només salta quan el cursor surt de la finestra) i sense recentrar en clic. Veure history.md (2026-07-07).
+**Plan (per fases; spec+pla datats cadascuna):**
+- **Fase A (base, desbloquejant):** default de scroll → `page` (avui és `stationary`); autoscroll = page-follow + **no recentrar en seek manual**; nova secció Ajustos "Ona d'àudio" amb botons **Pàgina** (default; amaga el botó intern estacionari/pàgina però el deixa al DOM perquè no es mogui res) i **Duo** (comportament actual amb el toggle visible). Arregla el doble-clic i l'edició durant playback.
+- **Fase B (ratolí):** arrossegar sense modificador = moure/redimensionar · doble-clic = seleccionar · modificador+clic = fixar cues (Shift=inici, Ctrl=final, Alt=inici mantenint durada, Ctrl+Shift=ripple) · crear arrossegant a zona buida (+Enter) · `Alt+Shift`+arrossegar = scrub · `Alt`+arrossegar vora = enllaça veí <500 ms.
+- **Fase C (teclat):** un sol joc de dreceres (independent del mode de scroll): `←/→` (1 s) i `Ctrl+←/→` (1 frame; passos configurables), nudge `Alt+←/→` (inici) i `Alt+Shift+←/→` (final) estil Nuendo, `Alt+↑/↓` (línia), `F9–F12`, `Shift+F9`, `Ctrl+Shift+M` (merge), `Ctrl+Alt+V` (split) — tot personalitzable.
+**Sub-parts ajornades:** model de ratolí per a estacionari/Duo (#1), presets explícits page/duo (#2).
+**Archivos afectados:** `frontend/components/VideoEditor/WaveformTimeline.tsx`, `SettingsModal.tsx`, `constants.ts`, `factoryReset.ts`, sistema de dreceres (`useKeyboardShortcuts`/`DEFAULT_SHORTCUTS`), les dues vistes d'editor.
+**Riesgo:** medio-alto (rework d'interacció ampli)
+**Tamaño:** gran (fer per fases)
+
+## 13. Detecció de canvis de pla (shot changes) + snapping *(2026-07-07)*
+
+**Síntoma / Contexto:** L'usuari vol detecció de canvis de pla qualitat tipus Premiere per enganxar-hi les vores dels subtítols. SE ho fa amb FFmpeg (`select=gt(scene\,0.4),showinfo`, llindar 0.4 configurable, desat en `.shotchanges`).
+**Plan:** Backend — job que detecti els canvis de pla del media i en desi els timestamps per media; opció FFmpeg (ràpid) o **PySceneDetect** (content-aware, millor amb fosos/moviment; ja hi ha worker Python de WhisperX). Frontend — pintar línies verticals a l'ona + snapping configurable de les vores (`Shift`+arrossegar per bypassar; zones de llindar estil SE). Mirar el codi de snapping de SE (clonat a scratchpad) per la UX.
+**Archivos afectados:** `backend_nest_mvp/src/modules/media/` (o worker Python), `frontend/components/VideoEditor/WaveformTimeline.tsx`.
+**Riesgo:** medio
+**Tamaño:** gran (fase pròpia)
+
+## 14. Presets de temps per frames per projecte (TV 25 / Cine 24) *(2026-07-07)*
+
+**Síntoma / Contexto:** Min duration / min gap són en ms; l'usuari vol presets seleccionables per projecte expressats en FRAMES segons perfil (TV 25 fps, Cine 24 fps).
+**Plan:** Afegir fps per projecte + conversió frame↔ms; presets escollibles que fixin min duration / min gap en frames.
+**Archivos afectados:** model de projecte (backend), `SettingsModal.tsx` / config d'editor.
+**Riesgo:** bajo-medio
+**Tamaño:** medio
+
 ### Tareas manuales del usuario
 
 <!-- Cosas que requieren acción humana fuera del código -->
 
+- *(2026-07-07)* Verificar en navegador (a :3000, app real amb un media amb ona) el drag de l'ona (T8/T9/T10): (a) arrossegar un esdeveniment respon de seguida (~50 ms, no 0,5 s); (b) mantenir premut i moure poc (<6 px) → clic, no mou; (c) Ctrl/Cmd+clic mou el cursor sense tocar l'event i Ctrl+arrossegar = scrub; (d) clic simple = seek al punt clicat, doble clic = seleccionar; (e) clic a la barra superior (Timeline/zoom/mode) NO mou el cursor. NOTA: el rediseny #12 canviarà bona part d'això (page-mode, model SE).
+- *(2026-07-07)* Decidir si commitejar el treball de l'ona (T8–T11: `WaveformTimeline.tsx`, `SettingsModal.tsx`, `constants.ts`, `factoryReset.ts`, `backend_nest_mvp/tsconfig.json`; sense commitejar per la regla del CLAUDE.md).
+- *(2026-07-07)* Verificar en navegador el resume position de T7 (cal MongoDB + auth + un projecte real amb vídeo; proves 5-14 de la spec): (a) obrir projecte, reproduir fins a ~0:30, tancar i reobrir → el vídeo arrenca a ~0:30 i el subtítol actiu és el correcte; (b) `resumeState.currentTime` > durada real (vídeo canviat) → obre al final menys 0.1s sense error; (c) projecte nou sense resumeState → obre a 0:00 i, després de reproduir i tancar, en reobrir recupera la posició (bootstrap); (d) standalone SRT lligat a projecte → mateixa restauració; SRT solt → sense efecte; (e) reproducció contínua >5s → almenys un PATCH periòdic; (f) canviar directament de projecte A→B (sense passar per Home) → A desa la seva posició i B obre net restaurant la SEVA posició.
+- *(2026-07-07)* Decidir si commitejar la feature de resume position de T7 (6 fitxers al working tree: `useResumePosition.ts` nou; `projects.service.ts`, `projects.controller.ts`, `api.ts`, `VideoSubtitlesEditorView.tsx`, `VideoSrtStandaloneEditorView.tsx`, `App.tsx` modificats; sense commitejar per la regla del CLAUDE.md).
 - *(2026-07-07)* Verificar en navegador la cerca/substitució de T6 (les dues vistes de l'editor de subtítols): (a) lupa i Ctrl+F obren la barra; Esc/✕ tanquen i el focus torna a l'editor; (b) cerca en viu amb comptador «N de M», ▲/▼ amb scroll i ressaltat groc/taronja; (c) opcions Aa i paraula completa (provar accents: «càmera»); (d) Substituir → 1 pas d'undo i salta a la següent; (e) Substituir-ho tot → 1 sol pas d'undo + missatge «S'han fet N substitucions»; (f) cas amb format: `buenos <i>días</i>` + substituir "buenos días"→"hola" → `hola` sense tags residuals; (g) mode lectura: cerca funciona, fila de substituir absent.
 - *(2026-07-07)* Decidir si commitejar la feature de cerca/substitució (5 fitxers al working tree: `searchReplace.ts` i `SearchReplaceBar.tsx` nous; `SubtitlesEditor.tsx`, `constants.ts`, `index.html` modificats; sense commitejar per la regla del CLAUDE.md).
 - *(2026-07-07)* Verificar en navegador el cicle de T5: crear/obrir un projecte, canviar el vídeo (importar-ne un altre), guardar, tancar i reobrir → ha de reaparèixer l'ÚLTIM vídeo vinculat, no l'original de la creació. Provar també amb la pestanya de l'editor de vídeo i amb l'standalone SRT.
@@ -112,6 +160,26 @@ Las fechas son SIEMPRE absolutas (YYYY-MM-DD), nunca relativas.
 ## ✅ TERMINADO
 
 > Histórico de tareas cerradas. Más reciente arriba.
+
+## T11. Fix del warning de deprecació `baseUrl` al tsconfig del backend *(tancada 2026-07-07)*
+
+**Qué cambió al cerrarla:** VS Code marcava `backend_nest_mvp/tsconfig.json:13` amb "Option 'baseUrl' is deprecated and will stop functioning in TypeScript 7.0" (el TS intern del VS Code és més nou que el 5.9.3 del workspace, que compilava net). El `"ignoreDeprecations": "5.0"` que hi havia ja no cobria la nova onada, i pujar-lo a `"6.0"` el rebutja el tsc 5.9.3 (`error TS5103`). Verificat que `baseUrl` **no s'usa** (cap import no-relatiu a `src/`, cap `paths`, cap `tsconfig-paths` a nest-cli/package) → **eliminats `baseUrl` i `ignoreDeprecations`**. `tsc --noEmit` i `nest build` → exit 0. Fix vàlid a qualsevol versió de TS. Sense commit. Detall a history.md (2026-07-07).
+
+## T10. Clic simple = seek al punt exacte / doble clic = seleccionar + guarda de la barra superior *(tancada 2026-07-07)*
+
+**Qué cambió al cerrarla:** El clic simple sobre un esdeveniment cridava `onSegmentClick` → el pare feia `onSeek(startTime-0.05)` → el cursor saltava a l'INICI del bloc en comptes d'on es clicava. Ara (estil Subtitle Edit): **clic simple = seek al punt EXACTE clicat** (mai selecciona) · **doble clic = seleccionar** (`handleDoubleClick` → `onSegmentClick`, respectant el mode Ctrl). Corregit després un defecte de regressió: `handleMouseUp`/`handleDoubleClick` viuen a l'element ARREL (que embolcalla la barra superior Timeline/zoom/undo/mode) → clicar la barra també feia seek. Guardes: el seek només si el gest ha començat dins la zona d'ona (`mouseDownActiveRef`), i el doble-clic només si el target és dins `scrollRef` (`scrollRef.contains`). Verificat amb harness (component real + esdeveniments de ratolí sintètics; clics a la barra confirmats sense efecte). Sense commit. Detall a history.md (2026-07-07).
+
+## T9. Ctrl/Cmd + clic = seek pur i Ctrl/Cmd + arrossegar = scrub (Fase 2) *(tancada 2026-07-07)*
+
+**Qué cambió al cerrarla:** Nova clau `WAVEFORM_CTRL_CLICK_SEEK` (`snlbpro_waveform_ctrl_click_seek`, default true) + toggle a SettingsModal + entrada a factoryReset. Amb Ctrl (o Cmd a Mac) premut, l'ona es tracta com a espai buit: `Ctrl+clic` mou el cursor al punt clicat i **mai** toca/mou/selecciona un esdeveniment; `Ctrl+arrossegar` fa scrub. Reaprofita el camí de seek/scrub existent (es salta el hit-test de segments a `handleMouseDown` quan `seekOnly = (ctrlKey||metaKey) && getCtrlClickSeek()`). Verificat amb harness (ctrlKey i metaKey). Sense commit. **Nota:** el rediseny d'interacció posterior (tareas.md #12) el reaprofita/substitueix — amb page-mode el clic normal ja és segur i `Ctrl+clic` passarà a "fixar final" (paritat SE).
+
+## T8. Hold per defecte 50 ms + zona morta anti-tremolor a l'arrossegament (Fase 1) *(tancada 2026-07-07)*
+
+**Qué cambió al cerrarla:** El temps de pulsació mantinguda per armar el drag d'un esdeveniment (`WAVEFORM_HOLD_MS`) baixa de default **500 → 50 ms** (els usuaris de proves el trobaven lent). Per compensar el risc de moviments accidentals, nova clau `WAVEFORM_DRAG_DEADZONE_PX` (`snlbpro_waveform_drag_deadzone_px`, default **6 px**, 0 = desactivat): un cop armat el drag, ignora moviments per sota del marge (anti-tremolor), i si no se supera es tracta com a clic. **Reancoratge** al creuar la zona morta per evitar el "salt" del valor sencer del llindar (validat: important si es puja el marge cap a 40 px). Controls a SettingsModal + entrada a factoryReset. 4 fitxers (`constants.ts`, `WaveformTimeline.tsx`, `SettingsModal.tsx`, `factoryReset.ts`). Verificat amb harness aïllat (7 escenaris: clic ràpid, drag, anti-tremolor, zona morta=0, hold configurable, seek buit, resize). `tsc` + `vite build` nets. Sense commit. Detall a history.md (2026-07-07).
+
+## T7. Restaurar l'última posició en reobrir un projecte de subtítols *(tancada 2026-07-07)*
+
+**Qué cambió al cerrarla:** En reobrir un projecte a l'editor de subtítols, ara torna a la posició de reproducció + subtítol actiu on l'usuari es va quedar, en comptes de començar sempre a 0:00. Persistència **backend** (triada per l'usuari, cross-device): nou camp lliure `project.settings.resumeState = { currentTime, activeSegmentId, updatedAt }` via nou endpoint `PATCH /projects/:id/resume-state` (`setResumeState` amb `$set` niat que no clobbereja la resta del bag `settings`); la lectura reaprofita el `getProjectBySrt` existent (cap GET nou). Tota la lògica de frontend en un hook compartit nou `frontend/hooks/useResumePosition.ts` (fetch del resum → aplicació de la restauració quan es coneix `duration`, amb clamp a `duration-0.1` i cas sense-vídeo per `activeSegmentId`; desat amb throttle de 5s flanc principal+cua; `flush()` a onPause/unmount/onClose amb guards que eviten sobreescriure amb 0). Afegit `key={currentDoc.id}` a les vistes d'editor a `App.tsx` perquè cada document munti un editor net (corregeix un defecte latent: `autoLoadAttemptedRef` no es reiniciava en canviar de `docId`). Consumit per les dues vistes (`VideoSubtitlesEditorView`, `VideoSrtStandaloneEditorView` — aquesta última no resolia el projecte; ara ho fa el hook). Dissenyat amb **ralph-loop de 6 iteracions adversarials** (1 crític + diversos majors corregits al disseny abans de codificar; sortida per 3 revisions consecutives només-minor) i executat amb subagents (backend + frontend-core en paral·lel, després wiring); `tsc --noEmit` net a frontend i backend. **Pendent de verificació en navegador i de commit.** Detall a history.md (2026-07-07).
 
 ## T6. Cerca i substitució tipus Word a l'editor de subtítols *(tancada 2026-07-07)*
 
