@@ -1,3 +1,0 @@
-[      69ms] [LOG] logging via refresh token @ https://www.nikse.dk/main.35ed37fe61f2ea6a.js:0
-[     189ms] [ERROR] Failed to load resource: the server responded with a status of 415 () @ https://www.nikse.dk/blog/profiles/login-token:0
-[     191ms] [ERROR] ERROR mw @ https://www.nikse.dk/main.35ed37fe61f2ea6a.js:0

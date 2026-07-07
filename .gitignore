@@ -1,0 +1,57 @@
+# ============================================================================
+#  .gitignore — raíz del proyecto SONILAB
+# ============================================================================
+
+# --- Artefactos generados por skills de Claude (planes, specs, docs) --------
+/docs/
+
+# --- Herramientas de agentes / MCP (no forman parte del código fuente) ------
+.superpowers/
+.playwright-mcp/
+
+# NOTA: .vscode/ y .claude/ SÍ se versionan a propósito (config del proyecto,
+#       incluidos sus .json). Por eso NO aparecen ignorados aquí.
+
+# --- Dependencias -----------------------------------------------------------
+node_modules/
+**/node_modules/
+
+# --- Builds / salidas -------------------------------------------------------
+dist/
+dist-ssr/
+build/
+*.local
+
+# --- Logs -------------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# --- Variables de entorno (secretos) ----------------------------------------
+# Se ignoran los .env reales; los *.env.example SÍ se versionan.
+.env
+.env.local
+.env.*.local
+
+# --- Datos de runtime / media subida por usuarios (NUNCA versionar) ---------
+# Archivos pesados (vídeos, audios) que superan el límite de 100 MB de GitHub.
+backend_nest_mvp/SonilabData/
+
+# --- Cachés y artefactos generados ------------------------------------------
+backend_nest_mvp/cache/
+*.tsbuildinfo
+repomix-output.*
+
+# --- Sistema operativo / editores -------------------------------------------
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.idea/

@@ -1,9 +1,0 @@
-[     548ms] [WARNING] cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in production, install it as a PostCSS plugin or use the Tailwind CLI: https://tailwindcss.com/docs/installation @ https://cdn.tailwindcss.com/:63
-[     655ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=1e9f6007:20102
-[     691ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/favicon.ico:0
-[   64547ms] [WARNING] cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in production, install it as a PostCSS plugin or use the Tailwind CLI: https://tailwindcss.com/docs/installation @ https://cdn.tailwindcss.com/:63
-[   64714ms] [WARNING] An import map rule for specifier 'react-dom/' was removed, as it conflicted with an existing rule. @ http://localhost:3000/__wavetest.html:0
-[   64714ms] [WARNING] An import map rule for specifier 'react' was removed, as it conflicted with an existing rule. @ http://localhost:3000/__wavetest.html:0
-[   64714ms] [WARNING] An import map rule for specifier 'react/' was removed, as it conflicted with an existing rule. @ http://localhost:3000/__wavetest.html:0
-[   65035ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/node_modules/.vite/deps/react-dom_client.js?v=1e9f6007:20102
-[   65172ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/__wavetest.html:0
