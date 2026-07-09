@@ -237,6 +237,8 @@ const autoLoadAttemptedRef = useRef(false);
   });
 
   const [editorMinGapMs, setEditorMinGapMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_GAP_MS, 160);
+  const [waveViewMode] = useLocalStorage<'page' | 'duo'>(LOCAL_STORAGE_KEYS.WAVEFORM_VIEW_MODE, 'page');
+  const effectiveScrollMode: 'stationary' | 'page' = waveViewMode === 'page' ? 'page' : scrollModeWave;
   const [editorMinDurationMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_DURATION_MS, 1000);
 
   const generalConfig = useMemo<GeneralConfig>(() => ({
@@ -927,6 +929,69 @@ const handleSave = useCallback(() => {
     subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, endTime } : s));
   }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
 
+  // ── Modificador+clic a l'ona (estil Subtitle Edit): fixa cues de l'esdeveniment ACTIU al temps clicat ──
+  const handleCueStart = useCallback((t: number) => {
+    if (!isEditing || !activeSegmentId) return;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const idx = segments.findIndex(s => s.id === activeSegmentId);
+    if (idx === -1) return;
+    const seg = segments[idx];
+    const prevSeg = idx > 0 ? segments[idx - 1] : null;
+    let startTime = t;
+    if (prevSeg && startTime < prevSeg.endTime + gap) startTime = prevSeg.endTime + gap;
+    const minDurSec = Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000;
+    if (startTime >= seg.endTime - minDurSec) startTime = seg.endTime - minDurSec;
+    if (startTime < 0) startTime = 0;
+    subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, startTime } : s));
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
+
+  const handleCueEnd = useCallback((t: number) => {
+    if (!isEditing || !activeSegmentId) return;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const idx = segments.findIndex(s => s.id === activeSegmentId);
+    if (idx === -1) return;
+    const seg = segments[idx];
+    const nextSeg = idx < segments.length - 1 ? segments[idx + 1] : null;
+    let endTime = t;
+    if (nextSeg && endTime > nextSeg.startTime - gap) endTime = nextSeg.startTime - gap;
+    const minDurSec = Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000;
+    if (endTime - seg.startTime < minDurSec) endTime = seg.startTime + minDurSec;
+    subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, endTime } : s));
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
+
+  const handleCueStartKeepDuration = useCallback((t: number) => {
+    if (!isEditing || !activeSegmentId) return;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const idx = segments.findIndex(s => s.id === activeSegmentId);
+    if (idx === -1) return;
+    const seg = segments[idx];
+    const dur = seg.endTime - seg.startTime;
+    const prevSeg = idx > 0 ? segments[idx - 1] : null;
+    const nextSeg = idx < segments.length - 1 ? segments[idx + 1] : null;
+    let startTime = t;
+    const lowerBound = prevSeg ? prevSeg.endTime + gap : 0;
+    const upperBound = (nextSeg ? nextSeg.startTime - gap : duration) - dur;
+    if (startTime < lowerBound) startTime = lowerBound;
+    if (startTime > upperBound) startTime = upperBound;
+    if (startTime < 0) startTime = 0;
+    const endTime = startTime + dur;
+    subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, startTime, endTime } : s));
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory, duration]);
+
+  const handleRippleFromCue = useCallback((t: number) => {
+    if (!isEditing || !activeSegmentId) return;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    const idx = segments.findIndex(s => s.id === activeSegmentId);
+    if (idx === -1) return;
+    const seg = segments[idx];
+    const prevSeg = idx > 0 ? segments[idx - 1] : null;
+    let startTime = t;
+    if (prevSeg && startTime < prevSeg.endTime + gap) startTime = prevSeg.endTime + gap;
+    if (startTime < 0) startTime = 0;
+    const delta = startTime - seg.startTime;
+    subsHistory.commit(segments.map((s, i) => i < idx ? s : { ...s, startTime: s.startTime + delta, endTime: s.endTime + delta }));
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory]);
+
   useKeyboardShortcuts('subtitlesEditor', (action) => {
     switch (action) {
       case 'TOGGLE_PLAY_PAUSE': onTogglePlay(); break;
@@ -1177,16 +1242,21 @@ const handleSave = useCallback(() => {
           onSegmentUpdate={handleSegmentUpdate}
           onSegmentUpdateEnd={handleSegmentUpdateEnd}
           onSegmentClick={handleSegmentClick}
+          onSetCueStart={handleCueStart}
+          onSetCueEnd={handleCueEnd}
+          onSetCueStartKeepDuration={handleCueStartKeepDuration}
+          onRippleFromCue={handleRippleFromCue}
           autoScroll={autoScrollWave}
-          scrollMode={scrollModeWave}
+          scrollMode={effectiveScrollMode}
           onUndo={() => subsHistory.undo()}
           onRedo={() => subsHistory.redo()}
           canUndo={subsHistory.canUndo}
           canRedo={subsHistory.canRedo}
           autoScrollWave={autoScrollWave}
           onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)}
-          scrollModeWave={scrollModeWave}
+          scrollModeWave={effectiveScrollMode}
           onScrollModeChangeWave={setScrollModeWave}
+          scrollModeLocked={waveViewMode === 'page'}
           autosaveEnabled={autosave}
           onToggleAutosave={() => setAutosave(!autosave)}
           onSave={handleSave}

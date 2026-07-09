@@ -566,7 +566,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [editorMinDurationMs, setEditorMinDurationMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_DURATION_MS, 1000);
   const [waveformHoldMs, setWaveformHoldMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS, 50);
   const [waveformDeadzonePx, setWaveformDeadzonePx] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_DRAG_DEADZONE_PX, 6);
-  const [waveformCtrlSeek, setWaveformCtrlSeek] = useLocalStorage<boolean>(LOCAL_STORAGE_KEYS.WAVEFORM_CTRL_CLICK_SEEK, true);
+  const [waveViewMode, setWaveViewMode] = useLocalStorage<'page' | 'duo'>(LOCAL_STORAGE_KEYS.WAVEFORM_VIEW_MODE, 'page');
 
   // Factory Reset modal state
   const [isFactoryResetModalOpen, setIsFactoryResetModalOpen] = useState(false);
@@ -968,6 +968,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         </div>
                         <div className="flex items-center justify-between pt-4 border-t border-[var(--th-border)]/30">
                             <div>
+                                <p className="font-bold text-gray-200">Mode de l'ona d'àudio</p>
+                                <p className="text-xs text-gray-500 italic">Pàgina (recomanat, estil Subtitle Edit): la vista avança per pàgines i no persegueix el cursor de manera contínua → permet fer doble clic i editar durant la reproducció. Duo: pots triar entre estacionari i pàgina amb el botó del timeline.</p>
+                            </div>
+                            <div className="flex items-center rounded-lg overflow-hidden shrink-0" style={{ border: '1px solid var(--th-border)' }}>
+                                {(['page', 'duo'] as const).map((m) => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => setWaveViewMode(m)}
+                                        className="px-3 py-1.5 text-xs font-bold transition-colors"
+                                        style={{
+                                            backgroundColor: waveViewMode === m ? 'var(--th-accent)' : 'var(--th-bg-tertiary)',
+                                            color: waveViewMode === m ? '#fff' : 'var(--th-editor-meta)',
+                                        }}
+                                    >
+                                        {m === 'page' ? 'Pàgina' : 'Duo'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-4 border-t border-[var(--th-border)]/30">
+                            <div>
                                 <p className="font-bold text-gray-200">Temps de pressió per moure segment</p>
                                 <p className="text-xs text-gray-500 italic">Temps mínim (ms) de pulsació mantinguda per activar el drag d'un segment al timeline.</p>
                             </div>
@@ -997,24 +1019,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 />
                                 <span className="text-xs font-mono font-bold w-16 text-right" style={{ color: 'var(--th-accent-text)' }}>{waveformDeadzonePx} px</span>
                             </div>
-                        </div>
-                        <div className="flex items-center justify-between pt-4 border-t border-[var(--th-border)]/30">
-                            <div>
-                                <p className="font-bold text-gray-200">Ctrl/Cmd + clic mou només el cursor</p>
-                                <p className="text-xs text-gray-500 italic">Amb Ctrl (o Cmd a Mac) premut, clicar o arrossegar sobre l'ona mou el cursor de transport i mai un esdeveniment. Estil Nuendo.</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setWaveformCtrlSeek((v) => !v)}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0"
-                                style={{
-                                    backgroundColor: waveformCtrlSeek ? 'var(--th-accent)' : 'var(--th-bg-tertiary)',
-                                    color: waveformCtrlSeek ? '#fff' : 'var(--th-editor-meta)',
-                                    border: '1px solid var(--th-border)',
-                                }}
-                            >
-                                {waveformCtrlSeek ? 'Activat' : 'Desactivat'}
-                            </button>
                         </div>
                     </div>
                 </div>

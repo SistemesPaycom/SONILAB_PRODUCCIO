@@ -22,6 +22,8 @@ export const LOCAL_STORAGE_KEYS = {
   WAVEFORM_DRAG_DEADZONE_PX: 'snlbpro_waveform_drag_deadzone_px',
   /** Ctrl/Cmd + clic a l'ona mou només el cursor de transport (mai un esdeveniment). Preferència d'usuari. Default: true. */
   WAVEFORM_CTRL_CLICK_SEEK: 'snlbpro_waveform_ctrl_click_seek',
+  /** Mode de visualització de l'ona: 'page' (default, estil Subtitle Edit) o 'duo' (permet triar estacionari/pàgina amb el botó del timeline). Preferència d'usuari. */
+  WAVEFORM_VIEW_MODE: 'snlbpro_waveform_view_mode',
   AUTOSAVE_SRT: 'snlbpro_autosave_srt',
   TASKS_TRANSLATION: 'snlbpro_tasks_translation',
   TASKS_TRANSCRIPTION: 'snlbpro_tasks_transcription',

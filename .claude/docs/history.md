@@ -43,6 +43,79 @@ La regla generalizable que se aprende, redactada para que sirva en problemas fut
 
 -->
 
+## 2026-07-08 — Hito: Fase B (part 1) — modificador+clic per fixar cues a l'ona
+
+**Tipo:** hito
+
+**Síntoma / Contexto:**
+Segona fase del rediseny d'interacció de l'ona (tareas.md #12). Afegeix l'eina de timing més ràpida de Subtitle Edit: **modificador+clic** (sense arrossegar) que fixa els temps de l'esdeveniment SELECCIONAT al punt clicat — Shift=inici, Ctrl/Cmd=final, Alt=inici mantenint durada (mou tot), Ctrl+Shift=ripple (desplaça l'actiu + tots els següents). Executat amb el flux autònom (spec → ralph-loop amb condicions de sortida objectives → implementació + verificació). **Descomposició deliberada:** Fase B són 4 sub-features; crear-arrossegant (que necessita fer l'ona focusable + teclat Enter/Escape + dibuix d'un rang provisional — infra que HOY no existeix), scrub→Alt+Shift i Alt+vora=veí queden a Fase B2 (#15) per fiabilitat. Aquesta part 1 = només el modificador+clic (autocontingut, reutilitza la infra de cues del pare).
+
+**Lo que NO funcionó** (caçat pel ralph-loop, ronda 2 — bug de pèrdua de dades):
+- **Afegir el dispatch de cues a `handleMouseUp` sense afegir els 4 callbacks al seu dep array.** `handleMouseUp` és un `useCallback` amb deps `[clearHold, onSegmentUpdateEnd, onSeek, pixelToTime]` — cap d'elles canvia en editar un segment (`onSeek` deps `[]`, `pixelToTime` `[duration, zoom]`, `onSegmentUpdateEnd` `[isEditing, subsHistory]`). Els handlers de cue del pare, en canvi, tanquen sobre `segments` (hi és a les seves deps → es recreen a cada edició). Sense els callbacks al dep array, `handleMouseUp` conserva la identitat de MUNTATGE i crida el callback de cue VELL, que fa `subsHistory.commit(segmentsOBSOLET.map(...))` → **revertiria totes les edicions fetes des del muntatge** (pèrdua de dades silenciosa). Es manifesta encara que NO es reprodueixi (el comparador de `React.memo` només curtcircuita durant `isPlaying`). `tsc`/`build` no ho detecten (no hi ha eslint react-hooks/exhaustive-deps). Fix: afegir `onSetCueStart/End/StartKeepDuration/RippleFromCue` al dep array de `handleMouseUp` (patró que el codi ja seguia: `handleDoubleClick` llista `onSegmentClick`).
+- (Ronda 1, minor) Prosa del ripple a la spec deia "índex > idxActiu" (només els següents) mentre el codi feia `i < idx return` (i>=idx, l'actiu inclòs). El codi és el correcte (si només es mogués l'actiu.start canviaria la durada de l'actiu i s'obriria forat amb el següent). Alineada la prosa.
+
+**Solución:**
+- `WaveformTimeline`: dispatch a la branca de clic simple de `handleMouseUp` (Ctrl+Shift→ripple, Shift→start, Ctrl/Cmd→end, Alt→startKeepDuration, cap→seek), amb els 4 callbacks al dep array. 4 props noves + al comparador de `React.memo`. **Repurposat Ctrl+clic:** eliminat el `seekOnly`/`getCtrlClickSeek` de la Fase 2 (3 punts + la funció) i el toggle de SettingsModal (ja no cal amb el mode Pàgina). Clau `WAVEFORM_CTRL_CLICK_SEEK` queda deprecada.
+- Pare (dues vistes): 4 `useCallback` que operen sobre `activeSegmentId` amb el temps rebut, reutilitzant els clamps de `handleSetTcIn`/`handleSetTcOut` (`gap`, `minDur`); ripple desplaça `i>=idx`; keep-duration clampa `[prevEnd+gap, nextStart-gap-dur]`. La standalone no tenia cap cue-setter — ara sí (autocontinguts).
+- **Ralph-loop:** 4 rondes (r1 minor prosa, r2 MAJOR dep-array, r3+r4 netes → sortida per 2 netes consecutives).
+
+**Archivos tocados:**
+- `frontend/components/VideoEditor/WaveformTimeline.tsx`
+- `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx` i `VideoSrtStandaloneEditorView.tsx`
+- `frontend/components/SettingsModal.tsx`
+- Docs: `docs/superpowers/specs/2026-07-08-waveform-fase-b1-modifier-click-cues-design.md`, `docs/superpowers/plans/2026-07-08-waveform-fase-b1-modifier-click-cues.md`
+
+**Verificació:** `tsc --noEmit` + `vite build` nets. Harness (component real): clic amb Shift→`onSetCueStart(t)`, Ctrl→`onSetCueEnd(t)`, Cmd(meta)→`onSetCueEnd(t)`, Alt→`onSetCueStartKeepDuration(t)`, Ctrl+Shift→`onRippleFromCue(t)`, cap→`onSeek(t)` — cadascun dispara EXACTAMENT un callback amb el temps correcte, sense creuaments; `Ctrl+clic` ja no és seek pur. Verificació en navegador de l'app real (clamps + undo + les dues vistes): pendent (tareas manuales).
+
+**Lección:**
+1. Quan afegeixes una crida a un callback dins d'un `useCallback` (o `useMemo`), **afegeix el callback al dep array** — sobretot si aquell callback prové del pare i tanca sobre estat que canvia (aquí `segments`). Sense eslint `react-hooks/exhaustive-deps`, ni `tsc` ni el build ho detecten; el bug és silenciós i destructiu (revertir edicions). La revisió adversarial que EXECUTA la cadena de deps al codi real ho va caçar.
+2. Descompon una fase gran quan una sub-feature necessita infraestructura nova (aquí: teclat + dibuix per a "crear-arrossegant"): entregar la part autocontinguda i verificable primer és millor que un pass gegant i arriscat.
+
+**Follow-ups (movidos a tareas.md):**
+- Fase B2 (#15): crear-arrossegant + scrub→Alt+Shift + Alt+vora=veí.
+- Verificació en navegador + decisió de commit (tareas manuales).
+
+---
+
+## 2026-07-08 — Hito: Fase A del rediseny de l'ona — mode Pàgina/Duo (default page)
+
+**Tipo:** hito + decisión arquitectónica
+
+**Síntoma / Contexto:**
+Primera fase (base) del rediseny d'interacció del visualitzador d'ona (tareas.md #12). Objectiu: fer del mode **pàgina** el comportament per defecte —que arregla el doble-clic sobre un esdeveniment i l'edició durant la reproducció— sense perdre l'estacionari, via una nova secció d'Ajustos "Ona d'àudio" amb dos modes **Pàgina** (default) i **Duo**. Executada amb el flux autònom de l'usuari: spec+pla datats → ralph-loop de revisió adversarial amb condicions de sortida objectives → implementació automàtica → verificació, sense confirmació intermèdia.
+
+**Descobriment que simplifica el disseny:** el problema del doble-clic NO calia arreglar-lo tocant l'autoscroll. En mode `'page'` l'efecte de follow (`WaveformTimeline.tsx` L445-448) **només** scrolla quan el cursor SURT de la finestra visible → un clic DINS la finestra no recentra. En canvi `'stationary'` (default vell) sempre centra (L451) → l'esdeveniment fuig i el segon clic falla. Per tant **defaultar a `page` ja fa el "no recentrar en seek manual"** de forma inherent; la Fase A no toca la lògica d'autoscroll.
+
+**Lo que NO funcionó** (caçat pel ralph-loop, ronda 1 — premissa falsa a la spec/pla):
+- **Assumir que `MediaPreviewView` renderitza `WaveformTimeline`** (l'spec el llistava com una de "les tres vistes" a modificar): FALS. `MediaPreviewView` renderitza `<VideoPlaybackArea>` i passa `scrollMode` com un **passthrough MORT** (documentat a `VideoPlaybackArea.tsx` L23: "Waveform-passthrough props (unused here, live at bottom waveform)"); no té ona. El seu botó estacionari/pàgina és un botó propi vestigial. Un implementador literal hauria editat props mortes i deixat el botó visible. Corregit: `MediaPreviewView` **fora d'abast**; només les dues vistes editores.
+- **Etiquetar l'objecte `playerProps` (~L1049 subtitles / ~L492 standalone) com a "punt on es passa el waveform"** (minor): la seva clau `scrollMode` és el mateix passthrough mort; el punt REAL és el `<WaveformTimeline>` JSX (subtitles ~L1181/L1188, standalone ~L616/L623). Corregit a reapuntar només al JSX.
+
+**Solución:**
+- Clau `WAVEFORM_VIEW_MODE` (`'page'|'duo'`, default `'page'`) + factoryReset. Control segmentat Pàgina/Duo a `SettingsModal` (secció de l'ona). Les dues vistes editores llegeixen la clau amb `useLocalStorage` (sync en viu via StorageEvent) i deriven `effectiveScrollMode = waveViewMode==='page' ? 'page' : scrollModeWave`, que passen com a `scrollMode`/`scrollModeWave` al `<WaveformTimeline>` + `scrollModeLocked={waveViewMode==='page'}`.
+- `WaveformTimeline`: nova prop `scrollModeLocked`; el botó intern de mode es manté renderitzat però amb `invisible pointer-events-none` + guard a l'`onClick` + `aria-hidden`/`tabIndex=-1` quan està bloquejat (ocupa espai, no mou res). Afegit al comparador de `React.memo`.
+- Mode Duo = 100% comportament actual (estat local `scrollModeWave` intacte, botó visible).
+- **Ralph-loop:** 4 rondes (r1: 2 major + 2 minor, tots el mateix defecte de MediaPreviewView → corregit; r2: 1 minor de referència creuada §4.7→§4.6 → corregit; r3 i r4: netes). Sortida per les dues condicions (2 netes consecutives + 3 sense-blocking).
+
+**Archivos tocados:**
+- `frontend/constants.ts` (+clau), `frontend/utils/factoryReset.ts` (+key)
+- `frontend/components/VideoEditor/WaveformTimeline.tsx` (prop `scrollModeLocked` + botó ocult/inert + comparador memo)
+- `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx` i `VideoSrtStandaloneEditorView.tsx` (`waveViewMode` + `effectiveScrollMode` + props JSX)
+- `frontend/components/SettingsModal.tsx` (estat + control Pàgina/Duo)
+- Docs: `docs/superpowers/specs/2026-07-07-waveform-fase-a-page-duo-design.md`, `docs/superpowers/plans/2026-07-07-waveform-fase-a-page-duo.md`, `Shortcuts Subtitols - Consolidat.csv`
+
+**Verificació:** `tsc --noEmit` + `vite build` nets. Harness (component real): en Pàgina el botó de mode és al DOM amb `visibility:hidden`/`pointer-events:none` i ocupa 20×20 px (espai preservat), inert al clic; en Duo és visible i el clic canvia el mode; doble-clic sobre un esdeveniment el selecciona. Verificació en navegador de l'app real: pendent (tareas manuales).
+
+**Lección:**
+1. Abans d'escriure una spec que enumera "les N vistes/components afectats", **verifica amb grep** que cadascun realment usa el símbol que creus (aquí: `<WaveformTimeline>`). Una premissa d'abast falsa fa una tasca sencera inexecutable; el ralph-loop la va caçar a la ronda 1 perquè els revisors grepejaven el codi real en comptes de confiar en la spec.
+2. Quan un mode ja existent (`page`) té la propietat que vols (no recentrar en clic), la implementació més neta és **canviar el default i bloquejar-lo**, no reescriure la lògica. Menys codi, menys risc.
+3. Amagar un control mantenint el layout: `invisible` (visibility:hidden) + `pointer-events-none` + guard a l'handler, deixant l'element al DOM — no `hidden`/desmuntar-lo (mouria la resta).
+
+**Follow-ups (movidos a tareas.md):**
+- Fase B (model de ratolí) i Fase C (dreceres de teclat) del #12; estacionari-en-Duo (#1).
+- Verificació en navegador + decisió de commit (tareas manuales).
+
+---
+
 ## 2026-07-07 — Decisió arquitectònica: model d'interacció del visualitzador d'ona (+ Fase 1/2 de drag)
 
 **Tipo:** decisión arquitectónica + hito

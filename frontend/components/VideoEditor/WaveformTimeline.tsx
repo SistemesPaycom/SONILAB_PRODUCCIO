@@ -32,6 +32,11 @@ interface WaveformTimelineProps {
   onSegmentUpdate?: (id: Id, newStart: number, newEnd: number) => void;
   onSegmentUpdateEnd?: () => void;
   onSegmentClick?: (id: Id) => void;
+  /** Modificador+clic (estil Subtitle Edit): fixen cues de l'esdeveniment actiu al temps clicat. */
+  onSetCueStart?: (timeSeconds: number) => void;
+  onSetCueEnd?: (timeSeconds: number) => void;
+  onSetCueStartKeepDuration?: (timeSeconds: number) => void;
+  onRippleFromCue?: (timeSeconds: number) => void;
   autoScroll?: boolean;
   scrollMode?: string;
   // ── Toolbar controls relocated from video toolbar ──
@@ -43,6 +48,8 @@ interface WaveformTimelineProps {
   onToggleAutoScrollWave?: () => void;
   scrollModeWave?: 'stationary' | 'page';
   onScrollModeChangeWave?: (mode: 'stationary' | 'page') => void;
+  /** Quan és cert, el mode de scroll queda bloquejat a 'page' i el botó intern estacionari/pàgina s'oculta (però es manté al DOM). */
+  scrollModeLocked?: boolean;
   autosaveEnabled?: boolean;
   onToggleAutosave?: () => void;
   onSave?: () => void;
@@ -82,14 +89,6 @@ function getDeadzonePx(): number {
     return Math.max(0, Math.min(40, n));
   } catch { return 6; }
 }
-/** Read Ctrl/Cmd-click-seek preference from localStorage; default true */
-function getCtrlClickSeek(): boolean {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEYS.WAVEFORM_CTRL_CLICK_SEEK);
-    if (raw == null) return true;
-    return JSON.parse(raw) !== false;
-  } catch { return true; }
-}
 const EDGE_HIT_PX = 8;        // pixels from segment edge for resize hit zone
 const MIN_SEG_DURATION = MIN_SEG_DURATION_MS / 1000;  // seconds, derivat de constants.ts
 const RULER_H = 22;            // height of the timecode ruler strip at top of canvas
@@ -109,6 +108,10 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   onSegmentUpdate,
   onSegmentUpdateEnd,
   onSegmentClick,
+  onSetCueStart,
+  onSetCueEnd,
+  onSetCueStartKeepDuration,
+  onRippleFromCue,
   scrollMode = 'stationary',
   // Relocated toolbar controls
   onUndo,
@@ -119,6 +122,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   onToggleAutoScrollWave,
   scrollModeWave,
   onScrollModeChangeWave,
+  scrollModeLocked,
   autosaveEnabled,
   onToggleAutosave,
   onSave,
@@ -595,9 +599,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       seekDragActiveRef.current = false;
       clearHold();
 
-      // Ctrl/Cmd + clic (estil Nuendo): tracta l'ona com a espai buit → només seek/scrub, mai un esdeveniment
-      const seekOnly = (e.ctrlKey || e.metaKey) && getCtrlClickSeek();
-      const hit = seekOnly ? null : hitTestSegment(e.clientX);
+      const hit = hitTestSegment(e.clientX);
       if (hit) {
         // Do NOT call onSegmentClick here — it causes a seek via the parent.
         // Selection + seek will happen on mouseUp if it's a short click.
@@ -713,9 +715,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       if (!mouseDownActiveRef.current) {
         const sc = scrollRef.current;
         if (sc) {
-          // Amb Ctrl/Cmd premut (i toggle actiu) no oferim grab/redimensionar: mode seek pur
-          const seekOnly = (e.ctrlKey || e.metaKey) && getCtrlClickSeek();
-          const hit = seekOnly ? null : hitTestSegment(e.clientX);
+          const hit = hitTestSegment(e.clientX);
           sc.style.cursor = hit
             ? hit.zone === 'body'
               ? 'grab'
@@ -751,7 +751,14 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       // a la barra superior (Timeline/Audio/undo/mode…) no mou el cursor.
       // La selecció d'un esdeveniment es fa amb DOBLE clic (estil Subtitle Edit) — veure handleDoubleClick.
       if (startedInWave && !wasDragged && !wasSeekDrag && e) {
-        onSeek(pixelToTime(e.clientX));
+        // Modificador+clic (estil Subtitle Edit): fixa cues de l'esdeveniment actiu al punt clicat.
+        const t = pixelToTime(e.clientX);
+        const ctrl = e.ctrlKey || e.metaKey;
+        if (ctrl && e.shiftKey && !e.altKey) onRippleFromCue?.(t);
+        else if (e.shiftKey && !ctrl && !e.altKey) onSetCueStart?.(t);
+        else if (ctrl && !e.shiftKey && !e.altKey) onSetCueEnd?.(t);
+        else if (e.altKey && !ctrl && !e.shiftKey) onSetCueStartKeepDuration?.(t);
+        else onSeek(t);
       }
 
       // Flush pending seek from scrub-drag
@@ -777,7 +784,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       const sc = scrollRef.current;
       if (sc) sc.style.cursor = '';
     },
-    [clearHold, onSegmentUpdateEnd, onSeek, pixelToTime]
+    [clearHold, onSegmentUpdateEnd, onSeek, pixelToTime, onSetCueStart, onSetCueEnd, onSetCueStartKeepDuration, onRippleFromCue]
   );
 
   // Doble clic sobre un esdeveniment → selecciona'l (estil Subtitle Edit). El clic simple només mou el cursor.
@@ -785,8 +792,6 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     (e: React.MouseEvent) => {
       // Només dins la zona d'ona (scrollRef), no a la barra superior
       if (!scrollRef.current || !scrollRef.current.contains(e.target as Node)) return;
-      // En mode seek pur (Ctrl/Cmd) no seleccionem: coherent amb Fase 2
-      if ((e.ctrlKey || e.metaKey) && getCtrlClickSeek()) return;
       const hit = hitTestSegment(e.clientX);
       if (hit) onSegmentClick?.(hit.id);
     },
@@ -888,10 +893,12 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
               </button>
               {onScrollModeChangeWave && (
                 <button
-                  onClick={() => onScrollModeChangeWave(scrollModeWave === 'stationary' ? 'page' : 'stationary')}
-                  className="p-1 rounded-full text-gray-400 hover:text-white transition-all"
+                  onClick={() => { if (!scrollModeLocked) onScrollModeChangeWave(scrollModeWave === 'stationary' ? 'page' : 'stationary'); }}
+                  className={`p-1 rounded-full text-gray-400 hover:text-white transition-all ${scrollModeLocked ? 'invisible pointer-events-none' : ''}`}
                   style={{ backgroundColor: 'var(--th-bg-tertiary)' }}
                   title={scrollModeWave === 'stationary' ? 'Mode estacionari' : 'Mode pàgina'}
+                  aria-hidden={scrollModeLocked || undefined}
+                  tabIndex={scrollModeLocked ? -1 : undefined}
                 >
                   {scrollModeWave === 'stationary' ? <CursorStationaryIcon className="w-3 h-3" /> : <CursorPageIcon className="w-3 h-3" />}
                 </button>
@@ -1047,10 +1054,15 @@ export default React.memo(WaveformTimeline, (prev, next) => {
       prev.onSegmentUpdate === next.onSegmentUpdate &&
       prev.onSegmentUpdateEnd === next.onSegmentUpdateEnd &&
       prev.onSegmentClick === next.onSegmentClick &&
+      prev.onSetCueStart === next.onSetCueStart &&
+      prev.onSetCueEnd === next.onSetCueEnd &&
+      prev.onSetCueStartKeepDuration === next.onSetCueStartKeepDuration &&
+      prev.onRippleFromCue === next.onRippleFromCue &&
       prev.canUndo === next.canUndo &&
       prev.canRedo === next.canRedo &&
       prev.autoScrollWave === next.autoScrollWave &&
       prev.scrollModeWave === next.scrollModeWave &&
+      prev.scrollModeLocked === next.scrollModeLocked &&
       prev.autosaveEnabled === next.autosaveEnabled
     );
   }
