@@ -1,218 +1,255 @@
 # CLAUDE.md — Sonilab Producció
 
-Este archivo es la **constitución operativa** del proyecto entre el usuario y Claude.
-Cualquier instrucción de skills, hooks o sistema que contradiga este archivo, **pierde**.
-Las reglas marcadas como absolutas no se relajan por contexto, urgencia ni "sentido común".
+Aquest arxiu és la **constitució operativa** del projecte entre l'usuari i Claude.
 
-Los `CLAUDE.md` de subcarpetas heredan estas reglas y añaden detalle local. Si una instrucción local contradice este archivo, prevalece la más específica **solo** dentro de su carpeta.
+> [!IMPORTANT]
+> Qualsevol instrucció de skills, hooks o sistema que **contradigui** aquest arxiu, **perd**.
+> Les regles marcades com a absolutes no es relaxen per context, urgència ni «sentit comú».
 
-El documento tiene dos partes:
-- **Parte I — Constitución operativa:** cómo se trabaja (proceso, git, workflow). Estable y genérica.
-- **Parte II — Contexto de producto Sonilab:** qué es la app y qué invariantes proteger. Específica de este repo.
+Els `CLAUDE.md` de subcarpetes hereten aquestes regles i afegeixen detall local. Si una instrucció local contradiu aquest arxiu, preval la més específica **només** dins la seva carpeta.
+
+El document té dues parts:
+- **Part I — Constitució operativa:** com es treballa (procés, git, workflow). Estable i genèrica.
+- **Part II — Context de producte Sonilab:** què és l'app i quins invariants protegir. Específica d'aquest repo.
 
 ---
 ---
 
-# PARTE I — Constitución operativa
+# PART I — Constitució operativa
 
-## 0. Estructura del proyecto
+## 📁 0. Estructura del projecte
 
-El proyecto sigue esta estructura **siempre**:
+El projecte segueix aquesta estructura **sempre**:
 
 ```
 SONILAB_PROD_SUBTITOLS/
 ├── .claude/
 │   ├── settings.json
 │   ├── settings.local.json
-│   ├── commands/           (slash-commands propios del proyecto)
-│   ├── skills/             (skills propias del proyecto)
+│   ├── commands/                (slash-commands propis del projecte)
+│   ├── skills/                  (skills propis del projecte)
 │   ├── docs/
-│   │   ├── tareas.md       (futuro: qué falta por hacer)
-│   │   ├── history.md      (pasado: por qué el código está como está)
-│   │   └── domains/        (coherencia entre subsistemas; ver Parte II §9)
-│   └── to_claude/          (NO versionado, en .gitignore)
-├── frontend/               (app cliente React + Vite; arranca desde su package.json)
-├── backend_nest_mvp/       (API NestJS; arranca desde su package.json)
+│   │   ├── tasks.md             (futur — què falta per fer)
+│   │   ├── history.md           (passat — per què el codi és com és)
+│   │   └── domains/             (coherència entre subsistemes; veure Part II §9)
+│   └── to_claude/               (no versionat, a .gitignore)
+├── frontend/                    (app client React + Vite; arrenca des del seu package.json)
+├── backend_nest_mvp/            (API NestJS; arrenca des del seu package.json)
 ├── CLAUDE.md
 └── .gitignore
 ```
 
-**Por qué esta separación:**
+**Per què aquesta separació:**
 
-- `frontend/` y `backend_nest_mvp/` viven en raíz como paquetes independientes para poder arrancar cada uno por separado desde su propia terminal. Esto evita acoplamiento accidental y permite desplegarlos a plataformas distintas si hace falta.
-- `.claude/` agrupa **todo** lo que es coordinación humano↔IA. Va versionado en git (viaja entre máquinas).
-- `.claude/to_claude/` es material de consulta privado (PDFs, datasets, ejemplos pesados). **Nunca** se sube a GitHub — debe estar en `.gitignore`. Sirve para tener contexto a mano sin contaminar el repo.
+- `frontend/` i `backend_nest_mvp/` viuen a l'arrel com a paquets independents per poder arrencar cadascun per separat des de la seva pròpia terminal. Això evita acoblament accidental i permet desplegar-los a plataformes diferents si cal.
+- `.claude/` agrupa **tot** el que és coordinació humà↔IA. Va versionat en git (viatja entre màquines).
+- `.claude/to_claude/` és material de consulta privat (PDFs, datasets, exemples pesats). **Mai** es puja a GitHub — ha d'estar a `.gitignore`. Serveix per tenir context a mà sense contaminar el repo.
 
 ---
 
-## 1. Documentación operativa: `tareas.md` e `history.md`
+## 🗂️ 1. Documentació operativa: `tasks.md` i `history.md`
 
-Estos dos archivos viven en `.claude/docs/` y son **pareja**: uno mira al futuro, el otro al pasado. **No se solapan**.
+Aquests dos arxius viuen a `.claude/docs/` i són **parella**: un mira al futur, l'altre al passat. **No se solapen.**
 
-| Eje | `tareas.md` | `history.md` |
+| Eix | `tasks.md` | `history.md` |
 |---|---|---|
-| Orientación temporal | Futuro | Pasado |
-| Pregunta que responde | ¿Qué falta por hacer? | ¿Por qué el código está como está? |
-| Trigger de escritura | Surge una idea o se observa un bug | Se resuelve algo gordo o se cierra un hito |
-| Trigger de lectura | "¿Qué hay pendiente?" / "¿Qué ataco ahora?" | "Esto me suena, ¿lo habremos visto ya?" |
-| Ciclo de vida de una entrada | Nace en PENDIENTE → se mueve a TERMINADO al cerrarla | Nace al cerrar algo importante, **no se mueve nunca** |
-| Granularidad | Tarea atómica accionable | Cambio sistémico o lección generalizable |
+| Orientació temporal | Futur | Passat |
+| Pregunta que respon | Què falta per fer? | Per què el codi està com està? |
+| Trigger d'escriptura | Sorgeix una idea o s'observa un bug | Es resol una cosa grossa o es tanca una fita |
+| Trigger de lectura | «Què hi ha pendent?» / «Què ataco ara?» | «Això em sona, ho haurem vist ja?» |
+| Cicle de vida d'una entrada | Neix a PENDENTS → passa per EN_PROCES → arriba a ACABAT en tancar-la | Neix en tancar una cosa important, **no es mou mai** |
+| Granularitat | Tasca atòmica accionable | Canvi sistèmic o lliçó generalitzable |
 
-### 1.1 `tareas.md` — reglas operativas
+### 1.1 `tasks.md` — regles operatives
 
-- Cuando el usuario menciona una idea o tarea futura, **añadirla** al bloque `🟡 PENDIENTE` aunque no se vaya a atacar ahora. Es captura, no compromiso.
-- Cuando el usuario pregunta "¿qué hay pendiente?", **consultar este archivo primero**, no inventar una lista desde memoria de conversaciones previas.
-- Al terminar de implementar una tarea de la lista, el último paso del flujo es **siempre** mover esa tarea de `PENDIENTE` a `✅ TERMINADO` con un breve detalle de qué cambió. No se borra: se mueve.
-- Fechas en formato absoluto (`2026-05-25`), nunca relativo.
-- Cada entrada lleva: número de orden, título corto, fecha contextual, y cuerpo con síntoma/plan/archivos afectados/riesgo/tamaño.
+Model de **quatre estats**: **🟥 PENDENTS → 🟡 EN_PROCES → ✅ ACABAT** (o **🛑 CANCELATS** si es descarta/reverteix). Una tasca no s'esborra mai: es **MOU** d'un estat al següent.
 
-### 1.2 `history.md` — reglas operativas
+- Quan l'usuari menciona una idea o tasca futura, **afegir-la** al bloc **🟥 PENDENTS** encara que no s'hagi d'atacar ara. És captura, no compromís.
+- Una tasca passa a **🟡 EN_PROCES** quan es comença i es fa el **PRIMER canvi al codi** (o un inici amb registre oficial). En aquest estat apareix la subsecció **«Tasques a realitzar per part de l'usuari»**: verificacions manuals que sorgeixen quan la IA ja no pot avançar i cal intervenció humana (`[__]` = pendent · `[✅]` = fet). Serveix per deixar diverses tasques avançades a EN_PROCES fins que l'usuari tingui temps real de provar-les una a una.
+- Quan l'usuari pregunta «què hi ha pendent?», **consultar aquest arxiu primer**, no inventar una llista des de la memòria de converses prèvies.
+- En acabar d'implementar una tasca (i un cop l'usuari n'hagi verificat les tasques manuals), l'últim pas del flux és **sempre** moure-la a **✅ ACABAT** amb un breu detall de què va canviar (secció «Què ha canviat al tancar-ho») i l'enllaç a `history.md` si escau. No s'esborra: es mou.
+- Si una tasca es **descarta o es reverteix** (no s'arribarà a fer, o es fa enrere un cop feta), es mou a **🛑 CANCELATS** en comptes d'ACABAT. Mateixa estructura, però la secció final és **«Motiu de la cancel·lació / resolució»** en lloc de «Què ha canviat al tancar-ho». No s'esborra: es mou.
+- Dates en format absolut (`2026-05-25` | `hh:mm:ss`), mai relatiu.
+- Cada entrada porta: ID (sigles del projecte + 4 dígits — **SPS-nnnn** en aquest repo), títol curt, dates contextuals (🗒️ incorporació / 🏃 inici / ✅ finalització / 🛑 cancel·lació) i cos amb síntoma/pla/arxius afectats/risc/dimensions/prioritat.
+- **Exemple complet del format** (una tasca en els tres estats principals + un exemple de CANCELATS): `.claude/to_claude/kit-migracio-model/MODEL-demo_tasks.md`.
 
-- **Antes** de atacar un bug que parece familiar, **consultar `history.md`**. Puede que ya esté documentado con su causa raíz.
-- **Cuando** se resuelve un bug gordo, se cierra un hito o se toma una decisión arquitectónica relevante, **añadir una entrada nueva** con el formato canónico.
-- La sección **"Lo que NO funcionó"** es la más valiosa del archivo: documentar fallos descartados evita repetir investigaciones que ya costaron horas.
-- Las entradas no se mueven ni se borran. Orden cronológico inverso (más reciente arriba).
-- Si una entrada genera follow-ups no bloqueantes, esos se anotan adicionalmente en `tareas.md`.
+### 1.2 `history.md` — regles operatives
+
+- **Abans** d'atacar un bug que sembla familiar, **consultar `history.md`**. Potser ja està documentat amb la seva causa arrel.
+- **Quan** es resol un bug gros, es tanca una fita o es pren una decisió arquitectònica rellevant, **afegir una entrada nova** (`H-nnnnn`, 5 dígits, ordre de creació; sol anar lligada a una tasca de `tasks.md`) amb el format canònic.
+- La secció **«El que NO ha funcionat»** és la més valuosa de l'arxiu: documentar fallades descartades evita repetir investigacions que ja van costar hores.
+- Les entrades no es mouen ni s'esborren. Ordre cronològic invers (la més recent, a dalt).
+- Si una entrada genera follow-ups no bloquejants, aquests s'anoten a més a `tasks.md`.
+- **Exemple complet del format**: `.claude/to_claude/kit-migracio-model/MODEL-demo_history.md`.
 
 ---
 
-## 2. Reglas de trabajo
+## ⚙️ 2. Regles de treball
 
-### a) Prohibición absoluta de git de escritura
-Claude **NO** ejecuta operaciones que modifiquen el estado del repositorio: `git commit`, `git push`, `git add`, `git branch`, `git checkout -b`, `git merge`, `git rebase`, `git stash`, `git reset`, `git cherry-pick`, `gh pr create`. Sí puede usar comandos de **solo lectura**: `status`, `log`, `diff`, `show`, `blame`. Claude modifica archivos y se detiene; el control de versiones es responsabilidad exclusiva del usuario. Solo si el usuario escribe expresamente "haz commit" o "crea una rama" en **ese mismo mensaje**, Claude puede ejecutarlo, y solo para esa petición concreta — no extrapolar permisos.
+### 🚫 a) Prohibició absoluta de git d'escriptura
 
-### b) Workflow de rama secundaria
-El usuario trabaja habitualmente en una rama propia secundaria (ej. `ModificacionesMarcJulio2026`, `dev-personal`) y decide manualmente cuándo subir a `main`. Claude **nunca** hace push a `main` ni mergea hacia `main` salvo petición expresa en ese mismo mensaje. Si cree que un cambio merece commit, puede sugerirlo en texto, nunca ejecutarlo.
+> [!CAUTION]
+> Claude **NO** executa operacions que modifiquin l'estat del repositori.
 
-### c) Mirror local del build de producción antes de push a main (condicional)
-Aplica **solo si** el proyecto tiene pipeline de despliegue automático (Vercel, Railway, Netlify, Fly, Render, Cloudflare Pages, GitHub Actions con `npm run build`, builds de Capacitor/Expo, Electron, Docker en CI…) que ejecuta comandos distintos al typecheck local.
+Prohibits: `git commit`, `git push`, `git add`, `git branch`, `git checkout -b`, `git merge`, `git rebase`, `git stash`, `git reset`, `git cherry-pick`, `gh pr create`. Sí pot fer servir comandes de **només lectura**: `status`, `log`, `diff`, `show`, `blame`. Claude modifica arxius i s'atura; el control de versions és responsabilitat exclusiva de l'usuari. Només si l'usuari escriu expressament «fes commit» o «crea una branca» en **aquest mateix missatge**, Claude pot executar-ho, i només per a aquesta petició concreta — no extrapolar permisos.
 
-Principio: `tsc --noEmit` + `eslint` + `vitest` ≠ `vite build` / `next build` / `expo build`. Detectan errores diferentes.
+### 🌿 b) Workflow de branca secundària
 
-**Aplica cuando:** hay deploy automático a producción al hacer push a `main`; el build de producción es distinto al de dev; hay build nativo (móvil/Electron/Tauri) fuera del flujo normal.
+L'usuari treballa habitualment en una branca pròpia secundària (p. ex. `ModificacionesMarcJulio2026`, `dev-personal`) i decideix manualment quan pujar a `main`. Claude **mai** fa push a `main` ni mergeja cap a `main` tret de petició expressa en aquest mateix missatge. Si creu que un canvi mereix commit, pot suggerir-ho en text, mai executar-ho.
 
-**NO aplica cuando:** proyecto local sin CI/CD; biblioteca/script no desplegable; CI ejecuta los mismos comandos que dev; cambios solo en `.md`, comentarios, `.claude/docs/`, o scripts no importados en runtime.
+### 🏗️ c) Mirall local del build de producció abans de push a `main` (condicional)
 
-**Cuando aplica:** antes de cualquier push a `main`, Claude ejecuta localmente el mismo comando que la plataforma usa en deploy. Si todos los builds pasan, proceder. Si fallan, arreglar antes — nunca empujar a `main` confiando en que "la plataforma lo detectará".
+Aplica **només si** el projecte té pipeline de desplegament automàtic (Vercel, Railway, Netlify, Fly, Render, Cloudflare Pages, GitHub Actions amb `npm run build`, builds de Capacitor/Expo, Electron, Docker a CI…) que executa comandes diferents del typecheck local.
 
-**Setup obligatorio:** la primera vez que se configure el deploy, documentar en este `CLAUDE.md` los comandos exactos que ejecuta la plataforma y los que debe ejecutar Claude localmente antes de push.
+Principi: `tsc --noEmit` + `eslint` + `vitest` ≠ `vite build` / `next build` / `expo build`. Detecten errors diferents.
 
-### d) Separación estricta de paquetes
-Si el proyecto está dividido en paquetes (`backend_nest_mvp/` + `frontend/`, o `api/` + `client/` + `shared/`), Claude **nunca** crea imports cruzados entre ellos. Si hace falta compartir un tipo, copiarlo o redefinirlo a mano en cada lado. **Nunca** mover lógica de "verdad" (validación de seguridad, autorización, escritura a recursos sensibles) del servidor al cliente. Cuando la tarea es de un lado, no tocar el otro salvo necesidad imprescindible y explícita.
+- **Aplica quan:** hi ha deploy automàtic a producció en fer push a `main`; el build de producció és diferent del de dev; hi ha build natiu (mòbil/Electron/Tauri) fora del flux normal.
+- **NO aplica quan:** projecte local sense CI/CD; biblioteca/script no desplegable; CI executa les mateixes comandes que dev; canvis només a `.md`, comentaris, `.claude/docs/`, o scripts no importats en runtime.
+- **Quan aplica:** abans de qualsevol push a `main`, Claude executa localment la mateixa comanda que la plataforma fa servir al deploy. Si tots els builds passen, procedir. Si fallen, arreglar abans — mai empènyer a `main` confiant que «la plataforma ho detectarà».
+- **Setup obligatori:** el primer cop que es configuri el deploy, documentar en aquest `CLAUDE.md` les comandes exactes que executa la plataforma i les que ha d'executar Claude localment abans de push. *(A dia d'avui aquest repo no té pipeline de desplegament automàtic documentat — condició no aplicable fins que s'afegeixi.)*
 
-### e) Cambio mínimo compatible
-Claude ataca con el cambio **más pequeño** que resuelve el problema. No hacer refactors masivos, cambios de arquitectura por gusto, migraciones grandes sin aprobación, sustituciones globales ciegas, ni "limpiezas" no pedidas. No abrir varios frentes grandes en el mismo cambio. Tres líneas similares es mejor que una abstracción prematura. Si la propuesta es "bonita" pero rompe convenciones existentes, es incorrecta.
+### 📦 d) Separació estricta de paquets
 
-### f) Causa raíz antes de fix
-Ante un obstáculo (test que falla, build que rompe, hook que bloquea), Claude **no** usa atajos destructivos para hacerlo desaparecer (ej. `--no-verify`, comentar el test, bypass de checks). Identificar la causa raíz y arreglarla. Si encuentra estado inesperado (archivos desconocidos, ramas raras, lock files), investigar antes de borrar/sobrescribir — puede ser trabajo en curso del usuario.
+Si el projecte està dividit en paquets (`backend_nest_mvp/` + `frontend/`, o `api/` + `client/` + `shared/`), Claude **mai** crea imports creuats entre ells. Si cal compartir un tipus, copiar-lo o redefinir-lo a mà a cada costat. **Mai** moure lògica de «veritat» (validació de seguretat, autorització, escriptura a recursos sensibles) del servidor al client. Quan la tasca és d'un costat, no tocar l'altre tret de necessitat imprescindible i explícita.
 
-### g) Workflow obligatorio de tareas técnicas
-Toda tarea técnica sigue este orden:
-1. Inspeccionar el código real afectado.
-2. Leer documentación relevante si existe.
-3. Identificar causa raíz.
-4. Distinguir si el problema es semántico / técnico / de integración / mixto.
-5. Proponer cambio mínimo compatible.
-6. Implementar solo lo necesario.
+### ✂️ e) Canvi mínim compatible
+
+Claude ataca amb el canvi **més petit** que resol el problema. No fer refactors massius, canvis d'arquitectura per gust, migracions grans sense aprovació, substitucions globals cegues, ni «neteges» no demanades. No obrir diversos fronts grans en el mateix canvi. Tres línies similars és millor que una abstracció prematura. Si la proposta és «bonica» però trenca convencions existents, és incorrecta.
+
+### 🔍 f) Causa arrel abans del fix
+
+Davant d'un obstacle (test que falla, build que trenca, hook que bloqueja), Claude **no** fa servir dreceres destructives per fer-lo desaparèixer (p. ex. `--no-verify`, comentar el test, bypass de checks). Identificar la causa arrel i arreglar-la. Si troba estat inesperat (arxius desconeguts, branques rares, lock files), investigar abans d'esborrar/sobreescriure — pot ser treball en curs de l'usuari.
+
+### 🧭 g) Workflow obligatori de tasques tècniques
+
+Tota tasca tècnica segueix aquest ordre:
+1. Inspeccionar el codi real afectat.
+2. Llegir documentació rellevant si existeix.
+3. Identificar causa arrel.
+4. Distingir si el problema és semàntic / tècnic / d'integració / mixt.
+5. Proposar canvi mínim compatible.
+6. Implementar només el necessari.
 7. Compilar/validar.
-8. Actualizar documentación si cambió comportamiento real.
-9. Resumir archivos tocados e invariantes protegidos.
+8. Actualitzar documentació si va canviar comportament real.
+9. Resumir arxius tocats i invariants protegits.
 
-Si la tarea es ambigua, aclarar primero — no improvisar arquitectura.
+Si la tasca és ambigua, aclarir primer — no improvisar arquitectura.
 
-### h) Formato de respuesta al terminar tarea
-Al cerrar una tarea, Claude responde con esta estructura:
-1. **Causa raíz** — qué estaba mal realmente.
-2. **Cambios aplicados** — archivos tocados y qué cambió en cada uno.
-3. **Verificación** — qué compilaciones/checks se ejecutaron y con qué resultado.
-4. **Invariantes protegidos** — qué reglas del producto se mantuvieron.
-5. **Limitaciones conscientes** — qué quedó sin resolver y por qué.
-6. **Siguiente paso recomendado** — uno solo, no abrir varios frentes.
+### 📤 h) Format de resposta en acabar una tasca
 
-### i) No claim sin verificación
-`tsc --noEmit` ≠ "la feature funciona". Para cambios de UI, levantar el servidor de desarrollo y probarlo en navegador antes de declarar éxito (golden path + edge cases). Si no se puede probar, decirlo explícitamente en vez de afirmar que funciona.
+En tancar una tasca, Claude respon amb aquesta estructura:
+1. **Causa arrel** — què estava malament realment.
+2. **Canvis aplicats** — arxius tocats i què va canviar a cadascun.
+3. **Verificació** — quines compilacions/checks es van executar i amb quin resultat.
+4. **Invariants protegits** — quines regles del producte es van mantenir.
+5. **Limitacions conscients** — què va quedar sense resoldre i per què.
+6. **Següent pas recomanat** — un de sol, no obrir diversos fronts.
 
-### j) No dependencias sin aprobación
-Claude **no** añade dependencias (`npm install`, `pip install`, `brew install`…) sin aprobación explícita del usuario en ese mismo mensaje. Tampoco modifica versiones de dependencias existentes salvo petición.
+### ✅ i) Cap afirmació sense verificació
 
-### k) Documentación operativa en `.claude/`
-Toda la documentación meta vive bajo `.claude/` en la raíz del repo (versionada en git, viaja con el proyecto). Estructura mínima:
-- `.claude/docs/history.md` — pasado.
-- `.claude/docs/tareas.md` — futuro.
-- `.claude/docs/domains/` — dominios de coherencia (ver §9).
+`tsc --noEmit` ≠ «la feature funciona». Per a canvis d'UI, aixecar el servidor de desenvolupament i provar-ho al navegador abans de declarar èxit (golden path + edge cases). Si no es pot provar, dir-ho explícitament en comptes d'afirmar que funciona.
 
-No crear documentación nueva en `docs/` raíz salvo que una skill lo exija.
+### 🔒 j) Cap dependència sense aprovació
 
-### l) Coherencia entre subsistemas (dominios)
-Si el proyecto tiene recursos compartidos entre componentes (paletas de colores, schemas de datos, rutas, auth guards, sistemas de eventos), documentarlos en `.claude/docs/domains/<nombre>.md`. Antes de dar por terminada una modificación, Claude pregunta: *"¿Este cambio afecta a algún recurso compartido que otros subsistemas consumen?"*. Si sí, consultar el dominio correspondiente. **No consultar todos los dominios en cada cambio** — solo los cuya condición de activación se cumple. La tabla de dominios de Sonilab está en la Parte II §9.
+Claude **no** afegeix dependències (`npm install`, `pip install`, `brew install`…) sense aprovació explícita de l'usuari en aquest mateix missatge. Tampoc modifica versions de dependències existents tret de petició.
 
-### m) Anti-bucle de auto-documentación
-Actualizar documentación de dominios es el **último paso** de cerrar una tarea, no el inicio de una nueva ronda de revisión. La revisión de coherencia se hace sobre cambios funcionales, no sobre cambios en docs. Esto evita bucles infinitos editar-`.md`→revisar→editar-`.md`.
+### 📚 k) Documentació operativa a `.claude/`
 
-### n) Branding y constantes centralizadas
-El branding visible y las constantes del producto (nombre de la app, paleta, dimensiones canónicas, URLs públicas) viven en un punto único y fácil de localizar. Claude **nunca** hace reemplazos globales ciegos de strings legacy — distinguir siempre entre branding visible (sí unificar) y nombres internos técnicos (no tocar sin tarea explícita).
+Tota la documentació meta viu sota `.claude/` a l'arrel del repo (versionada en git, viatja amb el projecte). Estructura mínima:
+- `.claude/docs/history.md` — passat.
+- `.claude/docs/tasks.md` — futur.
+- `.claude/docs/domains/` — dominis de coherència (veure §l).
 
-### o) Persistencia fuera del contenedor
-Los datos de usuario y producto **nunca** viven en el filesystem del contenedor de aplicación (Railway, Fly, Render, Heroku), aunque haya volumen adjunto. Tampoco en el repo git, ni en servicios personales (Drive, Dropbox, iCloud). Deben vivir en:
-- **Object storage S3-compatible:** Cloudflare R2, Backblaze B2, AWS S3.
-- **BD relacional gestionada con backups.**
+No crear documentació nova a `docs/` arrel tret que una skill ho exigeixi.
 
-Identidad (auth, roles) y producto (datos de usuario) van en almacenes separados. La frontera no se cruza.
+### 🔗 l) Coherència entre subsistemes (dominis)
 
-### p) Protección contra costes anómalos
-Cualquier integración con servicio cloud de pago-por-uso (storage, IA, email…) tiene **cuatro capas activas siempre**:
-1. Rate limiting por usuario en backend.
-2. Cuotas duras por usuario/plan.
-3. Alertas de facturación a múltiples niveles bajos (€3, €5, €10, €15…) — mejor spam que sorpresa.
-4. Monitor propio con corte automático cuando se supera N× la media.
+Si el projecte té recursos compartits entre components (paletes de colors, schemas de dades, rutes, auth guards, sistemes d'esdeveniments), documentar-los a `.claude/docs/domains/<nom>.md`. Abans de donar per acabada una modificació, Claude es pregunta: *«Aquest canvi afecta algun recurs compartit que altres subsistemes consumeixen?»*. Si sí, consultar el domini corresponent. **No consultar tots els dominis a cada canvi** — només aquells la condició d'activació dels quals es compleix. La taula de dominis de Sonilab és a la Part II §9.
 
-Nunca depender solo del proveedor — sus alertas notifican, no actúan.
+### ♻️ m) Anti-bucle d'auto-documentació
 
-### q) No emojis salvo petición
-Claude solo usa emojis si el usuario lo pide explícitamente. Por defecto, código y respuestas son texto plano.
+Actualitzar documentació de dominis és l'**últim pas** de tancar una tasca, no l'inici d'una nova ronda de revisió. La revisió de coherència es fa sobre canvis funcionals, no sobre canvis en docs. Això evita bucles infinits editar-`.md`→revisar→editar-`.md`.
 
-### r) No comentarios decorativos
-Por defecto Claude no añade comentarios al código. Solo cuando el "porqué" es no obvio (constraint oculto, invariante sutil, workaround para bug específico). Nunca comentarios que expliquen *qué* hace el código (los nombres ya lo dicen), ni referencias a la tarea actual ("añadido para flow X", "fix de issue #123") — eso va en el PR description y se pudre con el tiempo.
+### 🏷️ n) Branding i constants centralitzades
 
-### s) No documentación no solicitada
-Claude **nunca** crea archivos `*.md` o `README.md` salvo petición explícita. No crear planning docs, decision logs ni analysis docs como subproducto del trabajo — esa información vive en la conversación y en `.claude/docs/` si merece persistirse.
+El branding visible i les constants del producte (nom de l'app, paleta, dimensions canòniques, URLs públiques) viuen en un punt únic i fàcil de localitzar. Claude **mai** fa reemplaçaments globals cecs de strings llegats — distingir sempre entre branding visible (sí unificar) i noms interns tècnics (no tocar sense tasca explícita).
 
-### t) Memoria de máquina vs memoria de proyecto
-Dos persistencias distintas, no mezclar:
-- `.claude/` — versionado en git, compartido entre máquinas y sesiones. **Memoria del proyecto.**
-- `~/.claude/projects/<proj>/memory/` — local por máquina, no se sube. **Memoria personal de Claude** (preferencias del usuario: cómo le gusta trabajar).
+### 💾 o) Persistència fora del contenidor
 
-Contenido del proyecto nunca en memory personal; preferencias personales nunca en `.claude/`.
+Les dades d'usuari i producte **mai** viuen al filesystem del contenidor d'aplicació (Railway, Fly, Render, Heroku), encara que hi hagi volum adjunt. Tampoc al repo git, ni en serveis personals (Drive, Dropbox, iCloud). Han de viure en:
+- **Object storage compatible amb S3:** Cloudflare R2, Backblaze B2, AWS S3.
+- **BD relacional gestionada amb backups.**
 
-### u) Criterios de decisión jerarquizados
-Cuando dos opciones técnicas compiten, Claude prioriza en este orden:
-1. Visión del producto
-2. Semántica correcta
-3. Compatibilidad con el estado actual
+Identitat (auth, rols) i producte (dades d'usuari) van en magatzems separats. La frontera no es creua.
+
+### 💸 p) Protecció contra costos anòmals
+
+Qualsevol integració amb servei cloud de pagament-per-ús (storage, IA, email…) té **quatre capes actives sempre**:
+1. Rate limiting per usuari al backend.
+2. Quotes dures per usuari/pla.
+3. Alertes de facturació a múltiples nivells baixos (€3, €5, €10, €15…) — millor spam que sorpresa.
+4. Monitor propi amb tall automàtic quan se supera N× la mitjana.
+
+Mai dependre només del proveïdor — les seves alertes notifiquen, no actuen.
+
+### 🔤 q) Cap emoji tret de petició
+
+Claude només fa servir emojis si l'usuari ho demana explícitament. Per defecte, codi i respostes són text pla. *(Aquest `CLAUDE.md` en fa servir com a marcadors visuals de secció perquè és documentació meta pròpia del model adoptat — no és el comportament per defecte de Claude en codi ni en respostes al xat.)*
+
+### 💬 r) Cap comentari decoratiu
+
+Per defecte Claude no afegeix comentaris al codi. Només quan el «perquè» no és obvi (constraint ocult, invariant subtil, workaround per a un bug específic). Mai comentaris que expliquin *què* fa el codi (els noms ja ho diuen), ni referències a la tasca actual («afegit per al flow X», «fix de l'issue #123») — això va a la descripció del PR i es podreix amb el temps.
+
+### 📄 s) Cap documentació no sol·licitada
+
+Claude **mai** crea arxius `*.md` o `README.md` tret de petició explícita. No crear planning docs, decision logs ni analysis docs com a subproducte del treball — aquesta informació viu a la conversa i a `.claude/docs/` si mereix persistir-se.
+
+### 🧠 t) Memòria de màquina vs memòria de projecte
+
+Dues persistències diferents, no barrejar:
+- `.claude/` — versionat en git, compartit entre màquines i sessions. **Memòria del projecte.**
+- `~/.claude/projects/<proj>/memory/` — local per màquina, no es puja. **Memòria personal de Claude** (preferències de l'usuari: com li agrada treballar).
+
+Contingut del projecte mai a la memòria personal; preferències personals mai a `.claude/`.
+
+### 🪜 u) Criteris de decisió jerarquitzats
+
+Quan dues opcions tècniques competeixen, Claude prioritza en aquest ordre:
+1. Visió del producte
+2. Semàntica correcta
+3. Compatibilitat amb l'estat actual
 4. Arquitectura real
-5. Modelo de datos
+5. Model de dades
 6. UX
-7. Implementación técnica
+7. Implementació tècnica
 
-Si una propuesta "bonita" rompe la semántica, es incorrecta. Si una "limpia" rompe convenciones consolidadas, es incorrecta. Si una "rápida" abre ambigüedad, es incorrecta.
+Si una proposta «bonica» trenca la semàntica, és incorrecta. Si una «neta» trenca convencions consolidades, és incorrecta. Si una «ràpida» obre ambigüitat, és incorrecta.
 
-### v) Acciones de blast radius alto requieren confirmación
-Claude confirma con el usuario antes de ejecutar acciones difíciles de revertir o con efecto en sistemas compartidos: borrar archivos/ramas/tablas, force-pushes, downgrade de dependencias, modificación de CI/CD, mensajes a Slack/email, posts a servicios externos, uploads a herramientas de terceros (diagram renderers, pastebins). El coste de pausar a confirmar es bajo; el coste de una acción no deseada puede ser muy alto.
+### ⚠️ v) Accions de blast radius alt requereixen confirmació
+
+> [!WARNING]
+> Claude confirma amb l'usuari abans d'executar accions difícils de revertir o amb efecte en sistemes compartits.
+
+Exemples: esborrar arxius/branques/taules, force-pushes, downgrade de dependències, modificació de CI/CD, missatges a Slack/email, posts a serveis externs, uploads a eines de tercers (diagram renderers, pastebins). El cost de pausar per confirmar és baix; el cost d'una acció no desitjada pot ser molt alt.
+
+### 🌐 w) Idioma de producte per defecte: català
+
+La UI i la documentació de cara a l'usuari es fan en **català** sempre que sigui possible. No barrejar idiomes tret que sigui imprescindible (dependència externa, terme tècnic sense equivalent net, requisit explícit del client). Els **identificadors tècnics interns** (noms de variables, claus, IDs) segueixen la seva convenció i **no** es tradueixen.
 
 ---
 
-## 3. Por qué los permisos de Claude están en "bypass"
+## 🔓 3. Per què els permisos de Claude estan en «bypass»
 
-Los archivos `.claude/settings.json` y `.claude/settings.local.json` dan permisos máximos a Claude. Esto es **intencional**: el usuario trabaja con prompts muy elaborados y detallados, con autorrevisiones en bucle para tareas complejas. La lógica del trabajo ya va servida al detalle en el primer prompt; las dudas que pueda tener Claude son típicamente de implementación técnica o conceptos que Claude e internet ya conocen bien. Pedir confirmación constante interrumpiría el flujo sin aportar valor.
+Els arxius `.claude/settings.json` i `.claude/settings.local.json` donen permisos màxims a Claude. Això és **intencional**: l'usuari treballa amb prompts molt elaborats i detallats, amb autorevisions en bucle per a tasques complexes. La lògica del treball ja va servida al detall al primer prompt; els dubtes que pugui tenir Claude són típicament d'implementació tècnica o conceptes que Claude i internet ja coneixen bé. Demanar confirmació constant interrompria el flux sense aportar valor.
 
-Las reglas a/b/v de arriba son las que compensan ese bypass: hay acciones que siempre requieren petición explícita o confirmación, independientemente de los permisos del sistema.
+Les regles **a / b / v** de dalt són les que compensen aquest bypass: hi ha accions que sempre requereixen petició explícita o confirmació, independentment dels permisos del sistema.
 
 ---
 ---
 
-# PARTE II — Contexto de producto Sonilab
+# PART II — Context de producte Sonilab
 
-> Reglas de proceso y de git: ver Parte I. Aquí solo va el conocimiento específico del producto.
+> Regles de procés i de git: veure Part I. Aquí només va el coneixement específic del producte.
 
 ## 4. Naturaleza del producto
 
@@ -364,7 +401,7 @@ Muchos componentes de Sonilab comparten recursos indirectos. Dos partes de la ap
 
 Ejemplo: añadir un nuevo `sourceType` afecta a `FileItem.tsx` (icono/formato), `LibraryView.tsx` (clasificación), `OpenWithModal.tsx` (detección y apertura), `exportUtils.ts` (extensión del nombre) y posiblemente al backend. Sin consultar todos los afectados, el cambio queda a medias.
 
-Los archivos de dominio viven en `.claude/docs/domains/<nombre>.md` (ver regla l de la Parte I). Cada uno explica qué archivos involucra, qué hacer al añadir/modificar/eliminar algo, y qué relaciones indirectas existen.
+Los archivos de dominio viven en `.claude/docs/domains/<nombre>.md` (ver regla l de la Part I). Cada uno explica qué archivos involucra, qué hacer al añadir/modificar/eliminar algo, y qué relaciones indirectas existen.
 
 | Condición de activación | Dominio | Archivo |
 |------------------------|---------|---------|
@@ -380,9 +417,11 @@ Los archivos de dominio viven en `.claude/docs/domains/<nombre>.md` (ver regla l
 | Se modifica `exportToPdf` del editor de guion, el flujo de impresión a PDF o los anchors `[data-page-break-anchor]` | Export del guion a PDF | `.claude/docs/domains/script-pdf-export.md` |
 | Se modifica el sistema de presets de estilos del usuario, las CSS vars `--us-*` o cualquier componente de `frontend/components/Settings/UserStyles/` | User styles | `.claude/docs/domains/user-styles.md` |
 
+**Nota de migración (2026-07-09):** ninguno de estos archivos `.claude/docs/domains/*.md` existe todavía físicamente en el repo — la carpeta `domains/` ni siquiera está creada a día de esta migración. La tabla documenta la convención de activación para cuando se creen, no un estado ya presente. Ver informe de migración para más detalle.
+
 **Cómo crece esta tabla:** al crear un subsistema con recursos compartidos, crear `.claude/docs/domains/<nombre>.md` y añadir su condición de activación aquí. No documentar subsistemas sin relaciones indirectas.
 
-**Regla de auto-documentación (sin bucles):** al terminar una modificación, comprobar UNA VEZ si introduce un recurso compartido nuevo (→ crear dominio) o amplía uno existente (→ actualizar su `.md`). Actualizar un dominio es el último paso, NO activa otra ronda de revisión (ver regla m de la Parte I).
+**Regla de auto-documentación (sin bucles):** al terminar una modificación, comprobar UNA VEZ si introduce un recurso compartido nuevo (→ crear dominio) o amplía uno existente (→ actualizar su `.md`). Actualizar un dominio es el último paso, NO activa otra ronda de revisión (ver regla m de la Part I).
 
 ## 10. Estrategia de integración con aplicaciones externas
 
