@@ -436,31 +436,6 @@ Llegenda dels camps:
 > ---
 
 > ---
-> ## **SPS-0011. Fix del warning de deprecació `baseUrl` al tsconfig del backend**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
-> >> ###### [🏃‍♂️‍➡️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: T11)* VS Code marcava `backend_nest_mvp/tsconfig.json:13` amb "Option 'baseUrl' is deprecated…", contraintuïtiu perquè el `tsc` del workspace (5.9.3) compilava net i el fitxer ja tenia `"ignoreDeprecations": "5.0"`. Causa: el TS intern de VS Code és més nou que el 5.9.3 del workspace.
->
-> >#### **Pla (ja implementat):**
-> >* Verificat que `baseUrl` no s'usa (cap import no-relatiu, cap `paths`, cap `tsconfig-paths`) → eliminats `baseUrl` i `ignoreDeprecations` del tsconfig (en lloc de pujar `ignoreDeprecations` a "6.0", que el `tsc` 5.9.3 rebutja amb `TS5103`). `tsc --noEmit` i `nest build` → exit 0.
->
-> >#### **Arxius afectats:**
-> >* `backend_nest_mvp/tsconfig.json`.
->
-> >>##### **Risc:** (no aplica — ja implementat i verificat tècnicament)
-> >>##### **Dimensions:** (no aplica — ja implementat)
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
-> > * Decidir si commitejar el treball de l'ona i aquest fix col·lateral (grup T8–T11: `WaveformTimeline.tsx`, `SettingsModal.tsx`, `constants.ts`, `factoryReset.ts`, `backend_nest_mvp/tsconfig.json`; sense commitejar per la regla a de la Part I). [__]
->
-> **Ja documentat a** `history.md` (**H-00010**).
->
-> ---
-
-> ---
 > ## **SPS-0010. Clic simple = seek al punt exacte / doble clic = seleccionar + guarda de la barra superior**
 > >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
 > >> ###### [🏃‍♂️‍➡️] *[2026-07-07] | [hora no consta]*
@@ -698,6 +673,34 @@ Llegenda dels camps:
 ## ✅ **ACABAT**
 
 > *Històric de tasques acabades. Les més recents, a dalt.*
+
+> ---
+> ## **SPS-0011. Fix del warning de deprecació `baseUrl` al tsconfig del backend**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-07] | [hora no consta]*
+> >> ###### [✅] *[2026-07-10] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: T11)* VS Code marcava `backend_nest_mvp/tsconfig.json:13` amb "Option 'baseUrl' is deprecated…", contraintuïtiu perquè el `tsc` del workspace (5.9.3) compilava net i el fitxer ja tenia `"ignoreDeprecations": "5.0"`. Causa: el TS intern de VS Code és més nou que el 5.9.3 del workspace.
+>
+> >#### **Arxius afectats:**
+> >* `backend_nest_mvp/tsconfig.json`.
+>
+> >>##### **Risc:** (tancat — sense incidències)
+> >>##### **Dimensions:** (tancat)
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Decidir si commitejar el treball de l'ona i aquest fix col·lateral (grup T8–T11: `WaveformTimeline.tsx`, `SettingsModal.tsx`, `constants.ts`, `factoryReset.ts`, `backend_nest_mvp/tsconfig.json`; sense commitejar per la regla a de la Part I). [✅]
+>
+> ---
+
+#### Què ha canviat al tancar-ho:
+Eliminats `baseUrl` i `ignoreDeprecations` de `backend_nest_mvp/tsconfig.json` (no s'usava `baseUrl` enlloc). `tsc --noEmit` i `nest build` nets. Confirmat per `git log`/`git status` que el fitxer ja està commitejat sense aquestes claus (part del grup T8–T11, commits `4e28f29` i `71be927`) i que l'arbre de treball està net — la decisió de commit pendent ja està resolta.
+
+**Detall a** history.md (**H-00010**)
+
+---
 
 > ---
 > ## **SPS-0001. Durada mínima configurable per bloc de subtítol**
