@@ -74,6 +74,45 @@ Notes:
 ---
 
 > ---
+> ## **H-00014** — Bug: doble-clic i modificador+clic trencats en mode estacionari (Duo)
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0014 (abans: pendent #1)
+> >>
+> >>#### **Síntoma / Context:**
+> >> El nou model de ratolí (clic=seek exacte sense recentrar, doble clic=seleccionar, modificador+clic=fixar cues) es va dissenyar i verificar íntegrament en mode **Pàgina** (SPS-0012/H-00012), que és el default de l'app. En mode **estacionari** (dins de Duo, l'opció alternativa que es manté per compatibilitat) el mateix model fallava: el doble-clic sovint no seleccionava l'esdeveniment correcte, i el modificador+clic (fixar cues) podia agafar un punt equivocat si just abans hi havia hagut un seek.
+> >>
+> >>#### **Descobriment que simplifica el disseny:**
+> >> La causa NO era el model de clic/doble-clic en si (idèntic en tots dos modes), sinó l'efecte **"Auto-scroll when paused"** de `WaveformTimeline.tsx`: en estacionari recentrava la vista (`scrollLeft = px - viewportWidth/2`) en CADA canvi de `currentTime`, també quan el canvi venia d'un `onSeek` manual (clic) i no de reproducció real. És exactament la mateixa arrel que H-00011 ja va diagnosticar i resoldre per a Pàgina — només que aquell fix es va aplicar únicament al RAF loop de reproducció i a la branca `page` del mateix efecte pausat, deixant la branca `else` (estacionari) intacta amb el recentratge incondicional original.
+> >>
+> >>#### **El que NO ha funcionat** (carrerons ja descartats a H-00011, revisats i confirmats vàlids també aquí):
+> >> * **"Ctrl+clic per editar" a estacionari** (l'esquema que la pròpia tasca SPS-0014 apuntava com a "probable" en incorporar-se): descartat pel mateix motiu que a H-00011 — afegeix fricció a l'operació més freqüent (ajustar temps) i introduiria DOS models de clic diferents entre Pàgina i estacionari dins la mateixa app, cosa que trenca la paritat que Fase B (SPS-0013) ja dona per feta (el modificador+clic fixa cues igual als dos modes).
+> >> * **Tractar estacionari com a mode "llegat" sense tocar-lo:** descartat perquè el fix real (extreure el recentratge del camí de pausa) és petit, autocontingut en un sol fitxer i de risc baix — no hi havia motiu per deixar un bug conegut sense arreglar quan la causa arrel ja estava resolta per a l'altre mode.
+> >>
+> >>#### **Solució:**
+> >> Estendre a estacionari el mateix principi de H-00011 («l'autoscroll no s'ha de recentrar mai en una acció manual — només ha de seguir durant la reproducció real»): l'efecte "Auto-scroll when paused" ja no branca per `scrollMode` — sempre aplica la lògica estil pàgina (només salta si el punt surt de la finestra visible, `px > sl + viewportWidth*0.97 || px < sl`). El RAF loop de reproducció real (`scrollModeRef.current === 'page' ? ... : scroll.scrollLeft = px - vw/2`), que SÍ distingeix els dos modes, queda intacte — és on estacionari conserva la seva identitat: cursor centrat de manera contínua mentre el vídeo es reprodueix de veritat. Efecte secundari acceptat: saltar el cursor en pausa (des de la llista, teclat, o restauració de posició en obrir un projecte) ja no centra el punt en estacionari, igual que ja no ho feia en Pàgina.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoEditor/WaveformTimeline.tsx` (efecte "Auto-scroll when paused" — treu la branca `scrollMode==='page'`/`else` i la dependència `scrollMode`)
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` i `vite build` nets. Verificació manual en navegador (doble-clic i modificador+clic en estacionari dins Duo): **pendent** (tasques manuals a SPS-0014).
+> >>
+> >>#### **Lliçó:**
+> >> Quan un fix de causa arrel es documenta explícitament com a decisió transversal ("l'autoscroll mai recentra en una acció manual"), val la pena comprovar TOTS els camins de codi que implementen la variant antiga del comportament, no només el que estava en context de la tasca original — H-00011 ja tenia la resposta correcta escrita, però només es va aplicar a la meitat dels llocs (RAF loop + branca `page`) i es va deixar la branca `else` d'estacionari amb el comportament vell, generant un segon bug amb la mateixa causa un cop coneguda.
+> >>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * Presets d'interacció de ratolí page vs duo explícits (SPS-0015) — sense relació directa amb aquest fix, no bloquejant.
+> >> * Verificació manual en navegador i decisió de commit (tasques manuals a SPS-0014).
+> ---
+
+---
+
+> ---
 > ## **H-00013** — Fita: Fase B (part 1) — modificador+clic per fixar cues a l'ona
 > >> ###### *[2026-07-08]*
 >

@@ -442,19 +442,21 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   // video time.  This effect only fires on the throttled currentTime state
   // (~250ms), so running it while playing would fight the RAF loop — especially
   // in page mode where a stale time can trigger a backwards page jump.
+  //
+  // Manual/paused seeks (clic, doble clic, salt des de la llista, teclat…) MAI
+  // recentren la vista, en cap dels dos modes — només salten si el punt surt de
+  // la finestra visible. Recentrar aquí trencava el doble-clic en mode
+  // estacionari (SPS-0014): el primer clic ja movia la vista abans que arribés
+  // el segon. El recentratge continu propi d'estacionari només s'aplica DURANT
+  // la reproducció real (RAF loop, més avall) — arrel: H-00011.
   useEffect(() => {
     if (isPlaying || isDraggingRef.current || !scrollRef.current) return;
     const px = currentTime * zoom;
     const sl = scrollRef.current.scrollLeft;
-    if (scrollMode === 'page') {
-      if (px > sl + viewportWidth * 0.97 || px < sl) {
-        scrollRef.current.scrollLeft = px - viewportWidth * 0.03;
-      }
-    } else {
-      // Stationary: always center on cursor position
-      scrollRef.current.scrollLeft = px - viewportWidth / 2;
+    if (px > sl + viewportWidth * 0.97 || px < sl) {
+      scrollRef.current.scrollLeft = px - viewportWidth * 0.03;
     }
-  }, [currentTime, isPlaying, zoom, viewportWidth, scrollMode]);
+  }, [currentTime, isPlaying, zoom, viewportWidth]);
 
   // ── RAF loop during playback (playhead only) ──
   useEffect(() => {

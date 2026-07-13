@@ -88,25 +88,6 @@ Llegenda dels camps:
 > *Ordenat per recomanació d'atac: primer per ordre lògic (els ciments, les bases… fins al sostre) i, després, dels més ràpids/desbloquejants als més grans. Ordre conservat íntegrament de l'original.*
 
 > ---
-> ## **SPS-0014. Mode Duo + estacionari: model de ratolí alternatiu**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #1)* El nou model de ratolí de l'editor de subtítols (clic = seek sense recentrar · doble clic = seleccionar · arrossegar = moure/redimensionar · modificador+clic = fixar cues) depèn del **page-follow**. En mode **ESTACIONARI** (que recentra la vista a cada seek) el clic i el doble-clic no funcionen igual perquè la vista fuig.
->
-> >#### **Pla:**
-> >* Decidir/implementar el comportament de ratolí per a estacionari — probablement estil **Ctrl+clic per editar** (l'esquema original de l'usuari) — o assumir que estacionari és un mode "llegat" amb interacció limitada. De moment, el mode **Duo/estacionari** queda amb el comportament ACTUAL; per defecte el programa arrenca en mode **Pàgina** (SPS-0012), on tot el nou esquema funciona.
->
-> >#### **Arxius afectats:**
-> >* Editor de subtítols (visualitzador d'ona) — mode de scroll (page vs estacionari) i handlers de ratolí.
->
-> >>##### **Risc:** 5/10 *(orig.: «medio»)*
-> >>##### **Dimensions:** 5/10 *(orig.: «medio»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
 > ## **SPS-0015. Presets d'interacció de ratolí page vs duo**
 > >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
 >
@@ -382,6 +363,33 @@ Llegenda dels camps:
 ## 🟡 **EN_PROCES**
 
 > *Implementació ja feta (verificada tècnicament amb `tsc --noEmit`/`vite build`) però **pendent de verificació humana en navegador i/o decisió de commit** — per això, segons la semàntica del model nou, NO són ACABAT encara. Veure nota de migració a dalt. Ordenades de la més recent a la més antiga (mateix ordre que l'antic bloc TERMINADO).*
+
+> ---
+> ## **SPS-0014. Mode Duo + estacionari: model de ratolí alternatiu**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-13] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #1)* El nou model de ratolí de l'editor de subtítols (clic = seek sense recentrar · doble clic = seleccionar · arrossegar = moure/redimensionar · modificador+clic = fixar cues) depenia del **page-follow**. En mode **ESTACIONARI** (dins de Duo), l'efecte "auto-scroll quan està en pausa" de `WaveformTimeline.tsx` recentrava la vista (`scrollLeft = px - viewportWidth/2`) en CADA canvi de `currentTime`, també quan el canvi venia d'un clic manual i no de reproducció real. Un doble-clic genera dos cicles mousedown/mouseup abans de l'esdeveniment `dblclick` natiu: el primer clic ja disparava `onSeek` → `currentTime` canviava → la vista es recentrava ABANS que arribés el segon clic, de manera que `hitTestSegment` de `handleDoubleClick` ja no trobava l'esdeveniment sota el cursor (la vista havia fugit). El mateix recentratge interferia amb el modificador+clic (fixar cues) si just abans hi havia hagut un seek.
+>
+> >#### **Pla (ja implementat):**
+> >* S'ha estès a estacionari el mateix principi arrel documentat a H-00011 pel mode Pàgina: *"l'autoscroll no s'ha de recentrar mai en una acció manual — només ha de seguir durant la reproducció real"*. L'efecte "Auto-scroll when paused" de `WaveformTimeline.tsx` ja NO distingeix `scrollMode`: sempre fa servir la lògica estil pàgina (només salta si el punt surt de la finestra visible), en comptes de centrar sempre en estacionari. El RAF loop de reproducció real (que sí distingeix page/stationary) queda INTACTE — és on estacionari conserva la seva identitat pròpia: cursor centrat de manera CONTÍNUA mentre el vídeo es reprodueix de veritat. **Descartat explícitament** (ja documentat a H-00011): reintroduir "Ctrl+clic per editar" a estacionari — afegeix fricció a l'operació més freqüent i divergeix del model ja adoptat a Pàgina.
+> >* **Efecte secundari acceptat:** en pausa, saltar el cursor (des de la llista de subtítols, teclat, o en restaurar la posició en obrir un projecte — SPS-0007) ja NO centra el punt quan s'està en estacionari: salta a prop del punt igual que en Pàgina (el punt queda a l'esquerra de la nova vista en lloc de centrat). Estacionari només centra contínuament DURANT la reproducció real.
+>
+> >#### **Arxius afectats:**
+> >* `frontend/components/VideoEditor/WaveformTimeline.tsx` (únic fitxer — efecte "Auto-scroll when paused"; el RAF loop de reproducció no s'ha tocat).
+>
+> >>##### **Risc:** (no aplica — ja implementat; `tsc --noEmit` i `vite build` nets)
+> >>##### **Dimensions:** (no aplica — ja implementat)
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Verificar en navegador (a :3000, app real amb un projecte amb ona), amb el toggle **Duo** actiu i el botó intern del timeline en **estacionari**: (a) doble clic sobre un subtítol el selecciona correctament (abans podia fallar o seleccionar el veí per culpa del recentratge entre els dos clics); (b) clic simple mou el cursor al punt exacte sense que la vista salti de manera desconcertant; (c) modificador+clic (Shift/Ctrl/Alt/Ctrl+Shift) sobre l'esdeveniment seleccionat fixa les cues correctament; (d) DURANT la reproducció, estacionari continua mantenint el cursor centrat de manera contínua (aquest comportament NO ha de canviar); (e) en pausa, saltar des de la llista de subtítols o restaurar la posició en obrir un projecte ja no centra el punt — apareix a prop de l'esquerra de la nova vista (comportament nou i intencionat; valorar si és còmode). Repetir amb el toggle a **pàgina** dins Duo per confirmar que no ha canviat res (ja garantit des de SPS-0012). [__]
+> > * Decidir si commitejar el fix (1 fitxer: `WaveformTimeline.tsx`; sense commitejar per la regla a de la Part I). [__]
+>
+> **Ja documentat a** `history.md` (**H-00014**).
+>
+> ---
 
 > ---
 > ## **SPS-0013. Fase B (part 1): modificador+clic per fixar cues a l'ona**
