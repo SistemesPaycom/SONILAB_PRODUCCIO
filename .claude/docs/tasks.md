@@ -88,21 +88,46 @@ Llegenda dels camps:
 > *Ordenat per recomanació d'atac: primer per ordre lògic (els ciments, les bases… fins al sostre) i, després, dels més ràpids/desbloquejants als més grans. Ordre conservat íntegrament de l'original.*
 
 > ---
-> ## **SPS-0015. Presets d'interacció de ratolí page vs duo**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> ## **SPS-0029. Gestos de ratolí contra una vista en moviment durant la reproducció**
+> >> ###### [🗒️] *[2026-07-13] | [10:42:34]*
 >
 > >#### **Síntoma / Context:**
-> >* *(abans: pendent #2)* Potser cal separar explícitament els presets d'interacció de ratolí per mode (page vs duo) en comptes de derivar-los del mode de scroll actiu.
+> >* Descobert avaluant SPS-0015 (veure H-00015). Els handlers de ratolí de `WaveformTimeline` deriven el temps del `scrollLeft` **viu** (`pixelToTime` L513, `hitTestSegment` L543), i durant la reproducció el RAF loop l'escriu a 60 fps (L471-497). En **estacionari** el recentratge és continu (`scrollLeft = px - vw/2`, L489) → el marc de coordenades es mou **enmig del gest**. Tres conseqüències detectades **per anàlisi de codi** (pendents de reproduir al navegador):
+> >   1. **Doble clic en estacionari mentre reprodueix selecciona l'esdeveniment equivocat.** És la MATEIXA arrel que SPS-0014/H-00014 però al camí de **playback**, que aquell fix va deixar intacte a posta: el clic 1 fa `onSeek(t)` (L763) → el RAF recentra al frame següent (L489) → el clic 2 i el `hitTestSegment` (L797) ja llegeixen un `scrollLeft` desplaçat. Només encerta si es clica prop del centre horitzontal.
+> >   2. **Clic simple i modificador+clic (cues) arriben tard** en estacionari reproduint: el temps es calcula al `mouseUp` (L758) amb el `scrollLeft` d'aquell instant, no al `mouseDown` → error ≈ durada del clic × velocitat (~100 ms ≈ 2,5 frames a 25 fps). Sistemàtic, i afecta la feina de cues estil SE.
+> >   3. **Salt de pàgina enmig d'un clic** (mode pàgina, rar ~0,4% amb els defaults): si el RAF salta de pàgina (L484-485) entre `mouseDown` i `mouseUp`, el seek/cue aterra una pàgina sencera lluny del punt clicat.
 >
 > >#### **Pla:**
-> >* Avaluar si val la pena un preset explícit per mode o mantenir la derivació actual.
+> >* Dues correccions **mode-agnòstiques** (cap preset per mode — veure SPS-0015/H-00015):
+> >   * **Marc de coordenades estable durant el gest:** capturar el temps al `mouseDown` (`downTimeRef`, generalitzant el que ja fa `dragAnchorTimeRef` a L611 només quan hi ha segment) i usar-lo a la branca de clic simple en lloc de recalcular a L758. Cobreix (2) i (3).
+> >   * **Estendre l'invariant de H-00014 al RAF loop:** «un seek manual mai recentra la vista» s'aplica avui només a l'efecte de pausa (L452-459). Afegir una finestra de gràcia (p. ex. `suppressRecenterUntilRef`, ~350 ms des de qualsevol `onSeek` originat per un gest) durant la qual la branca estacionària (L489) usa la regla de pàgina. Cobreix (1); estacionari recupera el recentratge continu just després.
+> >* Verificar al navegador els 3 símptomes ABANS de tocar res (reproduir el bug primer).
 >
 > >#### **Arxius afectats:**
-> >* *(no consta a l'original)*
+> >* `frontend/components/VideoEditor/WaveformTimeline.tsx` (únic fitxer previst).
 >
-> >>##### **Risc:** 2/10 *(orig.: «bajo»)*
-> >>##### **Dimensions:** 2/10 *(orig.: «pequeño»)*
-> >>##### **Prioritat:** ⭐ (no consta)
+> >>##### **Risc:** 5/10 *(toca l'autoscroll i el camí de clic — zona amb 2 bugs previs, H-00011 i H-00014)*
+> >>##### **Dimensions:** 4/10
+> >>##### **Prioritat:** ⭐⭐⭐⭐⭐⭐⭐ (7/10 — bug real de selecció i de precisió de cues en un mode enviat)
+>
+> ---
+
+> ---
+> ## **SPS-0030. El botó «Seguiment» de l'ona és cosmètic (l'autoscroll no es pot desactivar)**
+> >> ###### [🗒️] *[2026-07-13] | [10:42:34]*
+>
+> >#### **Síntoma / Context:**
+> >* Descobert avaluant SPS-0015 (veure H-00015). `WaveformTimeline` declara la prop `autoScroll` (L40) però **mai la desestructura** (L98-132), i el RAF loop condiciona l'autoscroll únicament a `isDraggingRef` (L478). El botó «Seguiment» (`autoScrollWave`, L888-895) només canvia icona i estils. Resultat: **apagar el seguiment no atura el desplaçament de l'ona** — precisament la vàlvula d'escapament que un usuari buscaria per interactuar amb una ona en moviment (relacionat amb SPS-0029). Les dues vistes editores alimenten la prop inútilment (`VideoSubtitlesEditorView.tsx:1249`, `VideoSrtStandaloneEditorView.tsx:684`).
+>
+> >#### **Pla:**
+> >* Desestructurar `autoScroll`, mirallar-la en un ref (patró de `scrollModeRef`, L163/L179) i afegir-la a la guarda de L478. Decidir si també ha d'inhibir l'efecte d'autoscroll en pausa (L452-459) — probablement sí, per coherència amb el que el botó promet.
+>
+> >#### **Arxius afectats:**
+> >* `frontend/components/VideoEditor/WaveformTimeline.tsx`.
+>
+> >>##### **Risc:** 2/10
+> >>##### **Dimensions:** 2/10
+> >>##### **Prioritat:** ⭐⭐⭐⭐⭐ (5/10 — control visible que menteix a l'usuari)
 >
 > ---
 
@@ -288,7 +313,7 @@ Llegenda dels camps:
 > >* **Fase A (base, desbloquejant): implementada, pendent de verificació — veure SPS-0012.** Default de scroll → `page`; secció Ajustos "Ona d'àudio" amb **Pàgina** (default; amaga+inertitza el botó intern del timeline però el deixa al DOM) i **Duo** (comportament actual). Arregla el doble-clic i l'edició durant playback (el mode `page` ja no recentra en clics dins la finestra).
 > >* **Fase B (ratolí):** part 1 (modificador+clic = fixar cues: Shift=inici, Ctrl=final, Alt=inici mantenint durada, Ctrl+Shift=ripple) **implementada, pendent de verificació — veure SPS-0013.** Resta a **Fase B2 (SPS-0028)**: crear arrossegant a zona buida (+Enter), `Alt+Shift`+arrossegar = scrub, `Alt`+arrossegar vora = enllaça veí <500 ms.
 > >* **Fase C (teclat):** un sol joc de dreceres (independent del mode de scroll): `←/→` (1 s) i `Ctrl+←/→` (1 frame; passos configurables), nudge `Alt+←/→` (inici) i `Alt+Shift+←/→` (final) estil Nuendo, `Alt+↑/↓` (línia), `F9–F12`, `Shift+F9`, `Ctrl+Shift+M` (merge), `Ctrl+Alt+V` (split) — tot personalitzable.
-> >* **Sub-parts ajornades:** model de ratolí per a estacionari/Duo (SPS-0014), presets explícits page/duo (SPS-0015).
+> >* **Sub-parts ajornades:** model de ratolí per a estacionari/Duo (SPS-0014). Els presets explícits page/duo (SPS-0015) queden **descartats** — el model de ratolí és únic i mode-agnòstic (veure CANCELATS i H-00015); el que sí queda obert és SPS-0029 (gestos contra una vista en moviment durant la reproducció).
 >
 > >#### **Arxius afectats:**
 > >* `frontend/components/VideoEditor/WaveformTimeline.tsx`, `SettingsModal.tsx`, `constants.ts`, `factoryReset.ts`, sistema de dreceres (`useKeyboardShortcuts`/`DEFAULT_SHORTCUTS`), les dues vistes d'editor.
@@ -355,6 +380,29 @@ Llegenda dels camps:
 > >>##### **Risc:** 7/10 *(orig.: «medio-alto»)*
 > >>##### **Dimensions:** 8/10 *(orig.: «gran — infra nova de teclat + dibuix»)*
 > >>##### **Prioritat:** ⭐ (no consta)
+>
+> ---
+
+> ---
+> ## **SPS-0031. Neteja del deute mort del subsistema d'ona (props i claus sense consumidor)**
+> >> ###### [🗒️] *[2026-07-13] | [10:42:34]*
+>
+> >#### **Síntoma / Context:**
+> >* Inventari fet en avaluar SPS-0015 (veure H-00015). Cap d'aquests punts trenca res avui, però tots són trampes per a qui llegeixi el codi després (o per a una IA que hi confiï):
+> >   * `LOCAL_STORAGE_KEYS.WAVEFORM_CTRL_CLICK_SEEK` (`frontend/constants.ts:24`, `factoryReset.ts:41`): **zero lectures** des de SPS-0013 (H-00013 ja la va declarar deprecada). Pitjor: el comentari de `constants.ts:23` («Ctrl/Cmd + clic mou només el cursor») diu **el contrari** del que fa el codi avui (`WaveformTimeline.tsx:761` → Ctrl+clic = fixa cue de FINAL).
+> >   * Props declarades i mai desestructurades a `WaveformTimeline.tsx`: `viewMode` / `onToggleViewMode` (L30-31) i `autoScroll` (L40 — aquesta última és un bug propi: **SPS-0030**).
+> >   * Passthroughs morts: `VideoPlaybackArea.tsx:27-28` (`autoScroll`, `scrollMode` declarades i mai usades) alimentats des de `VideoSubtitlesEditorView.tsx:1114`, `VideoSrtStandaloneEditorView.tsx:557` i `MediaPreviewView.tsx:92-93` — i, a més, hi passen `scrollModeWave` **cru** en lloc d'`effectiveScrollMode` (inconsistència latent). Igual a `VideoSubtitlesToolbar.tsx:26-30` («kept for interface compat»).
+> >   * `MediaPreviewView.tsx:25,169-173`: té estat i botó propis d'estacionari/pàgina però **no renderitza cap `WaveformTimeline`** → el botó no fa res i no respecta el bloqueig del mode Pàgina (ja detectat a H-00012 com a botó vestigial).
+>
+> >#### **Pla:**
+> >* Esborrar clau + comentari obsolet, esborrar props mortes i els seus llocs de crida, i decidir què fer amb el botó vestigial de `MediaPreviewView` (amagar-lo o eliminar-lo). Fer-ho en **un sol canvi de neteja**, no barrejat amb cap fix funcional. Consultar `.claude/docs/domains/localstorage.md` si per llavors existeix (avui la carpeta `domains/` encara no està creada).
+>
+> >#### **Arxius afectats:**
+> >* `frontend/constants.ts`, `frontend/utils/factoryReset.ts`, `frontend/components/VideoEditor/WaveformTimeline.tsx`, `VideoPlaybackArea.tsx`, `MediaPreviewView.tsx`, `frontend/components/VideoSubtitlesEditor/VideoSubtitlesToolbar.tsx` + les dues vistes editores.
+>
+> >>##### **Risc:** 2/10 *(esborrar codi sense consumidor; el risc real és esborrar-ne un que sí que en tingui — verificar amb grep abans)*
+> >>##### **Dimensions:** 3/10
+> >>##### **Prioritat:** ⭐⭐ (2/10 — no bloqueja res; fer-ho quan es toqui l'ona per un altre motiu)
 >
 > ---
 
@@ -737,7 +785,43 @@ Nova clau `EDITOR_MIN_DURATION_MS` (`snlbpro_editor_min_duration_ms`, default 10
 
 ## 🛑 **CANCELATS**
 
-> *Tasques descartades o revertides. Cap fins ara en aquest projecte — secció buida, es manté per format.*
+> *Tasques descartades o revertides. Les més recents, a dalt.*
+
+> ---
+> ## **SPS-0015. Presets d'interacció de ratolí page vs duo**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-13] | [10:42:34]*
+> >> ###### [🛑] *[2026-07-13] | [11:05:00]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #2)* Potser cal separar explícitament els presets d'interacció de ratolí per mode (page vs duo) en comptes de derivar-los del mode de scroll actiu.
+>
+> >#### **Pla:**
+> >* Avaluar si val la pena un preset explícit per mode o mantenir la derivació actual.
+>
+> >#### **Arxius afectats:**
+> >* Cap (avaluació; no s'ha tocat codi).
+>
+> >>##### **Risc:** 2/10 *(orig.: «bajo»)*
+> >>##### **Dimensions:** 2/10 *(orig.: «pequeño»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> ---
+
+#### Motiu de la cancel·lació / resolució:
+**Avaluada i descartada: la premissa ja no és certa.** La tasca es va incorporar el 2026-07-07, ABANS de les Fases A i B de l'ona. Auditat el codi real (2026-07-13), **cap** handler de ratolí branca per mode: `handleMouseDown/Move/Up/DoubleClick/Leave/Wheel` no llegeixen mai `scrollMode`/`waveViewMode`, i els paràmetres del ratolí (`WAVEFORM_HOLD_MS`, `WAVEFORM_DRAG_DEADZONE_PX`, `EDGE_HIT_PX`, llindar de scrub, mapa de modificador+clic) ja són **globals i únics**. L'única lectura funcional del mode a tot `WaveformTimeline.tsx` és **una línia** — el RAF loop de reproducció (L481-490) — més la visibilitat del botó de mode. Per tant no hi ha cap «derivació» a substituir: no hi ha res a separar.
+
+Quatre raons independents per no crear-los igualment:
+1. **Error de categoria:** `scrollMode` ja no és una dimensió d'interacció, sinó un estil de seguiment durant la reproducció.
+2. **Eix mal plantejat:** «page vs duo» no és l'eix real — `effectiveScrollMode = waveViewMode === 'page' ? 'page' : scrollModeWave`, o sigui que **Duo també pot ser page**; un «preset de Duo» s'activaria per a usuaris amb comportament idèntic al de Pàgina.
+3. **Reobriria un carreró ja descartat dos cops:** l'únic preset per mode amb sentit real seria «Ctrl+clic per editar / per fer seek en estacionari» → dos models de clic diferents dins la mateixa app, rebutjat a H-00011 i re-rebutjat a H-00014.
+4. **Contradiu l'esquema mestre:** `Shortcuts Subtitols - Consolidat.csv` no té columna ni secció de mode i la seva base tècnica diu literalment «Mode PAGINA unic»; la Fase C ja fixa «un sol joc de dreceres, independent del mode de scroll».
+
+**Cost evitat:** ≥2 claus de localStorage per paràmetre, superfície nova a SettingsModal + factoryReset + comparador de `React.memo`, i sobretot una **matriu de verificació manual ×2 per a cada gest futur** de l'ona (Fase B2, Fase C, snapping) — cost que l'estimació original de 2/10 infravalorava.
+
+**El que SÍ ha sortit d'aquesta avaluació** (l'asimetria real entre modes existeix, però es resol amb UN invariant, no amb dos presets): SPS-0029 (gestos contra una vista en moviment durant la reproducció — inclou el doble-clic encara trencat en estacionari **mentre reprodueix**), SPS-0030 (el botó «Seguiment» és cosmètic) i SPS-0031 (neteja de deute mort).
+
+**Detall a** history.md (**H-00015**)
 
 ---
 
@@ -755,7 +839,9 @@ Vincular un SRT nou sobre el mateix document (drag&drop o modal Vincular; també
 
 Les **dreceres de teclat** (nudges Alt/Alt+Shift+fletxes, F9–F12, Ctrl+fletxes, Ctrl+Shift+M, Ctrl+Alt+V, etc.) són **independents del mode de scroll** → un sol joc, vàlid a pàgina i estacionari. No cal preset per mode per al teclat.
 
-El que és dependent del mode és **només el ratolí**.
+~~El que és dependent del mode és **només el ratolí**.~~
+
+> **Actualització *(2026-07-13, en tancar SPS-0015)*:** aquesta última frase **ha quedat obsoleta** i era l'origen de la premissa de SPS-0015. Des de les Fases A i B (SPS-0012/0013) i el fix de SPS-0014, **el ratolí tampoc depèn del mode**: cap handler de `WaveformTimeline` branca per `scrollMode`; l'única cosa que en depèn és l'autoscroll DURANT la reproducció real (RAF loop). Model d'interacció: **un de sol, mode-agnòstic** (ratolí i teclat). Veure CANCELATS → SPS-0015 i history.md → H-00015.
 
 Documents relacionats: `Shortcuts Subtitols - Consolidat.csv`.
 

@@ -74,6 +74,50 @@ Notes:
 ---
 
 > ---
+> ## **H-00015** — Decisió arquitectònica: un sol model d'interacció de ratolí, mode-agnòstic (es tanquen els presets page/duo)
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Decisió arquitectònica (tasca avaluada i descartada — cap canvi de codi)
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0015 (→ CANCELATS) · engendra SPS-0029, SPS-0030, SPS-0031
+> >>
+> >>#### **Síntoma / Context:**
+> >> SPS-0015 (incorporada el 2026-07-07, abans de les Fases A i B de l'ona) proposava «separar explícitament els presets d'interacció de ratolí per mode (page vs duo) en comptes de derivar-los del mode de scroll actiu». La seva font era la nota de disseny «dreceres vs ratolí» de `tasks.md`, que deia: *"El que és dependent del mode és només el ratolí"*.
+> >>
+> >>#### **Descobriment que tanca la qüestió:**
+> >> **Aquella frase ja no és certa, i per tant la tasca no té objecte.** Auditoria del codi real: cap handler de ratolí de `WaveformTimeline.tsx` llegeix mai el mode — `handleMouseDown` (L590, deps `[hitTestSegment, pixelToTime, clearHold]`), `handleMouseMove` (L636), `handleMouseUp` (L739), `handleDoubleClick` (L793), `handleMouseLeave` (L804) i `handleWheel` (L821). Tots els paràmetres del ratolí són **globals i únics** en els dos modes: `WAVEFORM_HOLD_MS` (L628), `WAVEFORM_DRAG_DEADZONE_PX` (L598/L642-647), `EDGE_HIT_PX` (L92), llindar de scrub `dx > 3` (L708) i el mapa de modificador+clic (L758-762). L'ÚNICA lectura funcional del mode a tot el component és **una línia**: el RAF loop de reproducció (L481-490, `page` → salt per pàgines / `stationary` → recentratge continu); la resta és la visibilitat del botó de mode (L898-905) i el comparador de `React.memo`. Dit d'una altra manera: després de SPS-0012/0013/0014, **«estacionari/Duo» ja no és un mode d'interacció, sinó un estil de seguiment durant la reproducció.**
+> >>
+> >>#### **El que NO ha funcionat** (el cas a favor dels presets, construït expressament com a advocat del diable i refutat):
+> >> * **«Fem un preset per mode igualment, per si de cas»:** error de categoria. No es pot parametritzar una dimensió que ja no existeix a la capa d'interacció. No hi ha cap «derivació» a substituir.
+> >> * **L'eix «page vs duo» és, a més, l'eix equivocat:** `effectiveScrollMode = waveViewMode === 'page' ? 'page' : scrollModeWave` (`VideoSubtitlesEditorView.tsx:241`) → **Duo també pot ser page**. Un «preset de Duo» s'activaria per a un usuari amb el toggle intern a pàgina i comportament byte-idèntic al de Pàgina.
+> >> * **L'únic preset per mode amb contingut real seria «Ctrl+clic per editar / per fer seek en estacionari»** — exactament el carreró ja descartat a H-00011 i re-descartat a H-00014 (dos models de clic diferents dins la mateixa app; fricció a l'operació més freqüent).
+> >> * **Contradiria l'esquema mestre:** `Shortcuts Subtitols - Consolidat.csv` no té columna ni secció per mode, i la seva base tècnica diu literalment «Mode PAGINA unic: nomes salta quan el cursor surt de la finestra visible. MAI recentra en un clic manual». La Fase C (SPS-0025) ja fixa «un sol joc de dreceres, independent del mode de scroll»: bifurcar el ratolí mantenint un sol teclat seria incoherent.
+> >> * **Cap fase futura no ho reclama:** a la Fase B2 (SPS-0028) el rang provisional de «crear-arrossegant» es guarda en TEMPS (immune al scroll), el scrub suprimeix l'autoscroll als dos modes (`isDraggingRef`, L478) i `Alt`+vora-veí és pur domini temporal.
+> >> * **Cost real infravalorat** per l'estimació original (2/10): ≥2 claus de localStorage per paràmetre, superfície nova a SettingsModal/factoryReset/memo, i una **matriu de verificació manual ×2 per a cada gest futur** de l'ona.
+> >>
+> >>#### **Solució (decisió):**
+> >> **Model d'interacció únic i mode-agnòstic — ratolí i teclat.** El mode de vista (Pàgina/Duo) només governa el seguiment de la vista DURANT la reproducció real. Qualsevol futura divergència de comportament entre modes s'ha de resoldre amb **un invariant únic** (una regla que sigui no-op en el mode on no cal), mai amb dos jocs de gestos. SPS-0015 → CANCELATS. Actualitzada la nota de disseny obsoleta a `tasks.md` que va originar la premissa.
+> >>
+> >>#### **Arxius modificats:**
+> >> * Cap fitxer de codi (avaluació). Només documentació: `.claude/docs/tasks.md` (SPS-0015 → CANCELATS amb motiu; noves SPS-0029/0030/0031; nota de disseny «dreceres vs ratolí» corregida; SPS-0025 actualitzada) i aquesta entrada.
+> >>
+> >>#### **Verificació:**
+> >> Auditoria de codi amb tres revisors adversarials en paral·lel (lent de premissa/correcció sobre el codi real, lent d'advocat del diable pro-presets, lent de casos límit durant la reproducció). Convergents: la premissa és falsa i el cas pro-presets no aguanta. **No s'ha executat cap build** perquè no s'ha tocat cap fitxer de codi. Els tres símptomes registrats a SPS-0029 provenen d'anàlisi estàtica del codi i **encara no s'han reproduït al navegador** — així consta a la tasca.
+> >>
+> >>#### **Lliçó:**
+> >> Una tasca «d'avaluar» que porta setmanes al backlog s'ha de re-verificar contra el codi ACTUAL abans de planificar-ne res: aquí la premissa (i la nota de disseny que la sostenia) havien quedat obsoletes per tres tasques posteriors (SPS-0012/0013/0014) que ningú va relacionar amb ella. El resultat correcte d'una avaluació pot ser **descartar-la i esborrar la premissa**, no implementar-la. I la troballa de valor no era la que la tasca demanava: l'asimetria real entre modes existeix (la vista es MOU sota el gest en estacionari mentre reprodueix), però es resol amb un invariant mode-agnòstic (SPS-0029), no partint el model de ratolí en dos.
+> >>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * **SPS-0029** — Gestos de ratolí contra una vista en moviment durant la reproducció: (a) el doble clic en estacionari MENTRE REPRODUEIX encara selecciona l'esdeveniment equivocat (mateixa arrel que H-00014, però al camí del RAF loop, que aquell fix va deixar intacte a posta); (b) clic i modificador+clic aterren tard (el temps es calcula al `mouseUp` amb el `scrollLeft` viu); (c) salt de pàgina enmig d'un clic. Fix mode-agnòstic: latch del temps al `mouseDown` + finestra de gràcia sense recentratge després d'un seek manual.
+> >> * **SPS-0030** — El botó «Seguiment» de l'ona és cosmètic: la prop `autoScroll` (L40) mai es desestructura i el RAF loop només mira `isDraggingRef` (L478) → apagar el seguiment no atura res.
+> >> * **SPS-0031** — Neteja de deute mort de l'ona: clau `WAVEFORM_CTRL_CLICK_SEEK` (+ comentari que descriu el contrari del que fa el codi), props `viewMode`/`onToggleViewMode`, passthroughs morts (`VideoPlaybackArea`, `VideoSubtitlesToolbar`) i botó vestigial de `MediaPreviewView`.
+> ---
+
+---
+
+> ---
 > ## **H-00014** — Bug: doble-clic i modificador+clic trencats en mode estacionari (Duo)
 > >> ###### *[2026-07-13]*
 >
