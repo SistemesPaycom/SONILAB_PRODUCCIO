@@ -8,6 +8,8 @@ import { useTheme } from '../context/Theme/ThemeContext';
 import { CUSTOM_THEME_ID, PRESET_THEMES, TOKEN_GROUPS, buildCustomTheme } from '../context/Theme/themes';
 import { StylesTab } from './Settings/UserStyles/StylesTab';
 import { factoryReset } from '../utils/factoryReset';
+import { comboFromEvent } from '../hooks/useKeyboardShortcuts';
+import { FPS_PRESETS, DEFAULT_FPS, msToFrames, presetToMs, detectActivePreset } from '../utils/SubtitlesEditor/frameTime';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -91,21 +93,19 @@ const TokenRow: React.FC<{
   );
 };
 
-/** Build the combo string from a KeyboardEvent */
-function comboFromEvent(e: KeyboardEvent | React.KeyboardEvent): string | null {
-  if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
-  const parts: string[] = [];
-  if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
-  if (e.shiftKey) parts.push('Shift');
-  if (e.altKey) parts.push('Alt');
-  let keyName = e.key;
-  if (keyName === ' ') keyName = 'Space';
-  if (keyName === '+') keyName = 'Plus';
-  if (keyName === '-') keyName = 'Minus';
-  if (keyName === ',') keyName = 'Comma';
-  if (keyName === 'Escape') return null; // Escape cancels recording
-  if (keyName.length === 1) keyName = keyName.toUpperCase();
-  parts.push(keyName);
+/**
+ * Combo per al gravador de dreceres: reutilitza la notació canònica del hook
+ * (font única de veritat compartida amb qui reconeix les dreceres) i només hi
+ * afegeix la presentació pròpia del gravador: la tecla d'1 caràcter en majúscula
+ * per coincidir amb el format desat a DEFAULT_SHORTCUTS (`Ctrl+Shift+Z`).
+ * L'Escape per cancel·lar el gestiona `handleKeyCapture` abans d'arribar aquí.
+ */
+function recorderCombo(e: React.KeyboardEvent): string | null {
+  const combo = comboFromEvent(e);
+  if (!combo) return null;
+  const parts = combo.split('+');
+  const last = parts[parts.length - 1];
+  if (last.length === 1) parts[parts.length - 1] = last.toUpperCase();
   return parts.join('+');
 }
 
@@ -206,7 +206,7 @@ const ShortcutsTab: React.FC = () => {
         setConflict(null);
         return;
       }
-      const combo = comboFromEvent(e);
+      const combo = recorderCombo(e);
       if (combo && recordingId) {
         updateCombo(recordingId, combo);
         setRecordingId(null);
@@ -564,7 +564,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [gridOpacity, setGridOpacity] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.SUB_GRID_OPACITY, 0);
   const [editorMinGapMs, setEditorMinGapMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_GAP_MS, 160);
   const [editorMinDurationMs, setEditorMinDurationMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_DURATION_MS, 1000);
+  const [editorFps, setEditorFps] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_FPS, DEFAULT_FPS);
   const [waveformHoldMs, setWaveformHoldMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_HOLD_MS, 50);
+
+  // Preset actiu derivat de l'estat (fps + ms), sense estat addicional.
+  const activeTimePreset = detectActivePreset(editorFps, editorMinGapMs, editorMinDurationMs);
+  const applyTimePreset = useCallback((presetId: 'tv' | 'cine') => {
+    const preset = FPS_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    const { minGapMs, minDurationMs } = presetToMs(preset);
+    setEditorFps(preset.fps);
+    setEditorMinGapMs(minGapMs);
+    setEditorMinDurationMs(minDurationMs);
+  }, [setEditorFps, setEditorMinGapMs, setEditorMinDurationMs]);
   const [waveformDeadzonePx, setWaveformDeadzonePx] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.WAVEFORM_DRAG_DEADZONE_PX, 6);
   const [waveViewMode, setWaveViewMode] = useLocalStorage<'page' | 'duo'>(LOCAL_STORAGE_KEYS.WAVEFORM_VIEW_MODE, 'page');
 
@@ -934,12 +946,61 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 <span className="text-xs font-mono font-bold w-10 text-right" style={{ color: 'var(--th-accent-text)' }}>{(gridOpacity * 100).toFixed(0)}%</span>
                             </div>
                         </div>
+                        <div className="pt-4 border-t border-[var(--th-border)]/30">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-bold text-gray-200">Perfil de temps (frames)</p>
+                                    <p className="text-xs text-gray-500 italic">Fixa la durada mínima i el marge mínim en frames segons el perfil. La conversió a ms es fa amb els fps del perfil.</p>
+                                </div>
+                                <div className="flex items-center rounded-lg overflow-hidden shrink-0" style={{ border: '1px solid var(--th-border)' }}>
+                                    {FPS_PRESETS.map((p) => (
+                                        <button
+                                            key={p.id}
+                                            type="button"
+                                            onClick={() => applyTimePreset(p.id)}
+                                            className="px-3 py-1.5 text-xs font-bold transition-colors"
+                                            style={{
+                                                backgroundColor: activeTimePreset === p.id ? 'var(--th-accent)' : 'var(--th-bg-tertiary)',
+                                                color: activeTimePreset === p.id ? '#fff' : 'var(--th-editor-meta)',
+                                            }}
+                                            title={`min durada ${p.minDurationFrames}f · min marge ${p.minGapFrames}f`}
+                                        >
+                                            {p.label}
+                                        </button>
+                                    ))}
+                                    <span
+                                        className="px-3 py-1.5 text-xs font-bold"
+                                        style={{
+                                            backgroundColor: activeTimePreset === 'custom' ? 'var(--th-accent)' : 'var(--th-bg-tertiary)',
+                                            color: activeTimePreset === 'custom' ? '#fff' : 'var(--th-editor-meta)',
+                                        }}
+                                        title="Els valors de min durada/marge no coincideixen amb cap perfil"
+                                    >
+                                        Personalitzat
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between mt-3">
+                                <p className="text-xs text-gray-500 italic">Frames per segon (per a la conversió frame↔ms).</p>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min="1" max="120" step="1"
+                                        value={editorFps}
+                                        onChange={(e) => setEditorFps(Math.max(1, Math.min(120, parseInt(e.target.value, 10) || DEFAULT_FPS)))}
+                                        className="w-20 rounded-lg px-3 py-2 text-white font-mono text-center outline-none" style={{ backgroundColor: 'var(--th-bg-tertiary)', border: '1px solid var(--th-border)', '--tw-ring-color': 'var(--th-accent)' } as any}
+                                    />
+                                    <span className="text-xs font-mono" style={{ color: 'var(--th-editor-meta)' }}>fps</span>
+                                </div>
+                            </div>
+                        </div>
                         <div className="flex items-center justify-between pt-4 border-t border-[var(--th-border)]/30">
                             <div>
                                 <p className="font-bold text-gray-200">Marge mínim entre subtítols</p>
                                 <p className="text-xs text-gray-500 italic">Separació mínima (ms) entre cues consecutius a l'editor. No afecta la transcripció.</p>
                             </div>
                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono w-14 text-right" style={{ color: 'var(--th-editor-meta)' }}>{msToFrames(editorMinGapMs, editorFps)} f</span>
                                 <input
                                     type="number"
                                     min="0" max="2000" step="10"
@@ -956,6 +1017,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 <p className="text-xs text-gray-500 italic">Impedeix reduir un bloc per sota d'aquest llindar (ms). Equivalent a "Minimum duration" de Subtitle Edit.</p>
                             </div>
                             <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono w-14 text-right" style={{ color: 'var(--th-editor-meta)' }}>{msToFrames(editorMinDurationMs, editorFps)} f</span>
                                 <input
                                     type="number"
                                     min="0" max="5000" step="50"

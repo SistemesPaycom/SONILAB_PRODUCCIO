@@ -3,7 +3,7 @@
 // Waveform extracted via Web Audio API. DOM playhead with diamond indicator.
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Segment, Id, TimelineViewMode } from '../../appTypes';
+import { Segment, Id } from '../../appTypes';
 import { useWaveformExtractor } from '../../hooks/useWaveformExtractor';
 import { LOCAL_STORAGE_KEYS, MIN_SEG_DURATION_MS } from '../../constants';
 import * as Icons from '../icons';
@@ -27,8 +27,6 @@ interface WaveformTimelineProps {
   isPlaying: boolean;
   videoRef?: React.RefObject<HTMLVideoElement>;
   activeId?: Id | null;
-  viewMode?: TimelineViewMode;
-  onToggleViewMode?: (mode: TimelineViewMode) => void;
   onSegmentUpdate?: (id: Id, newStart: number, newEnd: number) => void;
   onSegmentUpdateEnd?: () => void;
   onSegmentClick?: (id: Id) => void;
@@ -37,6 +35,9 @@ interface WaveformTimelineProps {
   onSetCueEnd?: (timeSeconds: number) => void;
   onSetCueStartKeepDuration?: (timeSeconds: number) => void;
   onRippleFromCue?: (timeSeconds: number) => void;
+  /** Crear arrossegant sobre zona buida (Fase B2, SPS-0028): marca un rang provisional i, en
+   *  confirmar amb Enter, insereix un subtítol nou en aquest interval. */
+  onCreateSegment?: (start: number, end: number) => void;
   autoScroll?: boolean;
   scrollMode?: string;
   // ── Toolbar controls relocated from video toolbar ──
@@ -114,6 +115,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   onSetCueEnd,
   onSetCueStartKeepDuration,
   onRippleFromCue,
+  onCreateSegment,
   autoScroll = true,
   scrollMode = 'stationary',
   // Relocated toolbar controls
@@ -139,6 +141,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const followEnabled = autoScrollWave ?? autoScroll;
 
   // ── Refs ──
+  const rootRef = useRef<HTMLDivElement>(null);       // contenidor focusable (teclat de crear, SPS-0028)
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -161,6 +164,20 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const dragSegOrigEndRef = useRef(0);
   const seekDragActiveRef = useRef(false);
   const dragMovedRef = useRef(false);   // true un cop el punter supera la zona morta després d'armar
+
+  // ── Crear-arrossegant a zona buida (Fase B2, SPS-0028) ──
+  // Un press sobre l'ona buida SENSE modificadors arma un gest de "crear"; amb modificadors, el
+  // vell scrub (relocalitzat a Alt+Shift, però qualsevol modificador el manté). El tipus es fixa al
+  // mousedown i no es reavalua a mig gest (mateixa filosofia de marc latched que SPS-0029).
+  const emptyGestureRef = useRef<'create' | 'scrub' | null>(null);
+  const createMovedRef = useRef(false); // el gest de crear ha superat el llindar i dibuixa rang
+  // Rang provisional en TEMPS (start/end): es dibuixa relatiu a timeStart, així queda correcte
+  // encara que la vista es desplaci. `setCreateRange` només serveix per persistir-lo entre re-renders
+  // i disparar un redibuix; durant el drag s'actualitza el ref i es crida drawVisible directament.
+  const createRangeRef = useRef<{ start: number; end: number } | null>(null);
+  const [createRange, setCreateRange] = useState<{ start: number; end: number } | null>(null);
+  const onCreateSegmentRef = useRef(onCreateSegment);
+  onCreateSegmentRef.current = onCreateSegment;
   const deadzonePxRef = useRef(0);      // zona morta (px) capturada al mousedown
   const minDurMsRef = useRef(minDurationMs);
   useEffect(() => { minDurMsRef.current = minDurationMs; }, [minDurationMs]);
@@ -413,6 +430,29 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           }
         }
       });
+
+      // ── Rang provisional de "crear arrossegant" (SPS-0028) ──
+      const cr = createRangeRef.current;
+      if (cr) {
+        const rs = Math.min(cr.start, cr.end);
+        const re = Math.max(cr.start, cr.end);
+        const cx1 = (rs - timeStart) * zoom;
+        const cx2 = (re - timeStart) * zoom;
+        if (cx2 >= 0 && cx1 <= w) {
+          ctx.fillStyle = 'rgba(129,140,248,0.18)';
+          ctx.fillRect(cx1, boxY, cx2 - cx1, boxH);
+          ctx.strokeStyle = '#818cf8';
+          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(cx1, boxY, cx2 - cx1, boxH);
+          ctx.setLineDash([]);
+          if (cx2 - cx1 > 60) {
+            ctx.fillStyle = 'rgba(199,210,254,0.95)';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('↵ inserir · Esc', cx1 + 5, boxY + 12);
+          }
+        }
+      }
     },
     [viewportWidth, viewportHeight, zoom, duration, peaks, isPlaying, getThemeColors]
   );
@@ -438,6 +478,12 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     drawVisible(sl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segments, activeId]);
+
+  // ── Redraw when the provisional create-range appears/disappears (SPS-0028) ──
+  useEffect(() => {
+    const sl = scrollRef.current?.scrollLeft ?? 0;
+    drawVisible(sl);
+  }, [createRange, drawVisible]);
 
   // ── Playhead positioning ──
   const updatePlayheadPos = useCallback(
@@ -665,6 +711,14 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     seekDragActiveRef.current = false;
     mouseDownActiveRef.current = false;
     firstClickRawTimeRef.current = null;
+    // Un gest de "crear" EN CURS (encara no confirmat al mouseup) es cancel·la; un rang ja
+    // finalitzat (createMovedRef ja reset a false) es conserva perquè l'usuari pugui prémer Enter.
+    if (createMovedRef.current) {
+      createRangeRef.current = null;
+      setCreateRange(null);
+    }
+    emptyGestureRef.current = null;
+    createMovedRef.current = false;
     const sc = scrollRef.current;
     if (sc) sc.style.cursor = '';
   }, [clearHold, onSegmentUpdateEnd]);
@@ -706,6 +760,9 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         return;
       }
 
+      // Un nou press dismet qualsevol rang provisional de "crear" pendent de confirmació (SPS-0028).
+      if (createRangeRef.current) { createRangeRef.current = null; setCreateRange(null); }
+
       // detail parell = 2n clic d'una parella (el navegador hi dispararà un dblclick). Es fa servir
       // la paritat i no `>= 2` perquè una cadena llarga són parelles independents: el 3r clic torna
       // a ser un clic simple de ple dret.
@@ -727,6 +784,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       dragTypeRef.current = null;
       dragSegIdRef.current = null;
       seekDragActiveRef.current = false;
+      emptyGestureRef.current = null;
+      createMovedRef.current = false;
       clearHold();
 
       // A la regla, `hit` sempre és null: cap drag ni resize. Hi queda el seek del clic simple (i
@@ -762,6 +821,14 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
             }, getHoldMs());
           }
         }
+      } else {
+        // Zona buida: fixa el tipus de gest. "Crear" NOMÉS a la zona de contingut, sense modificadors
+        // i amb onCreateSegment disponible. A la regla de timecodes es manté el scrub clàssic
+        // d'arrossegar (invariant preexistent: la regla fa scrub com qualsevol editor); qualsevol
+        // modificador (p.ex. Alt+Shift) també cau a scrub.
+        const noMods = !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+        emptyGestureRef.current =
+          noMods && onCreateSegmentRef.current && downZone === 'content' ? 'create' : 'scrub';
       }
       // Don't seek on mouseDown — decision happens on mouseUp
     },
@@ -847,12 +914,26 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         return;
       }
 
-      // ── 3. Empty-space seek-drag (scrubbing) ──
-      // El 2n clic d'una parella no fa scrub: la seva deriva no està acotada pel llindar de doble
-      // clic del SO (que només compara els dos punts de pressió) i el seek de brossa sobreescriuria
-      // el del primer clic (SPS-0029).
+      // ── 3. Gest sobre zona buida: crear-arrossegant o scrub (SPS-0028) ──
+      // El 2n clic d'una parella no en fa cap: la seva deriva no està acotada pel llindar de doble
+      // clic del SO (que només compara els dos punts de pressió) i sobreescriuria l'acció del primer
+      // clic (SPS-0029).
       if (mouseDownActiveRef.current && !dragSegIdRef.current && !pairContinuationRef.current) {
         const dx = Math.abs(e.clientX - mouseDownClientRef.current.x);
+        if (emptyGestureRef.current === 'create') {
+          // Rang provisional: inici = temps latched del mousedown (marc estable), final = punter viu.
+          if (dx > 3 || createMovedRef.current) {
+            createMovedRef.current = true;
+            isDraggingRef.current = true;
+            const startT = clampToDuration(downRawTimeRef.current ?? 0);
+            const endT = pixelToTime(e.clientX);
+            createRangeRef.current = { start: startT, end: endT };
+            const sc = scrollRef.current;
+            if (sc) drawVisible(sc.scrollLeft); // redibuix directe, sense setState per frame
+          }
+          return;
+        }
+        // scrub (relocalitzat a modificador; abans era qualsevol arrossegar-buit)
         if (dx > 3 || seekDragActiveRef.current) {
           seekDragActiveRef.current = true;
           isDraggingRef.current = true;
@@ -884,6 +965,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       hitTestSegment,
       getNeighborBounds,
       finishGesture,
+      clampToDuration,
+      drawVisible,
     ]
   );
 
@@ -900,10 +983,28 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       const startedInWave = mouseDownActiveRef.current;
       const wasDragged = dragMovedRef.current;   // el punter ha superat la zona morta → drag real
       const wasSeekDrag = seekDragActiveRef.current;
+      const wasCreating = createMovedRef.current; // gest de "crear arrossegant" (SPS-0028)
 
       // Commit del drag només si l'esdeveniment s'ha mogut de veritat
       if (wasDragged && dragSegIdRef.current) {
         onSegmentUpdateEnd?.();
+      }
+
+      // Crear-arrossegant: en deixar anar, el rang queda provisional (pendent d'Enter). Es dona focus
+      // al contenidor perquè el maneig de teclat (Enter/Esc) rebi les tecles. Si el rang és més curt
+      // que la durada mínima, es descarta en silenci.
+      if (wasCreating) {
+        const cr = createRangeRef.current;
+        const span = cr ? Math.abs(cr.end - cr.start) : 0;
+        if (cr && span >= MIN_SEG_DURATION) {
+          const norm = { start: Math.min(cr.start, cr.end), end: Math.max(cr.start, cr.end) };
+          createRangeRef.current = norm;
+          setCreateRange(norm);
+          rootRef.current?.focus();
+        } else {
+          createRangeRef.current = null;
+          setCreateRange(null);
+        }
       }
 
       // Clic simple → mou el cursor de transport al punt EXACTE clicat (mai selecciona).
@@ -914,7 +1015,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       // El temps surt del latch del mousedown, no del punter al mouseup: durant la reproducció la
       // vista es mou sota el gest i recalcular-lo aquí desplaçava el seek i les cues tota la durada
       // de la pressió (SPS-0029).
-      if (startedInWave && !wasDragged && !wasSeekDrag && e && downRawTimeRef.current !== null) {
+      if (startedInWave && !wasDragged && !wasSeekDrag && !wasCreating && e && downRawTimeRef.current !== null) {
         // El 2n clic d'una parella no repeteix l'acció: el primer ja l'ha executada al mateix punt
         // (dins de la distància de doble clic del SO) i el marc de coordenades pot haver-se mogut
         // entremig. S'exceptua el cas de modificadors diferents (p. ex. clic i tot seguit Shift+clic):
@@ -957,6 +1058,8 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       dragSegIdRef.current = null;
       seekDragActiveRef.current = false;
       mouseDownActiveRef.current = false;
+      emptyGestureRef.current = null;
+      createMovedRef.current = false;
       const sc = scrollRef.current;
       if (sc) sc.style.cursor = '';
     },
@@ -1002,6 +1105,27 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     return () => document.removeEventListener('mousedown', onDocMouseDown, true);
   }, []);
 
+  // ── Teclat de l'ona: confirma/cancel·la el rang provisional de "crear" (SPS-0028) ──
+  // L'ona és focusable (tabIndex al contenidor) i rep focus en acabar un crear-arrossegant.
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Només actua sobre un rang JA finalitzat i sense cap gest de ratolí viu: prémer Enter/Esc amb el
+    // botó encara premut (el focus salta al rootRef al mousedown) no ha d'interferir amb el drag.
+    if (!createRangeRef.current || mouseDownActiveRef.current) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      const cr = createRangeRef.current;
+      onCreateSegmentRef.current?.(Math.min(cr.start, cr.end), Math.max(cr.start, cr.end));
+      createRangeRef.current = null;
+      setCreateRange(null);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      createRangeRef.current = null;
+      setCreateRange(null);
+    }
+  }, []);
+
   // ── Zoom with Ctrl+Wheel ──
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -1013,11 +1137,14 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
 
   return (
     <div
-      className="w-full h-full flex flex-col border-t border-[var(--th-border)] select-none overflow-hidden"
+      ref={rootRef}
+      tabIndex={0}
+      className="w-full h-full flex flex-col border-t border-[var(--th-border)] select-none overflow-hidden outline-none"
       style={{ backgroundColor: 'var(--th-waveform-bg)' }}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
       onDoubleClick={handleDoubleClick}
+      onKeyDown={handleKeyDown}
     >
       {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-3 py-1 text-xs border-b border-[var(--th-border)] z-10 gap-2" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
@@ -1248,7 +1375,6 @@ export default React.memo(WaveformTimeline, (prev, next) => {
   //       (`onUndo={() => …}`) i comparar-les desactivaria el memo a cada tick. El que les manté
   //       fresques és comparar el *valor d'estat que capturen* (autosaveEnabled, autoScrollWave,
   //       canUndo/canRedo, segments…): si canvia, hi ha re-render i es reconstrueixen amb la closure nova.
-  //     (`onToggleViewMode` també queda fora, però perquè és prop morta: mai es desestructura.)
   if (prev.isPlaying && next.isPlaying) {
     return (
       prev.videoFile === next.videoFile &&
@@ -1265,6 +1391,7 @@ export default React.memo(WaveformTimeline, (prev, next) => {
       prev.onSetCueEnd === next.onSetCueEnd &&
       prev.onSetCueStartKeepDuration === next.onSetCueStartKeepDuration &&
       prev.onRippleFromCue === next.onRippleFromCue &&
+      prev.onCreateSegment === next.onCreateSegment &&
       prev.canUndo === next.canUndo &&
       prev.canRedo === next.canRedo &&
       prev.autoScroll === next.autoScroll &&

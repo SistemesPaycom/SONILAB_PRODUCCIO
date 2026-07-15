@@ -32,7 +32,7 @@ function mapKeyName(key: string): string {
 }
 
 /** Combo de l'event en la mateixa notació que els `combo` de DEFAULT_SHORTCUTS; null si és una tecla modificadora sola. */
-function comboFromEvent(e: KeyEventLike): string | null {
+export function comboFromEvent(e: KeyEventLike): string | null {
   if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return null;
 
   const parts: string[] = [];
@@ -86,6 +86,17 @@ export function useKeyboardShortcuts(
 
     const hasMod = e.ctrlKey || e.metaKey || e.altKey;
     if (isInput && !hasMod && mapKeyName(e.key).length === 1) return;
+
+    // Dins d'un camp editable, les tecles de navegació (fletxes/Home/End, amb o sense modificador)
+    // fan navegació de cursor/paraula NATIVA i mai disparen dreceres: així les dreceres de fletxa de
+    // l'ona (cursor 1 s/1 frame, nudge Nuendo, línia) no trepitgen l'edició de text (SPS-0025 Fase C).
+    if (
+      isInput &&
+      (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown' || e.key === 'Home' || e.key === 'End')
+    ) {
+      return;
+    }
 
     const pressedCombo = comboFromEvent(e);
     if (!pressedCombo) return;

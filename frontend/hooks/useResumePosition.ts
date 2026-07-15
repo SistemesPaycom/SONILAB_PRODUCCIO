@@ -9,6 +9,13 @@ interface ResumeState {
   updatedAt?: string;
 }
 
+// Forma mínima del projecte que el hook necessita per restaurar/desar posició.
+interface ResumeProjectInfo {
+  id: string;
+  mediaDocumentId?: string | null;
+  settings?: { resumeState?: ResumeState };
+}
+
 interface UseResumePositionParams {
   docId: string; // currentDoc.id — clau de reinici
   useBackend: boolean;
@@ -19,6 +26,11 @@ interface UseResumePositionParams {
   mediaMissing: boolean; // = linkedMediaMissing de la vista (media que falla)
   seekTo: (t: number) => void; // vídeo: video.currentTime=t + setCurrentTime; sense vídeo: setCurrentTime
   setActiveSegmentId: (id: number) => void;
+  // OPCIONAL — mode "gestionat": si la vista ja resol el projecte (getProjectBySrt),
+  // el passa aquí per evitar una segona lectura al hook. Si s'omet, el hook fa el fetch
+  // pel seu compte (comportament standalone). `ready` indica que la resolució ha acabat
+  // (el hook espera fins llavors); `project` és null quan el doc no és d'un projecte.
+  preloadedProject?: { ready: boolean; project: ResumeProjectInfo | null };
 }
 
 const INTERVAL = 5000;
@@ -36,6 +48,13 @@ export function useResumePosition(p: UseResumePositionParams): { flush: () => vo
     seekTo,
     setActiveSegmentId,
   } = p;
+
+  // Mode gestionat vs standalone. `managed` és estable perquè la vista, quan l'usa,
+  // sempre passa un objecte (mai undefined). Els valors derivats són primitius/refs
+  // estables per no re-disparar l'efecte de fetch a cada render.
+  const managed = p.preloadedProject !== undefined;
+  const preloadReady = p.preloadedProject ? p.preloadedProject.ready : undefined;
+  const preloadProject = p.preloadedProject ? p.preloadedProject.project : undefined;
 
   // ── Refs de control ────────────────────────────────────────────────────
   const projectIdRef = useRef<string | null>(null);
@@ -106,12 +125,27 @@ export function useResumePosition(p: UseResumePositionParams): { flush: () => vo
     };
   }, [docId]);
 
-  // ── 2) Fetch del resum ─────────────────────────────────────────────────
+  // ── 2) Resolució del resum (projecte + estat desat) ────────────────────
   useEffect(() => {
     if (!useBackend) {
       setResumeLoaded(true);
       return;
     }
+
+    // Mode gestionat: la vista ja ha resolt el projecte → no repetim getProjectBySrt.
+    if (managed) {
+      if (!preloadReady) return; // encara resolent: esperem
+      if (preloadProject?.id) {
+        projectIdRef.current = preloadProject.id;
+        mediaExpectedRef.current = !!preloadProject.mediaDocumentId; // esperem vídeo?
+        const rs = preloadProject.settings?.resumeState;
+        if (rs && typeof rs.currentTime === 'number' && rs.currentTime > 0) setPendingResume(rs);
+      }
+      setResumeLoaded(true);
+      return;
+    }
+
+    // Standalone: el hook fa la seva pròpia lectura.
     let cancelled = false;
     void api
       .getProjectBySrt(docId)
@@ -129,7 +163,7 @@ export function useResumePosition(p: UseResumePositionParams): { flush: () => vo
     return () => {
       cancelled = true;
     };
-  }, [docId, useBackend]);
+  }, [docId, useBackend, managed, preloadReady, preloadProject]);
 
   // ── 2b) Xarxa de seguretat (settle timeout) ────────────────────────────
   useEffect(() => {

@@ -1,7 +1,7 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors, Logger } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors, Logger } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { diskStorage } from 'multer';
@@ -12,6 +12,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequestUser } from '../../common/types/request-user';
 import { LibraryService } from '../library/library.service';
 import { MediaCacheService } from './media-cache.service';
+import { ShotChangesService, DEFAULT_SHOT_THRESHOLD } from './shot-changes.service';
 import { createHash } from 'crypto';
 import { NotFoundException } from '@nestjs/common';
 
@@ -48,6 +49,26 @@ function resolveSafeMediaPath(mediaRootAbs: string, storedPath: string): string 
   return abs;
 }
 
+/**
+ * Llegeix l'exp del JWT (sense verificar-lo; la verificació la fa el guard) per
+ * alinear el maxAge de la cookie amb la vida del token. Fail-safe: si retorna
+ * null es posa una cookie de sessió; i si la cookie sobrevisqués el token, el
+ * guard el rebutja igualment (ignoreExpiration=false).
+ */
+function jwtMaxAgeMs(token: string): number | null {
+  try {
+    const payloadB64 = token.split('.')[1];
+    if (!payloadB64) return null;
+    const json = Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const payload = JSON.parse(json);
+    if (typeof payload.exp !== 'number') return null;
+    const ms = payload.exp * 1000 - Date.now();
+    return ms > 0 ? ms : null;
+  } catch {
+    return null;
+  }
+}
+
 async function sha256File(filePath: string): Promise<string> {
   return await new Promise((resolve, reject) => {
     const hash = createHash('sha256');
@@ -67,6 +88,7 @@ export class MediaController {
     private readonly config: ConfigService,
     private readonly library: LibraryService,
     private readonly mediaCache: MediaCacheService,
+    private readonly shotChanges: ShotChangesService,
   ) {
     // Start periodic cleanup check every 30 minutes
     this.cleanupTimer = setInterval(() => {
@@ -256,6 +278,37 @@ export class MediaController {
   async delete(@CurrentUser() user: RequestUser, @Param('docId') docId: string) {
     return this.library.updateDocument(user.userId, docId, { isDeleted: true } as any);
 }
+  /**
+   * POST /media/session
+   * Emet una cookie de només-media (HttpOnly, SameSite=Lax, Path=/media) perquè
+   * el <video> pugui fer streaming SENSE portar el JWT a la query string. El
+   * valor de la cookie és el mateix JWT que ja ha validat aquest guard via la
+   * capçalera Authorization: reutilitzar-lo evita una segona lògica de signat i
+   * és estrictament més segur que el token a la URL (HttpOnly → inaccessible a
+   * JS; Path=/media → limita l'enviament a les rutes de streaming).
+   */
+  @Post('/session')
+  issueMediaCookie(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const auth = req.headers.authorization || '';
+    const m = /^Bearer\s+(.+)$/i.exec(auth);
+    if (!m) throw new BadRequestException('Missing bearer token');
+    const token = m[1];
+
+    // Secure només sota HTTPS: en dev (http://localhost) el navegador descartaria
+    // una cookie Secure. SameSite=Lax no requereix Secure.
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const maxAgeMs = jwtMaxAgeMs(token);
+
+    res.cookie('media_token', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/media',
+      secure: isHttps,
+      ...(maxAgeMs ? { maxAge: maxAgeMs } : {}),
+    });
+    return { ok: true };
+  }
+
   @Get('/:docId/stream')
   async stream(@CurrentUser() user: RequestUser, @Param('docId') docId: string, @Res() res: Response) {
     const doc = await this.library.getDocument(user.userId, docId);
@@ -365,6 +418,78 @@ if (!fs.existsSync(filePath)) {
     }
 
     return { cached: false, waveform: result };
+  }
+
+  /**
+   * Resolve the on-disk path + sha256 for a media document, applying the same
+   * guards as stream()/waveform(). Throws if the doc is not media / is deleted /
+   * missing on disk.
+   */
+  private resolveMediaFile(doc: any): { filePath: string; sha256: string } {
+    if (!doc.media?.path) throw new BadRequestException('Document has no media');
+    if (doc.isDeleted) throw new NotFoundException('Media not found');
+    const sha256 = doc.media.sha256;
+    if (!sha256) throw new BadRequestException('Media has no SHA-256 hash');
+
+    const mediaRoot = process.env.STORAGE_ROOT || process.env.MEDIA_ROOT || './media';
+    const mediaRootAbs = path.isAbsolute(mediaRoot) ? mediaRoot : path.join(process.cwd(), mediaRoot);
+    const filePath = resolveSafeMediaPath(mediaRootAbs, doc.media.path);
+    if (!fs.existsSync(filePath)) {
+      throw new BadRequestException('Media file not found on disk');
+    }
+    return { filePath, sha256 };
+  }
+
+  /**
+   * GET /media/:docId/shotchanges
+   * Returns cached shot-change timestamps (seconds). On cache miss, runs FFmpeg
+   * scene detection once (default threshold) and caches the result.
+   */
+  @Get('/:docId/shotchanges')
+  async getShotChanges(@CurrentUser() user: RequestUser, @Param('docId') docId: string) {
+    const doc = await this.library.getDocument(user.userId, docId);
+    const { filePath, sha256 } = this.resolveMediaFile(doc);
+
+    const cached = this.shotChanges.readCache(sha256);
+    if (cached) {
+      this.logger.log(`Shot-changes cache HIT for ${docId} (${sha256.substring(0, 12)}...)`);
+      return { cached: true, shotChanges: cached };
+    }
+
+    this.logger.log(`Shot-changes cache MISS for ${docId} (${sha256.substring(0, 12)}...) — detecting...`);
+    try {
+      const result = await this.shotChanges.detectAndCache(filePath, sha256);
+      return { cached: false, shotChanges: result };
+    } catch (err) {
+      this.logger.error(`Failed to detect shot changes for ${docId}: ${err}`);
+      throw new BadRequestException('Failed to detect shot changes. FFmpeg may not be available.');
+    }
+  }
+
+  /**
+   * POST /media/:docId/shotchanges
+   * Force (re)detection of shot changes with a configurable threshold
+   * (default 0.4). Overwrites any existing cache for this asset (idempotent).
+   * Body: { threshold?: number }  — clamped to [0, 1].
+   */
+  @Post('/:docId/shotchanges')
+  async detectShotChanges(
+    @CurrentUser() user: RequestUser,
+    @Param('docId') docId: string,
+    @Body('threshold') threshold?: number,
+  ) {
+    const doc = await this.library.getDocument(user.userId, docId);
+    const { filePath, sha256 } = this.resolveMediaFile(doc);
+
+    const thr = threshold == null ? DEFAULT_SHOT_THRESHOLD : Number(threshold);
+    this.logger.log(`Detecting shot changes for ${docId} (${sha256.substring(0, 12)}..., threshold ${thr})`);
+    try {
+      const result = await this.shotChanges.detectAndCache(filePath, sha256, thr);
+      return { shotChanges: result };
+    } catch (err) {
+      this.logger.error(`Failed to detect shot changes for ${docId}: ${err}`);
+      throw new BadRequestException('Failed to detect shot changes. FFmpeg may not be available.');
+    }
   }
 
 }

@@ -24,6 +24,7 @@ import TranscriptCorrectionModal, { ChangeRecord as CorrectionChangeRecord, Corr
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
 import { computeSmartSplit, computeSplitTimes } from '../../utils/SubtitlesEditor/splitHelpers';
+import { DEFAULT_FPS } from '../../utils/SubtitlesEditor/frameTime';
 
 import { api } from '../../services/api';
 import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges';
@@ -187,6 +188,9 @@ const autoLoadAttemptedRef = useRef(false);
   // ── Guió vinculat al projecte ─────────────────────────────────────────────
   const [guionContent, setGuionContent] = useState<string>('');
   const [guionProjectId, setGuionProjectId] = useState<string | null>(null);
+  // Projecte ja resolt per aquesta vista, per alimentar useResumePosition i evitar
+  // una segona crida getProjectBySrt. `ready` es posa a true en acabar la resolució.
+  const [resumeProject, setResumeProject] = useState<{ ready: boolean; project: any }>({ ready: false, project: null });
   // Ref mirall per accedir a guionProjectId dins callbacks estables (deps=[])
   const guionProjectIdRef = useRef(guionProjectId);
   guionProjectIdRef.current = guionProjectId;
@@ -240,6 +244,7 @@ const autoLoadAttemptedRef = useRef(false);
   const [waveViewMode] = useLocalStorage<'page' | 'duo'>(LOCAL_STORAGE_KEYS.WAVEFORM_VIEW_MODE, 'page');
   const effectiveScrollMode: 'stationary' | 'page' = waveViewMode === 'page' ? 'page' : scrollModeWave;
   const [editorMinDurationMs] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_MIN_DURATION_MS, 1000);
+  const [editorFps] = useLocalStorage<number>(LOCAL_STORAGE_KEYS.EDITOR_FPS, DEFAULT_FPS);
 
   const generalConfig = useMemo<GeneralConfig>(() => ({
     maxCharsPerLine: 40,
@@ -394,10 +399,15 @@ const handleSyncMedia = useCallback((doc: Document) => {
   // Streaming directe: el <video> demana bytes sota demanda, sense descàrrega completa.
   setVideoFile(null);
   setMediaDocId(doc.id);
-  setVideoSrc(api.streamUrlWithToken(doc.id));
   setIsPlaying(false);
   setCurrentTime(0);
   setDuration(0);
+  // Primer assegurem la cookie de només-media; després el <video> carrega la URL
+  // SENSE token a la query (SPS-0023). Si la cookie falla, el backend respondrà 401.
+  void (async () => {
+    try { await api.ensureMediaCookie(); } catch { /* el <video> ho reintentarà; backend valida */ }
+    setVideoSrc(api.streamUrl(doc.id));
+  })();
   // Persisteix el vincle SRT→media al backend
   if (useBackend) void api.linkMediaToSrt(currentDoc.id, doc.id).catch(() => {});
 }, [useBackend, currentDoc.id]);
@@ -444,13 +454,16 @@ const handleSyncMedia = useCallback((doc: Document) => {
   useEffect(() => {
     if (!currentDoc?.id) return;
     let cancelled = false;
+    setResumeProject({ ready: false, project: null });
 
     void (async () => {
+      let resolvedProject: any = null;
       try {
         if (useBackend) {
           // 1. Obtenim el projecte a partir del document SRT
           const project = await api.getProjectBySrt(currentDoc.id).catch(() => null);
           if (cancelled) return;
+          resolvedProject = project ?? null;
 
           if (project?.id) {
             setGuionProjectId(project.id);
@@ -480,6 +493,9 @@ const handleSyncMedia = useCallback((doc: Document) => {
           const localGuion = localStorage.getItem(`sonilab_guion_${currentDoc.id}`);
           if (localGuion) setGuionContent(localGuion);
         }
+      } finally {
+        // Alimentem useResumePosition amb el projecte ja resolt (evita 2a getProjectBySrt).
+        if (!cancelled) setResumeProject({ ready: true, project: resolvedProject });
       }
     })();
 
@@ -677,6 +693,7 @@ useEffect(() => {
     mediaMissing: linkedMediaMissing,
     seekTo: onSeek,
     setActiveSegmentId,
+    preloadedProject: resumeProject,
   });
   const onJumpTime = useCallback((seconds: number) => onSeek(Math.max(0, Math.min(duration, currentTimeRef.current + seconds))), [duration, onSeek]);
   const onChangeRate = useCallback((delta: number) => setPlaybackRate((rate) => {
@@ -896,6 +913,32 @@ const handleSave = useCallback(() => {
     subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
   }, [isEditing, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
 
+  // Crear arrossegant a l'ona (Fase B2, SPS-0028): insereix un subtítol a l'interval marcat.
+  // No pot trepitjar cap esdeveniment existent; si el rang en solapa un, s'avorta. Depèn de
+  // subsHistory.commit (no de l'objecte) perquè el React.memo de l'ona el compara.
+  const handleCreateSegment = useCallback((start: number, end: number) => {
+    if (!isEditing) return;
+    const gap = (generalConfig.minGapMs ?? 160) / 1000;
+    let s = Math.min(start, end);
+    let e = Math.max(start, end);
+    let lowerBound = 0;
+    let upperBound = duration;
+    for (const seg of segments) {
+      if (seg.endTime <= s) lowerBound = Math.max(lowerBound, seg.endTime + gap);
+      else if (seg.startTime >= e) upperBound = Math.min(upperBound, seg.startTime - gap);
+      else return; // solapa un esdeveniment → avortar
+    }
+    s = Math.max(s, lowerBound, 0);
+    e = Math.min(e, upperBound);
+    if (e - s < MIN_SEG_DURATION_MS / 1000) return;
+    const newSeg: Segment = { id: Date.now(), startTime: s, endTime: e, originalText: '' };
+    let insertAt = segments.findIndex(sg => sg.startTime > s);
+    if (insertAt === -1) insertAt = segments.length;
+    const newSegments = [...segments];
+    newSegments.splice(insertAt, 0, newSeg);
+    subsHistory.commit(newSegments.map((sg, i) => ({ ...sg, id: i + 1 })));
+  }, [isEditing, segments, generalConfig.minGapMs, subsHistory.commit, duration]);
+
   const handleDeleteSegment = useCallback((id: number) => {
     if (!isEditing || segments.length <= 1) return;
     const newSegments = segments.filter(s => s.id !== id);
@@ -1028,6 +1071,42 @@ const handleSave = useCallback(() => {
     subsHistory.commit(segments.map((s, i) => i < idx ? s : { ...s, startTime: s.startTime + delta, endTime: s.endTime + delta }));
   }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory.commit]);
 
+  // ── Nudge de teclat estil Nuendo (Fase C, SPS-0025) ──
+  // Reutilitza handleCueStart/handleCueEnd, que ja apliquen gap, durada mínima i límits de veïns:
+  // el nudge només calcula la nova vora (vora actual ± N frames) i delega tot el clamp.
+  const nudgeStart = useCallback((frames: number) => {
+    if (!isEditing || !activeSegmentId) return;
+    const seg = segments.find(s => s.id === activeSegmentId);
+    if (!seg) return;
+    handleCueStart(seg.startTime + frames / (editorFps || DEFAULT_FPS));
+  }, [isEditing, activeSegmentId, segments, editorFps, handleCueStart]);
+
+  const nudgeEnd = useCallback((frames: number) => {
+    if (!isEditing || !activeSegmentId) return;
+    const seg = segments.find(s => s.id === activeSegmentId);
+    if (!seg) return;
+    handleCueEnd(seg.endTime + frames / (editorFps || DEFAULT_FPS));
+  }, [isEditing, activeSegmentId, segments, editorFps, handleCueEnd]);
+
+  // Cursor per frames (Fase C, SPS-0025): mou el playhead ±N frames. Llegeix el temps directament
+  // del <video> per precisió (com handleSetTcIn) amb fallback al ref.
+  const seekByFrames = useCallback((frames: number) => {
+    const t = videoRef.current ? videoRef.current.currentTime : currentTimeRef.current;
+    onSeek(Math.max(0, Math.min(duration, t + frames / (editorFps || DEFAULT_FPS))));
+  }, [onSeek, duration, editorFps]);
+
+  // F9 = fixar inici de l'esdeveniment actiu al cursor i desplaçar la resta (ripple).
+  const fixInRipple = useCallback(() => {
+    const t = videoRef.current ? videoRef.current.currentTime : currentTimeRef.current;
+    handleRippleFromCue(t);
+  }, [handleRippleFromCue]);
+
+  // F10 = fixar final al cursor i saltar a la línia següent.
+  const fixOutNext = useCallback(() => {
+    handleSetTcOut();
+    onJumpSegment('next');
+  }, [handleSetTcOut, onJumpSegment]);
+
   useKeyboardShortcuts('subtitlesEditor', (action) => {
     switch (action) {
       case 'TOGGLE_PLAY_PAUSE': onTogglePlay(); break;
@@ -1045,6 +1124,16 @@ const handleSave = useCallback(() => {
       case 'MERGE_SEGMENT': handleMergeSegmentWithNext(); break;
       case 'SET_TC_IN': handleSetTcIn(); break;
       case 'SET_TC_OUT': handleSetTcOut(); break;
+      case 'FIX_IN_RIPPLE': fixInRipple(); break;
+      case 'FIX_OUT_NEXT': fixOutNext(); break;
+      case 'SEEK_STEP_BACK': onJumpTime(-1); break;
+      case 'SEEK_STEP_FWD': onJumpTime(1); break;
+      case 'FRAME_STEP_BACK': seekByFrames(-1); break;
+      case 'FRAME_STEP_FWD': seekByFrames(1); break;
+      case 'NUDGE_START_BACK': nudgeStart(-1); break;
+      case 'NUDGE_START_FWD': nudgeStart(1); break;
+      case 'NUDGE_END_BACK': nudgeEnd(-1); break;
+      case 'NUDGE_END_FWD': nudgeEnd(1); break;
       case 'INSERT_SUBTITLE': handleInsertSegmentAtCursor(); break;
       case 'DELETE_ACTIVE_SEGMENT': {
         // Only fires if there is an active segment and focus is NOT inside an editable text field
@@ -1153,7 +1242,7 @@ const handleSave = useCallback(() => {
     activeSegment: subsOverlayConfig.show ? activeSegmentForPlayer : null,
     overlayConfig: { original: subsOverlayConfig, translated: { show: false, position: 'bottom' as const, offsetPx: 10, fontScale: 1 } },
     onTimeUpdate: handleTimeUpdateThrottled, onDurationChange: setDuration, onPlay, onPause, onTogglePlay, onJumpSegment,
-    videoFile, mediaDocId, onSegmentUpdate: handleSegmentUpdate, onSegmentUpdateEnd: handleSegmentUpdateEnd, onSegmentClick: handleSegmentClick, autoScroll: autoScrollWave, scrollMode: scrollModeWave,
+    videoFile, mediaDocId, onSegmentUpdate: handleSegmentUpdate, onSegmentUpdateEnd: handleSegmentUpdateEnd, onSegmentClick: handleSegmentClick,
     isAudioOnly: isAudioOnly(state.documents.find(d => d.id === mediaDocId)?.sourceType),
   };
 
@@ -1260,7 +1349,7 @@ const handleSave = useCallback(() => {
           </div>
           <div className="flex-shrink-0 border-t border-gray-700/50" style={{ backgroundColor: 'var(--th-bg-secondary)' }}>
             <VideoSubtitlesToolbar
-              onOpenSync={() => setIsSyncModalOpen(true)} onExportSrt={handleExportSrt} isPlaying={isPlaying} onTogglePlay={onTogglePlay} onJumpSegment={onJumpSegment} onJumpTime={onJumpTime} currentTime={currentTime} duration={duration} onSeek={onSeek} playbackRate={playbackRate} onChangeRate={onChangeRate} isScriptLinked={isScriptLinked} onToggleScriptLink={() => setIsScriptLinked((p) => !p)} isEditable={isEditing} autoScrollWave={autoScrollWave} onToggleAutoScrollWave={() => setAutoScrollWave(!autoScrollWave)} scrollModeWave={scrollModeWave} onScrollModeChangeWave={setScrollModeWave} autoScrollSubs={autoScrollSubs} onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
+              onOpenSync={() => setIsSyncModalOpen(true)} onExportSrt={handleExportSrt} isPlaying={isPlaying} onTogglePlay={onTogglePlay} onJumpSegment={onJumpSegment} onJumpTime={onJumpTime} currentTime={currentTime} duration={duration} onSeek={onSeek} playbackRate={playbackRate} onChangeRate={onChangeRate} isScriptLinked={isScriptLinked} onToggleScriptLink={() => setIsScriptLinked((p) => !p)} isEditable={isEditing} autoScrollSubs={autoScrollSubs} onToggleAutoScrollSubs={() => setAutoScrollSubs(!autoScrollSubs)}
               subtitleOverlayShow={subsOverlayConfig.show}
               onToggleSubtitleOverlay={() => setSubsOverlayConfig(c => ({ ...c, show: !c.show }))}
             />
@@ -1282,6 +1371,7 @@ const handleSave = useCallback(() => {
           videoRef={videoRef}
           activeId={activeSegmentId}
           onSegmentUpdate={handleSegmentUpdate}
+          onCreateSegment={handleCreateSegment}
           onSegmentUpdateEnd={handleSegmentUpdateEnd}
           onSegmentClick={handleSegmentClick}
           onSetCueStart={handleCueStart}

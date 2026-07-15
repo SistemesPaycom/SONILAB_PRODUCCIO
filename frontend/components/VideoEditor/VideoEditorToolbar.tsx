@@ -21,11 +21,12 @@ interface VideoEditorToolbarProps {
     onToggleScriptLink: () => void;
 }
 
-const ControlButton: React.FC<{ onClick: () => void; title: string; children: React.ReactNode; className?: string; }> = (props) => (
+const ControlButton: React.FC<{ onClick: () => void; title: string; children: React.ReactNode; className?: string; style?: React.CSSProperties; }> = (props) => (
     <button
       onClick={props.onClick}
       title={props.title}
       className={`p-2 rounded-full transition-colors text-gray-300 hover:bg-gray-700 hover:text-white ${props.className || ''}`}
+      style={props.style}
     >
       {props.children}
     </button>

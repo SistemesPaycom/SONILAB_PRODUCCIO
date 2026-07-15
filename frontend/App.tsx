@@ -14,6 +14,7 @@ import Toolbar from './components/EditorDeGuions/Toolbar';
 import Editor from './components/EditorDeGuions/Editor';
 import { ColumnView } from './components/EditorDeGuions/ColumnView';
 import { CsvView } from './components/EditorDeGuions/CsvView';
+import ScriptSearchOverlay from './components/EditorDeGuions/ScriptSearchOverlay';
 import { useDocumentHistory } from './hooks/useDocumentHistory';
 import { DirtyGuardModal } from './components/DirtyGuardModal';
 import { translateScript } from './utils/EditorDeGuions/translator';
@@ -557,6 +558,17 @@ const [page, setPage] = useLocalStorage<'library' | 'media' | 'projects'>(LOCAL_
     }
   };
 
+  // Substitució de la cerca del guió: aplica contingut nou a una versió concreta. Si és la
+  // visible, passa per l'historial (undo + reflex a l'editor); si no, només dispatch.
+  const handleReplaceLangContent = useCallback((lang: string, newContent: string) => {
+    if (!currentDoc) return;
+    if (lang === effectiveLang) {
+      history.updateDraft(newContent);
+      history.commit(newContent);
+    }
+    dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang, content: newContent, csvContent: '' } });
+  }, [currentDoc, effectiveLang, history, dispatch]);
+
   const confirmNavigation = () => {
     if (pendingNav) {
       setOpenDocId(pendingNav.id);
@@ -613,6 +625,15 @@ if (openMode === 'editor-video') return <VideoEditorView {...toolbarProps} curre
     return (
       <div className="flex-1 flex flex-col min-h-0">
         <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
+        <ScriptSearchOverlay
+          isEditable={isEditing}
+          contentByLang={currentDoc.contentByLang}
+          sourceLang={currentDoc.sourceLang}
+          activeLang={effectiveLang}
+          visibleContent={history.present}
+          onReplaceLang={handleReplaceLangContent}
+          onRequestLang={setActiveLang}
+        />
         <main className="flex-grow overflow-y-auto p-8 flex flex-col items-center custom-scrollbar" style={{ backgroundColor: 'var(--th-bg-app)' }}>
            <div id="page-content-area" className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
               {editorView === 'csv' ? (
@@ -923,6 +944,15 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
     }
   };
 
+  const handleReplaceLangContent = useCallback((lang: string, newContent: string) => {
+    if (!currentDoc) return;
+    if (lang === effectiveLang) {
+      history.updateDraft(newContent);
+      history.commit(newContent);
+    }
+    dispatch({ type: 'UPDATE_DOCUMENT_CONTENTS', payload: { documentId: currentDoc.id, lang, content: newContent, csvContent: '' } });
+  }, [currentDoc, effectiveLang, history, dispatch]);
+
   const enableScriptShortcuts = isEditing && (mode === 'editor' || mode === 'editor-video' || mode === 'editor-ssrtlsf');
   useKeyboardShortcuts('scriptEditor', (action) => {
     switch (action) {
@@ -978,6 +1008,15 @@ const EditorTabContent: React.FC<{ mode: OpenMode; docId: string }> = ({ mode, d
     return (
       <div className="flex-1 flex flex-col min-h-0">
         <Toolbar {...toolbarProps} onUndo={() => history.undo()} onRedo={() => history.redo()} canUndo={history.canUndo} canRedo={history.canRedo} />
+        <ScriptSearchOverlay
+          isEditable={isEditing}
+          contentByLang={currentDoc.contentByLang}
+          sourceLang={currentDoc.sourceLang}
+          activeLang={effectiveLang}
+          visibleContent={history.present}
+          onReplaceLang={handleReplaceLangContent}
+          onRequestLang={setActiveLang}
+        />
         <main className="flex-grow overflow-y-auto p-8 flex flex-col items-center custom-scrollbar" style={{ backgroundColor: 'var(--th-bg-app)' }}>
           <div id="page-content-area" className="bg-white text-gray-900 shadow-2xl rounded-sm p-12 transition-all duration-300" style={{ width: pageWidth }}>
             {editorView === 'csv' ? (

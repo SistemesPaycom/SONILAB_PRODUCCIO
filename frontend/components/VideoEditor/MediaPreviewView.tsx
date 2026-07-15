@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Document } from '../../appTypes';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import { VideoPlaybackArea } from './VideoPlaybackArea';
-import { PlayIcon, PauseIcon, PlusIcon, MinusIcon, CursorStationaryIcon, CursorPageIcon } from './PlayerIcons';
+import { PlayIcon, PauseIcon, PlusIcon, MinusIcon } from './PlayerIcons';
 import { Timecode } from './Timecode';
-import * as Icons from '../icons';
 import { isAudioOnly } from '../../constants';
 
 interface MediaPreviewViewProps {
@@ -20,9 +19,6 @@ export const MediaPreviewView: React.FC<MediaPreviewViewProps> = ({ currentDoc }
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 const [videoFile, setVideoFile] = useState<File | null>(null);
-  // Estats de seguiment de l'ona
-  const [autoScrollWave, setAutoScrollWave] = useState(true);
-  const [scrollModeWave, setScrollModeWave] = useState<'stationary' | 'page'>('stationary');
 
   useEffect(() => {
   let cancelled = false;
@@ -89,8 +85,6 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
     onTogglePlay,
     onJumpSegment: () => {},
     videoFile: videoFile,
-    autoScroll: autoScrollWave,
-    scrollMode: scrollModeWave,
     isAudioOnly: isAudioOnly(currentDoc.sourceType)
   };
 
@@ -152,27 +146,6 @@ const [videoFile, setVideoFile] = useState<File | null>(null);
                 </button>
                 
                 <Timecode currentTime={currentTime} duration={duration} onSeek={onSeek} />
-                
-                <div className="w-px h-6 bg-gray-700 mx-1 opacity-50" />
-
-                {/* Botons de seguiment de l'ona */}
-                <div className="flex items-center gap-1 bg-black/40 rounded-full p-0.5 border border-white/5">
-                    <button 
-                        onClick={() => setAutoScrollWave(!autoScrollWave)}
-                        className={`p-1.5 rounded-full transition-all ${autoScrollWave ? 'text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
-                        style={autoScrollWave ? { backgroundColor: 'var(--th-accent)' } : undefined}
-                        title="Mode seguiment"
-                    >
-                        <Icons.ArrowDown className={`w-3.5 h-3.5 ${autoScrollWave && isPlaying ? 'animate-bounce' : ''}`} />
-                    </button>
-                    <button 
-                        onClick={() => setScrollModeWave(scrollModeWave === 'stationary' ? 'page' : 'stationary')}
-                        className="p-1.5 rounded-full bg-gray-800 text-gray-400 hover:text-white"
-                        title={scrollModeWave === 'stationary' ? "Canviar a mode pàgina" : "Canviar a mode estacionari"}
-                    >
-                        {scrollModeWave === 'stationary' ? <CursorStationaryIcon className="w-3 h-3" /> : <CursorPageIcon className="w-3 h-3" />}
-                    </button>
-                </div>
             </div>
 
             <div className="flex items-center gap-3 bg-black/30 rounded-xl px-4 py-1.5 border border-white/5">

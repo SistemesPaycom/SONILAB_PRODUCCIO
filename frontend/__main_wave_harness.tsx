@@ -39,6 +39,7 @@ const PEAK_COUNT = DURATION * 100;
 const FAKE_PEAKS = Array.from({ length: PEAK_COUNT }, (_, i) => 0.35 * (0.5 + 0.5 * Math.sin((2 * Math.PI * (i / 100)) / 3)));
 (api as any).streamUrlWithToken = () => BLOB_URL;
 (api as any).streamUrl = () => BLOB_URL;
+(api as any).ensureMediaCookie = async () => {};
 (api as any).getWaveform = async () => ({
   cached: true,
   waveform: { peaks: FAKE_PEAKS, peakCount: PEAK_COUNT, duration: DURATION, sampleRate: 44100 },

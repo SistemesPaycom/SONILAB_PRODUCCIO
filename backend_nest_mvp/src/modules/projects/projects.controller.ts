@@ -70,6 +70,20 @@ export class ProjectsController {
     return this.projects.getProjectBySrt(srtDocumentId);
   }
 
+  /**
+   * Vincula l'últim media usat a un SRT i sincronitza el mediaDocumentId del
+   * projecte associat (SPS-0019). Ruta estàtica: ha d'anar abans que /:id.
+   */
+  @Patch('/link-media/:srtDocumentId')
+  @HttpCode(200)
+  linkMediaToSrt(
+    @CurrentUser() user: RequestUser,
+    @Param('srtDocumentId') srtDocumentId: string,
+    @Body() body: { mediaDocumentId: string | null },
+  ) {
+    return this.projects.linkMediaToSrt(user.userId, srtDocumentId, body?.mediaDocumentId ?? null);
+  }
+
   @Get('/:id')
   get(@Param('id') id: string) {
     return this.projects.getProject(id);

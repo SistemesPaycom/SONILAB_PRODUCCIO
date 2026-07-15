@@ -359,6 +359,29 @@ if (exists) {
   }
 
   /**
+   * Vincula (o desvincula) l'últim media usat a un SRT. El linkedMediaId de l'SRT
+   * és la font primària; a més sincronitza project.mediaDocumentId del projecte
+   * associat perquè el registre no quedi obsolet (SPS-0019). Idempotent i no falla
+   * si l'SRT no té projecte associat.
+   */
+  async linkMediaToSrt(ownerId: string, srtDocumentId: string, mediaDocumentId: string | null) {
+    const updated = await this.library.updateDocument(ownerId, srtDocumentId, {
+      linkedMediaId: mediaDocumentId,
+    } as any);
+
+    // Només refresquem el projecte quan hi ha un media real: mediaDocumentId és
+    // required al schema de projecte, així que un desvincle (null) no l'ha de trencar.
+    if (mediaDocumentId) {
+      await this.projectModel.updateOne(
+        { srtDocumentId },
+        { $set: { mediaDocumentId } },
+      );
+    }
+
+    return updated;
+  }
+
+  /**
    * Extrae texto plano de un buffer DOCX/RTF/PDF/TXT usando guion_converter.py.
    * Preserva tabuladors (SPEAKER\ttext) i estructura SONILAB.
    */

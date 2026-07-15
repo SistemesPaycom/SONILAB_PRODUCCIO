@@ -85,225 +85,7 @@ Llegenda dels camps:
 
 # 🟥 **PENDENTS**
 
-> *Ordenat per recomanació d'atac: primer per ordre lògic (els ciments, les bases… fins al sostre) i, després, dels més ràpids/desbloquejants als més grans. Ordre conservat íntegrament de l'original.*
-
-> ---
-> ## **SPS-0019. Sincronitzar `project.mediaDocumentId` en vincular media (coherència del registre)**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #6)* El fix de SPS-0005 (T5, persistència del vídeo del projecte) llegeix l'últim vídeo des de `linkedMediaId` de l'SRT, però el `project.mediaDocumentId` del backend queda obsolet: continua apuntant al vídeo de la creació. No afecta l'obertura del projecte (ja no és la font primària), però qualsevol llistat/report/lògica futura que llegeixi `mediaDocumentId` veurà el vídeo antic.
->
-> >#### **Pla:**
-> >* En `api.linkMediaToSrt` (o al backend en rebre el PATCH de `linkedMediaId`), actualitzar també el `mediaDocumentId` del projecte associat a aquest SRT. Toca `backend_nest_mvp/src/modules/projects/` → consultar `.claude/docs/domains/projectes.md` abans. Opcional; no bloqueja res.
->
-> >#### **Arxius afectats:**
-> >* `backend_nest_mvp/src/modules/projects/` (service + potser controller), possiblement `frontend/services/api.ts`.
->
-> >>##### **Risc:** 2/10 *(orig.: «bajo»)*
-> >>##### **Dimensions:** 2/10 *(orig.: «pequeño»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0020. Cerca i substitució a l'editor de guions (columnes original/traducció)**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #7)* La cerca/substitució tipus Word (SPS-0006/T6) es va implementar només a l'editor de subtítols — decisió d'abast validada amb l'usuari. L'editor de guions (`EditorDeGuions`, dues columnes) no en té; l'usuari va assenyalar que allà caldria poder cercar tant a la columna original com a la traduïda (o a totes dues).
->
-> >#### **Pla:**
-> >* Reutilitzar el mòdul pur `frontend/utils/SubtitlesEditor/searchReplace.ts` (`findMatches`/`replaceVisibleRange` són agnòstics del component); dissenyar a part la UI i el selector de columna (original / traducció / ambdues).
->
-> >#### **Arxius afectats:**
-> >* `frontend/components/EditorDeGuions/`.
->
-> >>##### **Risc:** 5/10 *(orig.: «medio»)*
-> >>##### **Dimensions:** 5/10 *(orig.: «medio»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0021. Instal·lar `@types/react` (+ `@types/react-dom`) al frontend**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #8)* El frontend no té `@types/react` enlloc: `npx tsc --noEmit` passa, però tot `React.*` es resol com a *any* silenciós i el typecheck valida molt menys del que sembla. Va aflorar dues vegades durant SPS-0006 (T6, error TS2347 en un genèric de `querySelectorAll` derivat de la cadena d'*any*; els revisors ho van marcar com a baseline feble del repo).
->
-> >#### **Pla:**
-> >* `npm install --save-dev @types/react @types/react-dom` (**dependència nova → requereix aprovació expressa de l'usuari**, regla j de la Part I) i arreglar els errors de tipus latents que aflorin.
->
-> >#### **Arxius afectats:**
-> >* `frontend/package.json` + errors de tipus latents que aflorin arreu del frontend.
->
-> >>##### **Risc:** 2/10 *(orig.: «bajo, només dev-time»)*
-> >>##### **Dimensions:** 4/10 *(orig.: «pequeño-medio, poden aflorar errors latents en cadena»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0023. [SEGURETAT · HIGH] Treure el JWT de la URL de streaming de media**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #10)* La revisió de seguretat automàtica va marcar `api.streamUrlWithToken(docId)` (`frontend/services/api.ts`): passa el JWT com a query param (`?token=...`) al `src` del `<video>`. Els tokens a la query string es filtren a logs d'accés del servidor, historial del navegador, capçaleres `Referer` i proxies. **Preexistent** — no introduït per SPS-0007 (T7, resume position); `api.saveResumeState` de SPS-0007 usa la capçalera `Authorization`, no la URL. Fora de l'abast de SPS-0007 i toca el flux de streaming (zona sensible, requereix canvi coordinat backend+frontend d'autenticació) → tasca a part.
->
-> >#### **Pla:**
-> >* Opció recomanada (b) menys intrusiva: endpoint que emeti una cookie de només-media (`HttpOnly, SameSite=Lax, Path=/media`) i que el `<video>` usi la URL sense token. Alternativa (a): signed-URLs curtes amb HMAC(docId+expiry). Si es manté el token durant la migració, configurar el servidor perquè no registri el param `token` als logs.
->
-> >#### **Arxius afectats:**
-> >* `frontend/services/api.ts`, `backend_nest_mvp/src/modules/media/` (nou endpoint/guard), consultar `.claude/docs/domains/` si aplica.
->
-> >>##### **Risc:** 5/10 *(orig.: «medio (auth)»)*
-> >>##### **Dimensions:** 5/10 *(orig.: «medio»)*
-> >>##### **Prioritat:** ⭐ (no consta — marcada [SEGURETAT · HIGH] a l'original)
->
-> ---
-
-> ---
-> ## **SPS-0024. Evitar la doble crida `getProjectBySrt` a `VideoSubtitlesEditorView`**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #11)* Tradeoff acceptat de SPS-0007 (T7): el hook `useResumePosition` fa la seva pròpia crida `api.getProjectBySrt(docId)`, i `VideoSubtitlesEditorView` ja en fa una altra a l'efecte de càrrega del guió → dues lectures en obrir. És barat i es va prioritzar tenir les dues vistes idèntiques, però es podria optimitzar passant el projecte ja carregat al hook (via setter). No bloqueja res.
->
-> >#### **Pla:**
-> >* Afegir un mecanisme opcional perquè la vista alimenti el projecte ja resolt al hook; l'standalone continuaria fent el fetch propi.
->
-> >#### **Arxius afectats:**
-> >* `frontend/hooks/useResumePosition.ts`, `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx`.
->
-> >>##### **Risc:** 2/10 *(orig.: «bajo»)*
-> >>##### **Dimensions:** 2/10 *(orig.: «pequeño»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0025. Rediseny complet de la interacció del visualitzador d'ona (Fases A/B/C)**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #12)* Sessió de disseny llarga (validada amb l'usuari, estudiant el codi font de Subtitle Edit) per portar la interacció de l'ona a paritat amb SE + millores de Nuendo. Esquema mestre a `Shortcuts Subtitols - Consolidat.csv` (arrel). Arrel tècnica descoberta: el problema del doble-clic i de l'edició durant la reproducció NO és el model de ratolí sinó l'**autoscroll que recentra la vista en cada seek manual**; SE ho evita amb page-follow (només salta quan el cursor surt de la finestra) i sense recentrar en clic. Veure `history.md` (H-00011).
->
-> >#### **Pla (per fases; spec+pla datats cadascuna):**
-> >* **Fase A (base, desbloquejant): implementada, pendent de verificació — veure SPS-0012.** Default de scroll → `page`; secció Ajustos "Ona d'àudio" amb **Pàgina** (default; amaga+inertitza el botó intern del timeline però el deixa al DOM) i **Duo** (comportament actual). Arregla el doble-clic i l'edició durant playback (el mode `page` ja no recentra en clics dins la finestra).
-> >* **Fase B (ratolí):** part 1 (modificador+clic = fixar cues: Shift=inici, Ctrl=final, Alt=inici mantenint durada, Ctrl+Shift=ripple) **implementada, pendent de verificació — veure SPS-0013.** Resta a **Fase B2 (SPS-0028)**: crear arrossegant a zona buida (+Enter), `Alt+Shift`+arrossegar = scrub, `Alt`+arrossegar vora = enllaça veí <500 ms.
-> >* **Fase C (teclat):** un sol joc de dreceres (independent del mode de scroll): `←/→` (1 s) i `Ctrl+←/→` (1 frame; passos configurables), nudge `Alt+←/→` (inici) i `Alt+Shift+←/→` (final) estil Nuendo, `Alt+↑/↓` (línia), `F9–F12`, `Shift+F9`, `Ctrl+Shift+M` (merge), `Ctrl+Alt+V` (split) — tot personalitzable.
-> >* **Sub-parts ajornades:** model de ratolí per a estacionari/Duo (SPS-0014). Els presets explícits page/duo (SPS-0015) queden **descartats** — el model de ratolí és únic i mode-agnòstic (veure CANCELATS i H-00015); el que sí queda obert és SPS-0029 (gestos contra una vista en moviment durant la reproducció).
->
-> >#### **Arxius afectats:**
-> >* `frontend/components/VideoEditor/WaveformTimeline.tsx`, `SettingsModal.tsx`, `constants.ts`, `factoryReset.ts`, sistema de dreceres (`useKeyboardShortcuts`/`DEFAULT_SHORTCUTS`), les dues vistes d'editor.
->
-> >>##### **Risc:** 7/10 *(orig.: «medio-alto, rework d'interacció ampli»)*
-> >>##### **Dimensions:** 8/10 *(orig.: «gran — fer per fases»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0026. Detecció de canvis de pla (shot changes) + snapping**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #13)* L'usuari vol detecció de canvis de pla qualitat tipus Premiere per enganxar-hi les vores dels subtítols. SE ho fa amb FFmpeg (`select=gt(scene\,0.4),showinfo`, llindar 0.4 configurable, desat en `.shotchanges`).
->
-> >#### **Pla:**
-> >* Backend — job que detecti els canvis de pla del media i en desi els timestamps per media; opció FFmpeg (ràpid) o **PySceneDetect** (content-aware, millor amb fosos/moviment; ja hi ha worker Python de WhisperX). Frontend — pintar línies verticals a l'ona + snapping configurable de les vores (`Shift`+arrossegar per bypassar; zones de llindar estil SE). Mirar el codi de snapping de SE (clonat a scratchpad) per la UX.
->
-> >#### **Arxius afectats:**
-> >* `backend_nest_mvp/src/modules/media/` (o worker Python), `frontend/components/VideoEditor/WaveformTimeline.tsx`.
->
-> >>##### **Risc:** 5/10 *(orig.: «medio»)*
-> >>##### **Dimensions:** 8/10 *(orig.: «gran — fase pròpia»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0027. Presets de temps per frames per projecte (TV 25 / Cine 24)**
-> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #14)* Min duration / min gap són en ms; l'usuari vol presets seleccionables per projecte expressats en FRAMES segons perfil (TV 25 fps, Cine 24 fps).
->
-> >#### **Pla:**
-> >* Afegir fps per projecte + conversió frame↔ms; presets escollibles que fixin min duration / min gap en frames.
->
-> >#### **Arxius afectats:**
-> >* Model de projecte (backend), `SettingsModal.tsx` / config d'editor.
->
-> >>##### **Risc:** 3/10 *(orig.: «bajo-medio»)*
-> >>##### **Dimensions:** 5/10 *(orig.: «medio»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0028. Fase B2 de l'ona: crear-arrossegant + scrub + Alt-vora-veí**
-> >> ###### [🗒️] *[2026-07-08] | [hora no consta]*
->
-> >#### **Síntoma / Context:**
-> >* *(abans: pendent #15)* Resta de la Fase B (SPS-0025) que es va deixar fora de la part 1 (SPS-0013/T13) perquè requereix infraestructura NOVA i té col·lisions de modificador-durant-drag. Van juntes.
->
-> >#### **Pla:**
-> >* **Crear arrossegant a zona buida:** arrossegar sobre l'ona buida marca un rang provisional (nou estat + dibuix a `drawVisible` de `WaveformTimeline`) → `Enter` insereix el subtítol (`Esc` cancel·la). **Cal fer l'ona focusable i afegir-hi maneig de teclat** (avui `WaveformTimeline` NO té cap `onKeyDown` ni és focusable — tota la gestió de tecles viu al pare via `useKeyboardShortcuts`). Nou callback `onCreateSegment(start, end)` + handler al pare (reutilitzar la lògica de `handleInsertSegmentAtCursor`).
-> >* **Scrub → `Alt+Shift`+arrossegar:** relocalitzar el scrub (avui = arrossegar sobre espai buit) a `Alt+Shift`, per alliberar l'arrossegar-buit per a "crear". Acoblat amb el punt anterior.
-> >* **`Alt`+arrossegar vora = enllaça veí:** en redimensionar una vora amb Alt, moure també la vora del veí més proper si és a <500 ms (com SE). Modifica la lògica de drag/resize a `handleMouseMove`; compte amb la col·lisió amb `Alt`+clic (cue, SPS-0013/T13) — es distingeix per clic-vs-drag.
->
-> >#### **Arxius afectats:**
-> >* `frontend/components/VideoEditor/WaveformTimeline.tsx` (drawVisible, handlers, teclat, nou estat), les dues vistes editores (callback `onCreateSegment`).
->
-> >>##### **Risc:** 7/10 *(orig.: «medio-alto»)*
-> >>##### **Dimensions:** 8/10 *(orig.: «gran — infra nova de teclat + dibuix»)*
-> >>##### **Prioritat:** ⭐ (no consta)
->
-> ---
-
-> ---
-> ## **SPS-0031. Neteja del deute mort del subsistema d'ona (props i claus sense consumidor)**
-> >> ###### [🗒️] *[2026-07-13] | [10:42:34]*
->
-> >#### **Síntoma / Context:**
-> >* Inventari fet en avaluar SPS-0015 (veure H-00015). Cap d'aquests punts trenca res avui, però tots són trampes per a qui llegeixi el codi després (o per a una IA que hi confiï):
-> >   * `LOCAL_STORAGE_KEYS.WAVEFORM_CTRL_CLICK_SEEK` (`frontend/constants.ts:24`, `factoryReset.ts:41`): **zero lectures** des de SPS-0013 (H-00013 ja la va declarar deprecada). Pitjor: el comentari de `constants.ts:23` («Ctrl/Cmd + clic mou només el cursor») diu **el contrari** del que fa el codi avui (`WaveformTimeline.tsx:761` → Ctrl+clic = fixa cue de FINAL).
-> >   * Props declarades i mai desestructurades a `WaveformTimeline.tsx`: `viewMode` / `onToggleViewMode` (L30-31). ⚠️ **`autoScroll` (L40) JA NO és deute mort: SPS-0030 l'ha feta viva** (és qui governa el seguiment del RAF loop). **No l'esborris.** Compte a no confondre-la: el que sí que és mort és el `autoScroll` que viatja dins de `playerProps` cap a `VideoPlaybackArea` (punt següent) — camí de props diferent, tot i dir-se igual.
-> >   * Passthroughs morts: `VideoPlaybackArea.tsx:27-28` (`autoScroll`, `scrollMode` declarades i mai usades) alimentats des de `VideoSubtitlesEditorView.tsx:1114`, `VideoSrtStandaloneEditorView.tsx:557` i `MediaPreviewView.tsx:92-93` — i, a més, hi passen `scrollModeWave` **cru** en lloc d'`effectiveScrollMode` (inconsistència latent). Igual a `VideoSubtitlesToolbar.tsx:26-30` («kept for interface compat»).
-> >   * `MediaPreviewView.tsx:25,169-173`: té estat i botó propis d'estacionari/pàgina però **no renderitza cap `WaveformTimeline`** → el botó no fa res i no respecta el bloqueig del mode Pàgina (ja detectat a H-00012 com a botó vestigial).
->
-> >#### **Pla:**
-> >* Esborrar clau + comentari obsolet, esborrar props mortes i els seus llocs de crida, i decidir què fer amb el botó vestigial de `MediaPreviewView` (amagar-lo o eliminar-lo). Fer-ho en **un sol canvi de neteja**, no barrejat amb cap fix funcional. Consultar `.claude/docs/domains/localstorage.md` si per llavors existeix (avui la carpeta `domains/` encara no està creada).
->
-> >#### **Arxius afectats:**
-> >* `frontend/constants.ts`, `frontend/utils/factoryReset.ts`, `frontend/components/VideoEditor/WaveformTimeline.tsx`, `VideoPlaybackArea.tsx`, `MediaPreviewView.tsx`, `frontend/components/VideoSubtitlesEditor/VideoSubtitlesToolbar.tsx` + les dues vistes editores.
->
-> >>##### **Risc:** 2/10 *(esborrar codi sense consumidor; el risc real és esborrar-ne un que sí que en tingui — verificar amb grep abans)*
-> >>##### **Dimensions:** 3/10
-> >>##### **Prioritat:** ⭐⭐ (2/10 — no bloqueja res; fer-ho quan es toqui l'ona per un altre motiu)
->
-> ---
-
-> ---
-> ## **SPS-0039. Lògica de combos de teclat duplicada entre `SettingsModal` i `useKeyboardShortcuts`**
-> >> ###### [🗒️] *[2026-07-14] | [13:15:39]*
->
-> >#### **Síntoma / Context:**
-> >* Detectat a la revisió de SPS-0022. El gravador de dreceres d'Ajustos (`SettingsModal.tsx:94-110`) té la **seva pròpia còpia** de la funció que converteix un event de teclat en el string de combo (`Ctrl+Shift+Z`), gairebé idèntica a la del hook però amb diferències pròpies (majúscula per a tecles d'1 caràcter, `null` per a `Escape`). Fins ara la duplicació era invisible; SPS-0022 ha extret la versió canònica al hook (`mapKeyName`/`comboFromEvent`, ara reutilitzada també per la barra de cerca), de manera que ara hi ha **dues fonts de veritat**: qui gravi el combo i qui el reconegui poden divergir. Si algú toca `mapKeyName` (p. ex. afegint `'.'→Period`), els combos ja gravats a `localStorage` deixarien de casar i la drecera de l'usuari es tornaria muda, sense cap error visible.
->
-> >#### **Pla:**
-> >* Fer que `SettingsModal` consumeixi el `comboFromEvent` del hook (exportar-lo) i quedar-se només amb el que és pròpiament del gravador (tractament d'`Escape` per cancel·lar, presentació en majúscules). Verificar que els combos ja desats a `LOCAL_STORAGE_KEYS.SHORTCUTS` segueixen casant després del canvi (o migrar-los) — és l'únic risc real.
->
-> >#### **Arxius afectats:**
-> >* `frontend/components/SettingsModal.tsx`, `frontend/hooks/useKeyboardShortcuts.ts`.
->
-> >>##### **Risc:** 3/10 *(toca el matching de dreceres ja desades de l'usuari)*
-> >>##### **Dimensions:** 2/10
-> >>##### **Prioritat:** ⭐⭐ (2/10 — no trenca res avui; és una trampa per al proper que toqui les dreceres)
->
-> ---
+> *(Buit — 2026-07-15.) Les tres tasques que hi havia (SPS-0025 Fase C, SPS-0028, SPS-0040) s'han passat a 🟡 EN_PROCES en aquesta sessió d'autopilot. El que queda obert d'elles (parts de SPS-0025/SPS-0028 bloquejades pel CSV mestre o ajornades) viu documentat dins de la seva entrada a EN_PROCES, no aquí.*
 
 ---
 
@@ -313,6 +95,395 @@ Llegenda dels camps:
 
 > [!NOTE]
 > **Comprovació 2026-07-15 (abans d'un trasllat de disc).** SPS-0011 es va tancar aquest dia perquè `git status` confirmava l'arbre net i el seu únic fitxer (`backend_nest_mvp/tsconfig.json`) ja commitejat. **NO s'ha fet el mateix amb SPS-0008/SPS-0009/SPS-0010/SPS-0012/SPS-0013**, que comparteixen el mateix ítem "decidir si commitejar" (grup T8–T13): en aquesta data, `git status` mostrava canvis **encara no commitejats** a `WaveformTimeline.tsx`, `VideoSubtitlesEditorView.tsx`, `VideoSrtStandaloneEditorView.tsx`, `SubtitlesEditor.tsx`, `SegmentItem.tsx`, `SrtPreviewView.tsx`, `useKeyboardShortcuts.ts`, `SearchReplaceBar.tsx`, `richTextHelpers.ts`, `splitHelpers.ts`, `VideoPlayer.tsx` i als propis `tasks.md`/`history.md` (aquests dos ja amb les entrades SPS-0016..SPS-0039 / H-00019..H-00024 escrites però sense commit) — més 4 fitxers de harness sense trackejar (`frontend/__main_wave_harness.*`, `frontend/__wave_harness.*`). No tocar aquestes 5 tasques com a ACABAT fins que es torni a comprovar `git status` i surti net. **Abans de traslladar aquest projecte a un altre disc, assegura't que el mètode de trasllat preserva l'arbre de treball tal qual (còpia de carpeta sencera, no un `git clone` nou)** — un clone nou perdria tot això perquè mai s'ha fet push.
+
+> ---
+> ## **SPS-0028. Fase B2 de l'ona: crear-arrossegant + scrub relocalitzat**
+> >> ###### [🗒️] *[2026-07-08] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #15)* Resta de la Fase B (SPS-0025) fora de la part 1 (SPS-0013): requereix infraestructura NOVA (ona focusable + teclat) i té col·lisions de modificador-durant-drag.
+>
+> >#### **Pla (Parts 1+2 implementades; Part 3 ajornada):**
+> >* **Crear arrossegant a zona buida (fet):** arrossegar SENSE modificadors sobre l'ona buida (només zona de contingut, no la regla) marca un rang provisional (nou estat `createRange` + refs + dibuix a `drawVisible`) → l'ona és focusable (`tabIndex` al div arrel, focus en acabar el drag) i `Enter` insereix el subtítol via nou `onCreateSegment(start,end)`, `Esc` cancel·la. Nou `handleCreateSegment` als DOS editors (reutilitza la lògica de `handleInsertSegmentAtCursor`; avorta si el rang solapa un esdeveniment; clamp a min durada/gap/veïns). `onCreateSegment` afegit al comparador de `React.memo`.
+> >* **Scrub relocalitzat (fet):** l'arrossegar-buit sense modificadors passa a "crear"; el scrub queda en qualsevol arrossegar-buit AMB modificador (Alt+Shift inclòs) i a la regla de timecodes (preservat l'invariant que la regla fa scrub). El tipus de gest es fixa al mousedown (marc latched, filosofia SPS-0029).
+> >* **Fixos de la revisió adversarial:** (a) crear només a zona de contingut, la regla manté scrub; (b) `handleKeyDown` ignora Enter/Esc mentre hi ha un gest de ratolí viu (el focus salta al div arrel al mousedown); (c) `SegmentItem` fa `stopPropagation` d'Alt+fletxes dins del camp editable perquè el nudge de Fase C no trepitgi la navegació de text.
+> >* **PART 3 AJORNADA (`Alt`+arrossegar vora = enllaça veí <500 ms):** necessita un contracte NOU d'actualització atòmica de DOS segments alhora (`onSegmentUpdate` només en toca un). És la part de menys valor i més risc; es deixa fora per no implementar-la a mitges i cega. Follow-up obert.
+>
+> >#### **Arxius afectats:**
+> >* `frontend/components/VideoEditor/WaveformTimeline.tsx` (refs/estat/dibuix/handlers/teclat/memo), `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx` i `VideoSrtStandaloneEditorView.tsx` (`handleCreateSegment` + prop), `frontend/components/VideoSubtitlesEditor/SegmentItem.tsx` (guard Alt+fletxes).
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0 + `vite build` EXIT 0. Revisió adversarial (2 agents) → 3 troballes majors corregides. Interacció de ratolí/teclat NO verificada al navegador.
+>
+> >>##### **Risc:** 7/10 *(orig.: «medio-alto»)*
+> >>##### **Dimensions:** 8/10 *(orig.: «gran»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >**Detall a** history.md (H-00031)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Editor: en mode edició, arrossegar sobre àrea buida de l'ona (contingut) dibuixa un rang amb "↵ inserir · Esc"; Enter insereix un subtítol nou en aquest interval, Esc el descarta. [__]
+> > * Arrossegar sobre la REGLA de timecodes segueix fent scrub (mou el cursor), NO crea. [__]
+> > * Scrub encara funciona arrossegant l'àrea buida amb Alt+Shift (o qualsevol modificador). [__]
+> > * El rang provisional no permet trepitjar un esdeveniment existent (s'avorta o es retalla). [__]
+> > * Clic simple, doble clic (selecció), modificador+clic (cues) i drag/resize de segments segueixen igual que abans (cap regressió). [__]
+> > * ¿Vols la Part 3 (Alt+vora enllaça veí <500 ms)? Requereix contracte nou de 2 segments. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0025. Rediseny de la interacció de l'ona — Fase C (teclat): Secció D del CSV mestre**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #12)* Umbrella del redisseny d'ona. Fase A = SPS-0012 (feta), Fase B1 = SPS-0013 (feta), Fase B2 = SPS-0028 (EN_PROCES). Aquesta sessió implementa la **Fase C (teclat)** contra l'esquema mestre `Shortcuts Subtitols - Consolidat.csv` (arrel, Secció D). **NOTA:** en un primer intent es va afirmar per error que el CSV no existia (el `Glob` respecta `.gitignore` i el fitxer hi és ignorat) → l'usuari ho va corregir i la Fase C es va completar segons el CSV real.
+>
+> >#### **Pla (Secció D completa implementada):**
+> >* Defaults de `DEFAULT_SHORTCUTS.subtitlesEditor` alineats al CSV (personalitzables, globals, independents del mode de scroll): cursor 1 s `←/→` (`SEEK_STEP_*`), cursor 1 frame `Ctrl+←/→` (`FRAME_STEP_*`, fps d'`EDITOR_FPS`), nudge Nuendo de l'esdeveniment actiu `Alt+←/→` (inici) i `Alt+Shift+←/→` (final, combo canònic `Shift+Alt+…`), línia `Alt+↑/↓`, fixar inici/final al cursor `F11`/`F12` (`SET_TC_IN/OUT`), `F9` fixar inici + ripple (`FIX_IN_RIPPLE`), `F10` fixar final + següent (`FIX_OUT_NEXT`), inserir `Shift+F9`, dividir `Ctrl+Alt+V`, fusionar `Ctrl+Shift+M` (ja hi era). Handlers nous als DOS editors (nudge, seekByFrames, fixInRipple, fixOutNext, i `handleSetTcIn/Out` afegits a la standalone que no els tenia); reutilitzen `handleCueStart/End`/`handleRippleFromCue` (tot el clamp ja hi és).
+> >* **Conflicte fletxes↔text resolt de forma CENTRALITZADA:** guard nou a `useKeyboardShortcuts` — dins d'un camp editable, les tecles de navegació (fletxes/Home/End, amb o sense modificador) fan navegació de cursor/paraula NATIVA i mai disparen dreceres. Com que el hook filtra per `appId`, les fletxes nues només actuen dins de l'editor de subtítols. (S'ha retirat el pegat previ a `SegmentItem`, ara redundant.)
+> >* **Canvis de default respecte d'abans (per alinear amb el CSV):** `SET_TC_IN` Q→F11, `SET_TC_OUT` W→F12, `INSERT_SUBTITLE` Alt+N→Shift+F9, `SPLIT_SEGMENT` Ctrl+K→Ctrl+Alt+V. Són defaults personalitzables; qui tingués overrides a `localStorage` els manté.
+> >* **Futur (CSV seccions C/F, no Fase C):** passos de cursor configurables (0.5 frame, 1 s ajustable), snapping a canvis de pla (SPS-0026), enllaç de veí (SPS-0028 Part 3). **Sub-parts ajornades de l'umbrella:** SPS-0014, SPS-0029. SPS-0015 descartat (H-00015).
+>
+> >#### **Arxius afectats:**
+> >* `frontend/constants.ts` (Secció D sencera), `frontend/hooks/useKeyboardShortcuts.ts` (guard de navegació), `VideoSubtitlesEditorView.tsx` + `VideoSrtStandaloneEditorView.tsx` (handlers + casos + `EDITOR_FPS`; `handleSetTcIn/Out` a la standalone), `SegmentItem.tsx` (retirat el pegat Alt+fletxes).
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0 + `vite build` EXIT 0. Matching de combos verificat byte-a-byte (ordre canònic Ctrl→Shift→Alt de `comboFromEvent`). Disparament real al navegador NO verificat.
+>
+> >>##### **Risc:** 7/10 *(orig.: «medio-alto»)*
+> >>##### **Dimensions:** 8/10 *(orig.: «gran — per fases»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >**Detall a** history.md (H-00032)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Cursor: `←/→` mou 1 s; `Ctrl+←/→` mou 1 frame (segons `EDITOR_FPS`; a 25 fps = 40 ms). [__]
+> > * Nudge (esdeveniment actiu): `Alt+←/→` inici ±1 frame; `Alt+Shift+←/→` final ±1 frame; respecta gap/durada/veïns; cada pas un undo. [__]
+> > * `Alt+↑/↓` = línia anterior/següent. `F11`/`F12` = fixar inici/final al cursor. `F9` = inici+ripple. `F10` = final+següent. `Shift+F9` = inserir. `Ctrl+Alt+V` = dividir. [__]
+> > * Editant el TEXT d'un subtítol, les fletxes fan navegació de cursor/paraula NATIVA i NO mouen temps ni salten de línia. [__]
+> > * ⚠️ Els defaults han canviat (Q/W→F11/F12, Alt+N→Shift+F9, Ctrl+K→Ctrl+Alt+V): comprova que et va bé o repersonalitza a Ajustos. `F11` ja no fa pantalla completa del navegador dins l'editor. [__]
+> > * Provar a les DUES vistes (vídeo+subtítols i SRT standalone) — comportament idèntic. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0040. Icones i `ControlButton` reenvien `style` (tint d'accent recuperat)**
+> >> ###### [🗒️] *[2026-07-15] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* Destapat a SPS-0021: `icons.tsx` (48 components) i `ControlButton` DECLARAVEN `style?` però NO el reenviaven a l'element → el tint d'accent dels 6+1 call-sites es descartava silenciosament.
+>
+> >#### **Pla (ja implementat):**
+> >* Reenviat `style` a l'element de cada component: `icons.tsx` (2 substitucions globals: `style` a la desestructuració + `style={style}` als 48 `<svg>`) i `ControlButton` (`style={props.style}` al `<button>`). Reenviar quan és `undefined` és no-op; l'únic canvi visual real són els call-sites amb accent.
+>
+> >#### **Arxius afectats:**
+> >* `frontend/components/icons.tsx`, `frontend/components/VideoEditor/VideoEditorToolbar.tsx`.
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0 + `vite build` EXIT 0.
+>
+> >>##### **Risc:** 2/10
+> >>##### **Dimensions:** 3/10
+> >>##### **Prioritat:** ⭐⭐ (2/10)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Visual: les icones/botons amb accent (campana d'App, Upload de Pujades, cadenat de la biblioteca, etc.) ara es tenyeixen amb el color d'accent del tema; jutjar si el tint es veu bé. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0039. Lògica de combos de teclat duplicada entre `SettingsModal` i `useKeyboardShortcuts`**
+> >> ###### [🗒️] *[2026-07-14] | [13:15:39]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* Detectat a la revisió de SPS-0022. El gravador de dreceres d'Ajustos (`SettingsModal.tsx:94-110`) té la **seva pròpia còpia** de la funció que converteix un event de teclat en el string de combo (`Ctrl+Shift+Z`), gairebé idèntica a la del hook però amb diferències pròpies (majúscula per a tecles d'1 caràcter, `null` per a `Escape`). Fins ara la duplicació era invisible; SPS-0022 ha extret la versió canònica al hook (`mapKeyName`/`comboFromEvent`, ara reutilitzada també per la barra de cerca), de manera que ara hi ha **dues fonts de veritat**: qui gravi el combo i qui el reconegui poden divergir. Si algú toca `mapKeyName` (p. ex. afegint `'.'→Period`), els combos ja gravats a `localStorage` deixarien de casar i la drecera de l'usuari es tornaria muda, sense cap error visible.
+>
+> >#### **Pla (ja implementat):**
+> >* `comboFromEvent` exportada del hook (font única). `SettingsModal` el consumeix via `recorderCombo(e)` que hi afegeix només la presentació en majúscula de la tecla d'1 caràcter; Escape→cancel·lar segueix a `handleKeyCapture`. Taula d'equivalència cas-per-cas: byte-idèntic per als combos emmagatzemables → cap combo desat a `localStorage` es trenca, sense migració.
+>
+> >#### **Arxius afectats:**
+> >* `frontend/components/SettingsModal.tsx`, `frontend/hooks/useKeyboardShortcuts.ts`.
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0.
+>
+> >>##### **Risc:** 3/10 *(toca el matching de dreceres ja desades de l'usuari)*
+> >>##### **Dimensions:** 2/10
+> >>##### **Prioritat:** ⭐⭐ (2/10 — no trenca res avui; és una trampa per al proper que toqui les dreceres)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Gravar drecera nova amb modificadors (Ctrl+Shift+G): es mostra en majúscula i dispara. [__]
+> > * Gravar tecla única (q): es desa/mostra com Q. [__]
+> > * Una drecera ja desada abans del canvi segueix disparant sense re-gravar. [__]
+> > * Escape mentre grava cancel·la. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0031. Neteja del deute mort del subsistema d'ona (props i claus sense consumidor)**
+> >> ###### [🗒️] *[2026-07-13] | [10:42:34]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* Inventari fet en avaluar SPS-0015 (veure H-00015). Cap d'aquests punts trenca res avui, però tots són trampes per a qui llegeixi el codi després (o per a una IA que hi confiï):
+> >   * `LOCAL_STORAGE_KEYS.WAVEFORM_CTRL_CLICK_SEEK` (`frontend/constants.ts:24`, `factoryReset.ts:41`): **zero lectures** des de SPS-0013 (H-00013 ja la va declarar deprecada). Pitjor: el comentari de `constants.ts:23` («Ctrl/Cmd + clic mou només el cursor») diu **el contrari** del que fa el codi avui (`WaveformTimeline.tsx:761` → Ctrl+clic = fixa cue de FINAL).
+> >   * Props declarades i mai desestructurades a `WaveformTimeline.tsx`: `viewMode` / `onToggleViewMode` (L30-31). ⚠️ **`autoScroll` (L40) JA NO és deute mort: SPS-0030 l'ha feta viva** (és qui governa el seguiment del RAF loop). **No l'esborris.** Compte a no confondre-la: el que sí que és mort és el `autoScroll` que viatja dins de `playerProps` cap a `VideoPlaybackArea` (punt següent) — camí de props diferent, tot i dir-se igual.
+> >   * Passthroughs morts: `VideoPlaybackArea.tsx:27-28` (`autoScroll`, `scrollMode` declarades i mai usades) alimentats des de `VideoSubtitlesEditorView.tsx:1114`, `VideoSrtStandaloneEditorView.tsx:557` i `MediaPreviewView.tsx:92-93` — i, a més, hi passen `scrollModeWave` **cru** en lloc d'`effectiveScrollMode` (inconsistència latent). Igual a `VideoSubtitlesToolbar.tsx:26-30` («kept for interface compat»).
+> >   * `MediaPreviewView.tsx:25,169-173`: té estat i botó propis d'estacionari/pàgina però **no renderitza cap `WaveformTimeline`** → el botó no fa res i no respecta el bloqueig del mode Pàgina (ja detectat a H-00012 com a botó vestigial).
+>
+> >#### **Pla (ja implementat):**
+> >* Eliminats (grep-verificats sense consumidor viu) `WAVEFORM_CTRL_CLICK_SEEK` (`constants.ts` + `factoryReset.ts`) i el comentari obsolet contrari al codi; props mortes `viewMode`/`onToggleViewMode` de `WaveformTimeline`; passthroughs morts `autoScroll`/`scrollMode` de `VideoPlaybackArea` + els 3 call-sites (eliminant també la incoherència `scrollModeWave`-cru vs `effectiveScrollMode`) + props mortes de `VideoSubtitlesToolbar`; ELIMINATS (no amagats) l'estat i botons vestigials estacionari/pàgina de `MediaPreviewView` (no renderitzava cap `WaveformTimeline`). PRESERVAT el `autoScroll` viu de `WaveformTimeline` (SPS-0030). Conservats fora d'abast: tipus `TimelineViewMode` orfe i props undo/redo del toolbar (follow-ups trivials).
+>
+> >#### **Arxius afectats:**
+> >* `frontend/constants.ts`, `frontend/utils/factoryReset.ts`, `frontend/components/VideoEditor/WaveformTimeline.tsx`, `VideoPlaybackArea.tsx`, `MediaPreviewView.tsx`, `frontend/components/VideoSubtitlesEditor/VideoSubtitlesToolbar.tsx` + les dues vistes editores.
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0 + grep per ítem (cap consumidor viu dels símbols eliminats).
+>
+> >>##### **Risc:** 2/10 *(esborrar codi sense consumidor; el risc real és esborrar-ne un que sí que en tingui — verificar amb grep abans)*
+> >>##### **Dimensions:** 3/10
+> >>##### **Prioritat:** ⭐⭐ (2/10 — no bloqueja res; fer-ho quan es toqui l'ona per un altre motiu)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Editor subtítols de vídeo: l'ona segueix el cursor, botó estacionari/pàgina i mode Pàgina/Duo funcionen igual. [__]
+> > * Editor SRT standalone: igual. [__]
+> > * MediaPreview: barra de transport igual, sense els 2 botonets que abans no feien res. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0027. Presets de temps per frames per projecte (TV 25 / Cine 24)**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #14)* Min duration / min gap són en ms; l'usuari vol presets seleccionables per projecte expressats en FRAMES segons perfil (TV 25 fps, Cine 24 fps).
+>
+> >#### **Pla (ja implementat):**
+> >* DESCOBERT que min duration/min gap són preferències **GLOBALS** d'usuari (localStorage `EDITOR_MIN_GAP_MS`/`EDITOR_MIN_DURATION_MS`), NO per projecte. Resolt amb el mínim coherent: fps + presets viuen al MATEIX nivell global a `SettingsModal`; els valors segueixen guardant-se en MS (contracte intacte amb els consumidors), frames és només capa de presentació. Nou `EDITOR_FPS` (localStorage, default 25) + factoryReset. Nou helper pur `frameTime.ts` (`framesToMs`/`msToFrames`/`FPS_PRESETS`/`presetToMs`/`detectActivePreset`). UI: bloc "Perfil de temps (frames)" amb TV (25 fps)/Cine (24 fps)/Personalitzat + input fps + equivalent en frames al costat dels ms. Presets: min gap 2 frames, min duration 1 s. A més, `fps?` afegit a `TranscriptionSettingsDto` del backend (dins `project.settings`, forward-looking, sense migració ni tocar `api.ts`).
+> >* **PENDENT:** fps editable PER PROJECTE post-creació requeriria endpoint `PATCH /projects/:id/settings` + funció a `api.ts` (no fet, fora d'abast de la UI global demanada).
+>
+> >#### **Arxius afectats:**
+> >* Model de projecte (backend), `SettingsModal.tsx` / config d'editor. *(Real: `frontend/constants.ts`, `frontend/utils/factoryReset.ts`, `frontend/utils/SubtitlesEditor/frameTime.ts` (nou), `SettingsModal.tsx`; backend `projects/dto/create-project.dto.ts`.)*
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend+backend EXIT 0.
+>
+> >>##### **Risc:** 3/10 *(orig.: «bajo-medio»)*
+> >>##### **Dimensions:** 5/10 *(orig.: «medio»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >**Detall a** history.md (H-00030)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Config→General→Editor de Subtítols: veure el bloc "Perfil de temps (frames)"; ¿les etiquetes "TV (25 fps)"/"Cine (24 fps)" et semblen bé? [__]
+> > * TV: fps=25, min gap 2f, min durada 1000ms; Cine: fps=24. ¿Els valors en frames et fan servei (min gap 2f vs 160ms actual; si vols 3-4f canviar `minGapFrames` a `frameTime.ts`)? [__]
+> > * Editar un ms manualment → botó passa a "Personalitzat"; canviar fps → recàlcul dels "N f". [__]
+> > * Projecte real: l'editor segueix respectant min gap/duration (fallback default 25). [__]
+> > * Decidir si vols fps editable per projecte (llavors cal el punt pendent). [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0026. Detecció de canvis de pla (shot changes) + snapping**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #13)* L'usuari vol detecció de canvis de pla qualitat tipus Premiere per enganxar-hi les vores dels subtítols. SE ho fa amb FFmpeg (`select=gt(scene\,0.4),showinfo`, llindar 0.4 configurable, desat en `.shotchanges`).
+>
+> >#### **Pla (ja implementat — només BACKEND; frontend AJORNAT):**
+> >* `ShotChangesService` executa FFmpeg `select='gt(scene,0.4)',showinfo` (llindar default 0.4 configurable), parseja `pts_time` de stderr, persisteix JSON per SHA-256 a `{CACHE_ROOT}/shotchanges/{sha256}.json` (mateix patró que `MediaCacheService` de la waveform), idempotent. Endpoints `GET/POST /media/:docId/shotchanges` sota `JwtAuthGuard`. Sense dependències noves (FFmpeg del sistema, com ja fa media-cache).
+> >* **PENDENT (fase frontend, ajornada amb el redisseny d'ona — SPS-0025):** pintar línies de shot change al `WaveformTimeline` + snapping de vores.
+>
+> >#### **Arxius afectats:**
+> >* `backend_nest_mvp/src/modules/media/` (o worker Python), `frontend/components/VideoEditor/WaveformTimeline.tsx`. *(Real backend: `media/shot-changes.service.ts` (nou), `media.module.ts`, `media.controller.ts`.)*
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` backend EXIT 0.
+>
+> >>##### **Risc:** 5/10 *(orig.: «medio»)*
+> >>##### **Dimensions:** 8/10 *(orig.: «gran — fase pròpia»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >**Detall a** history.md (H-00029)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Amb FFmpeg al PATH, POST /media/<id>/shotchanges sobre un vídeo real → timestamps plausibles. [__]
+> > * Provar llindars (0.2 més talls, 0.6 menys). [__]
+> > * GET dues vegades → cache HIT a la segona; POST sobreescriu sense duplicar. [__]
+> > * Asset àudio-only → llista buida sense petar. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0024. Evitar la doble crida `getProjectBySrt` a `VideoSubtitlesEditorView`**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #11)* Tradeoff acceptat de SPS-0007 (T7): el hook `useResumePosition` fa la seva pròpia crida `api.getProjectBySrt(docId)`, i `VideoSubtitlesEditorView` ja en fa una altra a l'efecte de càrrega del guió → dues lectures en obrir. És barat i es va prioritzar tenir les dues vistes idèntiques, però es podria optimitzar passant el projecte ja carregat al hook (via setter). No bloqueja res.
+>
+> >#### **Pla (ja implementat):**
+> >* Paràmetre OPCIONAL `preloadedProject?: {ready; project}` a `useResumePosition`; si es passa (`managed`), consumeix el projecte ja resolt sense fetch; si `undefined`, manté el `getProjectBySrt` propi (standalone intacte). `VideoSubtitlesEditorView` guarda el projecte resolt a estat `resumeProject` (finally → `ready:true` a tots els camins) i el passa al hook. `VideoSrtStandaloneEditorView` NO tocat (segueix fent fetch propi).
+>
+> >#### **Arxius afectats:**
+> >* `frontend/hooks/useResumePosition.ts`, `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx`.
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0.
+>
+> >>##### **Risc:** 2/10 *(orig.: «bajo»)*
+> >>##### **Dimensions:** 2/10 *(orig.: «pequeño»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Vista vídeo+subtítols amb posició desada: playhead es restaura i a Network hi ha UNA sola crida `getProjectBySrt` en obrir (abans dues). [__]
+> > * El desat periòdic de posició segueix funcionant. [__]
+> > * SRT no-projecte: no peta. [__]
+> > * Standalone: resume igual que abans. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0023. [SEGURETAT · HIGH] Treure el JWT de la URL de streaming de media**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #10)* La revisió de seguretat automàtica va marcar `api.streamUrlWithToken(docId)` (`frontend/services/api.ts`): passa el JWT com a query param (`?token=...`) al `src` del `<video>`. Els tokens a la query string es filtren a logs d'accés del servidor, historial del navegador, capçaleres `Referer` i proxies. **Preexistent** — no introduït per SPS-0007 (T7, resume position); `api.saveResumeState` de SPS-0007 usa la capçalera `Authorization`, no la URL. Fora de l'abast de SPS-0007 i toca el flux de streaming (zona sensible, requereix canvi coordinat backend+frontend d'autenticació) → tasca a part.
+>
+> >#### **Pla (ja implementat):**
+> >* Enfocament (b) cookie. Nou `POST /media/session` (autenticat per header) emet cookie `media_token` = JWT reutilitzat, `HttpOnly, SameSite=Lax, Path=/media`, `Secure` només sota HTTPS, `maxAge` alineat amb `exp` del JWT. `jwt.strategy` afegeix extractor de cookie (entre header i query). Frontend: `ensureMediaCookie()` (POST /media/session) i després `streamUrl(docId)` SENSE token al `<video src>`; els dos editors fan await de la cookie abans del src. `?token=` mantingut transitòriament (l'estratègia és compartida per tots els endpoints; retirar-lo és blast-radius alt i innecessari — la fuita real, el token al `<video src>`, ja queda eliminada). `cookie-parser` ja hi era (cap dep nova).
+> >* **⚠️ AVÍS DE SEGURETAT:** funciona amb front i API **SAME-SITE** (dev `localhost:3000`↔`8000`, mateix domini registrable → Lax envia la cookie al subrecurs `<video>`). Si en PRODUCCIÓ el `<video>` i l'API queden en dominis registrables DIFERENTS (cross-site real), Lax bloquejaria la cookie i el vídeo no carregaria → caldria `SameSite=None; Secure` + `<video crossorigin="use-credentials">` + CORS amb credencials i origin explícit. NO forçat: pendent de decisió segons el domini real de producció.
+>
+> >#### **Arxius afectats:**
+> >* `frontend/services/api.ts`, `backend_nest_mvp/src/modules/media/` (nou endpoint/guard), consultar `.claude/docs/domains/` si aplica. *(Real: backend `auth/jwt.strategy.ts`, `media/media.controller.ts`; frontend `services/api.ts`, `VideoSubtitlesEditorView.tsx`, `VideoSrtStandaloneEditorView.tsx`, `__main_wave_harness.tsx`.)*
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` backend+frontend EXIT 0.
+>
+> >>##### **Risc:** 5/10 *(orig.: «medio (auth)»)*
+> >>##### **Dimensions:** 5/10 *(orig.: «medio»)*
+> >>##### **Prioritat:** ⭐ (no consta — marcada [SEGURETAT · HIGH] a l'original)
+>
+> >**Detall a** history.md (H-00028)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Streaming a l'app real: URL del `<video>` és /media/<id>/stream SENSE ?token= (mirar Network). [__]
+> > * Application→Cookies: `media_token` amb HttpOnly, SameSite=Lax, Path=/media (i Secure si HTTPS). [__]
+> > * Usuari no autenticat → 401 a /media/<id>/stream. [__]
+> > * Verificar en el desplegament REAL (same-site vs cross-site); si cross-site i el vídeo no carrega, aplicar la variant SameSite=None. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0021. Instal·lar `@types/react` (+ `@types/react-dom`) al frontend**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #8)* El frontend no té `@types/react` enlloc: `npx tsc --noEmit` passa, però tot `React.*` es resol com a *any* silenciós i el typecheck valida molt menys del que sembla. Va aflorar dues vegades durant SPS-0006 (T6, error TS2347 en un genèric de `querySelectorAll` derivat de la cadena d'*any*; els revisors ho van marcar com a baseline feble del repo).
+>
+> >#### **Pla (ja implementat):**
+> >* Instal·lats `@types/react@19.2.17` + `@types/react-dom@19.2.3` (devDeps, major 19 casant amb `react ^19.2`). Aflorats 7 errors TS2322 (tots: prop `style` no declarada); arreglats NOMÉS de tipus afegint `style?: React.CSSProperties` a la forma compartida de les icones i a `ControlButton`. `tsc` frontend passa de fals-verd a 0 errors reals (nova línia base). NO s'ha canviat runtime.
+> >* **IMPORTANT** — va destapar 2 bugs REALS de runtime (icones i `ControlButton` declaren `style` però no el reenvien → tint d'accent descartat silenciosament) que s'han registrat com a tasca NOVA **SPS-0040** (veure PENDENTS).
+>
+> >#### **Arxius afectats:**
+> >* `frontend/package.json` + errors de tipus latents que aflorin arreu del frontend. *(Real: `frontend/package.json`, `components/icons.tsx`, `VideoEditor/VideoEditorToolbar.tsx`.)*
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0 (nova línia base real amb els @types instal·lats).
+>
+> >>##### **Risc:** 2/10 *(orig.: «bajo, només dev-time»)*
+> >>##### **Dimensions:** 4/10 *(orig.: «pequeño-medio, poden aflorar errors latents en cadena»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >**Detall a** history.md (H-00027)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * (opcional, lligat a SPS-0040) decidir si es reenvia `style` per recuperar el tint d'accent. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0020. Cerca i substitució a l'editor de guions (columnes original/traducció)**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #7)* La cerca/substitució tipus Word (SPS-0006/T6) es va implementar només a l'editor de subtítols — decisió d'abast validada amb l'usuari. L'editor de guions (`EditorDeGuions`, dues columnes) no en té; l'usuari va assenyalar que allà caldria poder cercar tant a la columna original com a la traduïda (o a totes dues).
+>
+> >#### **Pla (ja implementat):**
+> >* Nous `ScriptSearchReplaceBar.tsx` + `ScriptSearchOverlay.tsx` a `components/EditorDeGuions/`, reutilitzant el mòdul pur `searchReplace.ts` SENSE tocar-lo. Selector de columna Original/Traducció/Ambdues sobre `contentByLang`; original=`sourceLang`, traducció=idioma actiu/primer altre. Ctrl+F (afegit `se_find`→FIND a `DEFAULT_SHORTCUTS.scriptEditor`, personalitzable). Substituir-un / Substituir-ho tot acotat a la columna diana (un pas d'undo per idioma). Muntat als dos hosts d'edició de guió a `App.tsx`.
+> >* **Limitacions:** sense ressaltat in-place (edit mode via `contentEditable`/`textarea`; feedback = canvi de versió visible + comptador); només mode edició; undo de "Ambdues" per-idioma.
+>
+> >#### **Arxius afectats:**
+> >* `frontend/components/EditorDeGuions/`. *(Real: `ScriptSearchReplaceBar.tsx` (nou), `ScriptSearchOverlay.tsx` (nou), `constants.ts`, `App.tsx`.)*
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` frontend EXIT 0.
+>
+> >>##### **Risc:** 5/10 *(orig.: «medio»)*
+> >>##### **Dimensions:** 5/10 *(orig.: «medio»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Ctrl+F obre la barra; Esc/✕ tanquen; escriure a les cel·les no dispara accions. [__]
+> > * Selector Original/Traducció/Ambdues: comptador "N de M" coherent; ▲/▼ canvia de versió visible quan la coincidència és a l'altre idioma — jutjar si aquest salt és agradable o desconcertant. [__]
+> > * Substituir i Substituir-ho tot acotats a la columna; missatge de N substitucions; undo. [__]
+> > * Posició/estètica de la barra sota el Toolbar; que el selector no desbordi en pantalles estretes. [__]
+> > * Document amb 3+ idiomes: la "Traducció" agafa l'idioma actiu — verificar que és l'esperat. [__]
+> > * Decidir commit. [__]
+>
+> ---
+
+> ---
+> ## **SPS-0019. Sincronitzar `project.mediaDocumentId` en vincular media (coherència del registre)**
+> >> ###### [🗒️] *[2026-07-07] | [hora no consta]*
+> >> ###### [🏃‍♂️‍➡️] *[2026-07-15] | [hora no consta]*
+>
+> >#### **Síntoma / Context:**
+> >* *(abans: pendent #6)* El fix de SPS-0005 (T5, persistència del vídeo del projecte) llegeix l'últim vídeo des de `linkedMediaId` de l'SRT, però el `project.mediaDocumentId` del backend queda obsolet: continua apuntant al vídeo de la creació. No afecta l'obertura del projecte (ja no és la font primària), però qualsevol llistat/report/lògica futura que llegeixi `mediaDocumentId` veurà el vídeo antic.
+>
+> >#### **Pla (ja implementat):**
+> >* `api.linkMediaToSrt` reencaminada de `PATCH /documents/:id` a nou `PATCH /projects/link-media/:srtDocumentId`. Nou `ProjectsService.linkMediaToSrt(ownerId, srtDocumentId, mediaDocumentId)`: escriu `linkedMediaId` de l'SRT (delegant a `library.updateDocument`, direcció projects→library) i sincronitza `project.mediaDocumentId` via `updateOne({srtDocumentId})` només si `mediaDocumentId` no és null (idempotent; si l'SRT no té projecte, 0 matches). Nou controller `@Patch('/link-media/:srtDocumentId')`. `PATCH /documents/:id` es manté intacte. Sense backfill per a projectes antics (només es corregeix al proper re-vincle).
+> >* **Nota:** canvi de contracte (nou endpoint substitueix el `PATCH /documents` per a aquest write). SPS-0005 intacte (`App.tsx` segueix prioritzant `linkedMediaId`).
+>
+> >#### **Arxius afectats:**
+> >* `backend_nest_mvp/src/modules/projects/` (service + potser controller), possiblement `frontend/services/api.ts`. *(Real: backend `projects.service.ts`, `projects.controller.ts`; frontend `services/api.ts`.)*
+>
+> >#### **Verificació feta:**
+> >* `tsc --noEmit` backend+frontend EXIT 0. SPS-0005 intacte.
+>
+> >>##### **Risc:** 2/10 *(orig.: «bajo»)*
+> >>##### **Dimensions:** 2/10 *(orig.: «pequeño»)*
+> >>##### **Prioritat:** ⭐ (no consta)
+>
+> >**Detall a** history.md (H-00026)
+>
+> >#### **Tasques a realitzar per part de l'usuari ABANS de donar-ho per tancat:**
+> > * Canviar el vídeo vinculat des de l'editor i confirmar (GET /projects/:id o BD) que `project.mediaDocumentId` apunta al nou vídeo i `linkedMediaId` també. [__]
+> > * Confirmar que obrir el projecte carrega el vídeo correcte (SPS-0005). [__]
+> > * SRT solt SENSE projecte (standalone): el vincle es guarda igual sense error. [__]
+> > * Cas desvincle (null): no trenca el projecte. [__]
+> > * Decidir commit. [__]
+>
+> ---
 
 > ---
 > ## **SPS-0022. Polits menors del review final de cerca/substitució**

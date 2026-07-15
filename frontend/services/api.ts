@@ -154,7 +154,7 @@ async listProjects() {
     return request<any>(`/documents/${id}/srt`, { method: 'PATCH', body: { srtText } });
   },
   async linkMediaToSrt(srtDocId: string, mediaDocId: string | null) {
-    return request<any>(`/documents/${srtDocId}`, { method: 'PATCH', body: { linkedMediaId: mediaDocId } });
+    return request<any>(`/projects/link-media/${srtDocId}`, { method: 'PATCH', body: { mediaDocumentId: mediaDocId } });
   },
 
   // ── Edit lock ──────────────────────────────────────────────────────────
@@ -250,7 +250,19 @@ async listProjects() {
   streamUrl(docId: string) {
     return `${API_URL}/media/${docId}/stream`;
   },
-  /** Stream URL con token en query param — para usar directamente en <video src> */
+  /**
+   * Demana una cookie de només-media (HttpOnly, SameSite=Lax, Path=/media) al
+   * backend perquè el <video> pugui carregar `streamUrl()` SENSE el JWT a la
+   * query string. Cal cridar-la i ESPERAR-LA abans d'assignar el src del <video>.
+   * S'autentica amb la capçalera Authorization (via `request`), no amb la cookie.
+   */
+  async ensureMediaCookie(): Promise<void> {
+    await request<{ ok: boolean }>(`/media/session`, { method: 'POST' });
+  },
+  /**
+   * @deprecated Filtra el JWT a la query string (logs/historial/Referer). Fes
+   * servir `ensureMediaCookie()` + `streamUrl()`. Mantingut transitòriament.
+   */
   streamUrlWithToken(docId: string): string {
     const token = getToken();
     const base = `${API_URL}/media/${docId}/stream`;

@@ -24,8 +24,6 @@ interface VideoPlaybackAreaProps {
     onSegmentUpdate?: (id: Id, newStart: number, newEnd: number) => void;
     onSegmentUpdateEnd?: () => void;
     onSegmentClick?: (id: Id) => void;
-    autoScroll?: boolean;
-    scrollMode?: 'stationary' | 'page';
 }
 
 export const VideoPlaybackArea: React.FC<VideoPlaybackAreaProps> = (props) => {

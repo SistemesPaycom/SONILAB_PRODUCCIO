@@ -20,8 +20,6 @@ export const LOCAL_STORAGE_KEYS = {
   WAVEFORM_HOLD_MS: 'snlbpro_waveform_hold_ms',
   /** Marge de moviment (px) a superar per iniciar l'arrossegament d'un esdeveniment (anti-tremolor). Default: 6. 0 = desactivat. */
   WAVEFORM_DRAG_DEADZONE_PX: 'snlbpro_waveform_drag_deadzone_px',
-  /** Ctrl/Cmd + clic a l'ona mou només el cursor de transport (mai un esdeveniment). Preferència d'usuari. Default: true. */
-  WAVEFORM_CTRL_CLICK_SEEK: 'snlbpro_waveform_ctrl_click_seek',
   /** Mode de visualització de l'ona: 'page' (default, estil Subtitle Edit) o 'duo' (permet triar estacionari/pàgina amb el botó del timeline). Preferència d'usuari. */
   WAVEFORM_VIEW_MODE: 'snlbpro_waveform_view_mode',
   AUTOSAVE_SRT: 'snlbpro_autosave_srt',
@@ -33,6 +31,8 @@ export const LOCAL_STORAGE_KEYS = {
   EDITOR_MIN_GAP_MS: 'snlbpro_editor_min_gap_ms',
   /** Durada mínima d'un bloc de subtítol a l'editor (ms). Preferència d'usuari. Default: 1000. */
   EDITOR_MIN_DURATION_MS: 'snlbpro_editor_min_duration_ms',
+  /** Frames per segon del perfil de temps de l'editor (TV 25 / Cine 24). Preferència d'usuari per a la conversió frame↔ms dels presets. Default: 25. */
+  EDITOR_FPS: 'snlbpro_editor_fps',
   /** Tema de color de la interfície */
   THEME: 'snlbpro_theme',
   /** Tokens del tema personalitzat (fallback local) */
@@ -89,27 +89,47 @@ export const DEFAULT_SHORTCUTS: AppShortcuts = {
   ],
   scriptEditor: [
     { id: 'se_mode_csv', action: 'MODE_CSV', label: 'Canviar a mode Dades', combo: 'Ctrl+M' },
+    { id: 'se_find', action: 'FIND', label: 'Cercar i substituir', combo: 'Ctrl+F' },
   ],
   videoEditor: [
     { id: 've_play', action: 'TOGGLE_PLAY', label: 'Reproduir / Pausa', combo: 'Ctrl+Space' },
   ],
   subtitlesEditor: [
-    { id: 'sub_new', action: 'INSERT_SUBTITLE', label: 'Nou subtítol (playhead)', combo: 'Alt+N' },
+    // ── Esquema mestre: "Shortcuts Subtitols - Consolidat.csv" (arrel), Secció D. Tot personalitzable. ──
     { id: 'sub_delete', action: 'DELETE_SEGMENT', label: 'Esborrar subtítol', combo: 'Delete' },
     { id: 'sub_delete_active', action: 'DELETE_ACTIVE_SEGMENT', label: 'Esborrar subtítol actiu', combo: 'Shift+Delete' },
 
-    { id: 'sub_split', action: 'SPLIT_SEGMENT', label: 'Dividir subtítol al cursor', combo: 'Ctrl+K' },
     { id: 'sub_split_ph', action: 'SPLIT_AT_PLAYHEAD', label: 'Dividir al playhead', combo: 'Ctrl+Shift+K' },
-
-    { id: 'sub_merge', action: 'MERGE_SEGMENT', label: 'Unir amb següent', combo: 'Ctrl+Shift+M' },
+    { id: 'sub_merge', action: 'MERGE_SEGMENT', label: 'Fusionar subtítols seleccionats', combo: 'Ctrl+Shift+M' },
     { id: 'sub_play', action: 'TOGGLE_PLAY_PAUSE', label: 'Reproduir / Pausa', combo: 'Ctrl+Space' },
 
     { id: 'sub_next_line', action: 'NAVIGATE_NEXT_LINE', label: 'Següent línia / subtítol', combo: 'Ctrl+Enter' },
     { id: 'sub_prev_line', action: 'NAVIGATE_PREV_LINE', label: 'Anterior línia / subtítol', combo: 'Ctrl+Shift+Enter' },
-
-    { id: 'sub_set_tc_in', action: 'SET_TC_IN', label: 'Marcar TC IN al playhead', combo: 'Q' },
-    { id: 'sub_set_tc_out', action: 'SET_TC_OUT', label: 'Marcar TC OUT al playhead', combo: 'W' },
     { id: 'sub_find', action: 'FIND', label: 'Cercar i substituir', combo: 'Ctrl+F' },
+
+    // Cursor (playhead). Els combos de fletxa NO disparen dins de camps de text (guard a
+    // useKeyboardShortcuts): allà les fletxes fan navegació de cursor/paraula nativa.
+    { id: 'sub_seek_back', action: 'SEEK_STEP_BACK', label: 'Cursor 1 s enrere', combo: 'ArrowLeft' },
+    { id: 'sub_seek_fwd', action: 'SEEK_STEP_FWD', label: 'Cursor 1 s endavant', combo: 'ArrowRight' },
+    { id: 'sub_frame_back', action: 'FRAME_STEP_BACK', label: 'Cursor 1 frame enrere', combo: 'Ctrl+ArrowLeft' },
+    { id: 'sub_frame_fwd', action: 'FRAME_STEP_FWD', label: 'Cursor 1 frame endavant', combo: 'Ctrl+ArrowRight' },
+
+    // Nudge estil Nuendo de les vores de l'esdeveniment actiu, en passos d'1 frame (fps d'EDITOR_FPS).
+    // El pas Alt/Shift+Alt de les fletxes es reconeix amb l'ordre canònic Ctrl→Shift→Alt de comboFromEvent.
+    { id: 'sub_nudge_start_back', action: 'NUDGE_START_BACK', label: 'Inici −1 frame (Nuendo)', combo: 'Alt+ArrowLeft' },
+    { id: 'sub_nudge_start_fwd', action: 'NUDGE_START_FWD', label: 'Inici +1 frame (Nuendo)', combo: 'Alt+ArrowRight' },
+    { id: 'sub_nudge_end_back', action: 'NUDGE_END_BACK', label: 'Final −1 frame (Nuendo)', combo: 'Shift+Alt+ArrowLeft' },
+    { id: 'sub_nudge_end_fwd', action: 'NUDGE_END_FWD', label: 'Final +1 frame (Nuendo)', combo: 'Shift+Alt+ArrowRight' },
+    { id: 'sub_line_prev', action: 'NAVIGATE_SEGMENT_UP', label: 'Línia anterior', combo: 'Alt+ArrowUp' },
+    { id: 'sub_line_next', action: 'NAVIGATE_SEGMENT_DOWN', label: 'Línia següent', combo: 'Alt+ArrowDown' },
+
+    // Fixar cues + inserir + dividir (paritat Subtitle Edit, tecles F del CSV).
+    { id: 'sub_fix_in_ripple', action: 'FIX_IN_RIPPLE', label: 'Fixar inici i desplaçar la resta', combo: 'F9' },
+    { id: 'sub_fix_out_next', action: 'FIX_OUT_NEXT', label: 'Fixar final i anar a la següent', combo: 'F10' },
+    { id: 'sub_set_tc_in', action: 'SET_TC_IN', label: 'Fixar inici al cursor', combo: 'F11' },
+    { id: 'sub_set_tc_out', action: 'SET_TC_OUT', label: 'Fixar final al cursor', combo: 'F12' },
+    { id: 'sub_new', action: 'INSERT_SUBTITLE', label: 'Inserir subtítol a la posició de vídeo', combo: 'Shift+F9' },
+    { id: 'sub_split', action: 'SPLIT_SEGMENT', label: 'Dividir subtítol al cursor', combo: 'Ctrl+Alt+V' },
   ]
 };
 

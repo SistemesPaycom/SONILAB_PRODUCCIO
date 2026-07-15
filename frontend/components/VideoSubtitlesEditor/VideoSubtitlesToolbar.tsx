@@ -23,11 +23,6 @@ interface VideoSubtitlesToolbarProps {
     onToggleScriptLink: () => void;
     isEditable?: boolean;
     onSave?: () => void;
-    // Seguiment Ona (kept for interface compat but controls moved to timeline header)
-    autoScrollWave: boolean;
-    onToggleAutoScrollWave: () => void;
-    scrollModeWave: 'stationary' | 'page';
-    onScrollModeChangeWave: (mode: 'stationary' | 'page') => void;
     autosaveEnabled?: boolean;
     onToggleAutosave?: () => void;
 

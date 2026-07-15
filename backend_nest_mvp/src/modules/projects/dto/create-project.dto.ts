@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class TranscriptionSettingsDto {
@@ -67,6 +67,16 @@ export class TranscriptionSettingsDto {
   @IsOptional()
   @IsBoolean()
   enforceMinSubGap?: boolean;
+
+  /**
+   * Frames per segon del projecte (perfil de temps: TV 25 / Cine 24). S'emmagatzema
+   * dins project.settings via el flux de creació existent. Permet expressar els
+   * llindars de temps en frames per projecte. Valors broadcast habituals.
+   */
+  @IsOptional()
+  @IsNumber()
+  @IsIn([23.976, 24, 25, 29.97, 30])
+  fps?: number;
 }
 
 export class CreateProjectDto {

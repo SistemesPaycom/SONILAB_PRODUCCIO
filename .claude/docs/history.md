@@ -74,6 +74,243 @@ Notes:
 ---
 
 > ---
+> ## **H-00032** — Fase C de l'ona (teclat): Secció D del CSV mestre implementada sencera; el conflicte fletxes↔text es resol amb un guard central de navegació
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Fita (joc de dreceres de l'editor de subtítols alineat amb l'esquema mestre).
+>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0025 (Fase C → EN_PROCES).
+>
+> >>#### **Síntoma / Context:**
+> >> La Fase C de SPS-0025 demanava "un sol joc de dreceres" de l'ona (cursor 1 s/1 frame, nudge Nuendo, línia, F9–F12, insert, split, merge) segons l'esquema mestre `Shortcuts Subtitols - Consolidat.csv` (arrel, Secció D).
+>
+> >>#### **El que NO ha funcionat:**
+> >> * **Afirmar que el CSV no existia.** En un primer intent es va cercar el CSV amb `Glob` (`**/*Consolidat*.csv`) → cap resultat, i es va concloure (ERRÒNIAMENT) que no hi era, implementant només un subconjunt "segur" amb modificadors i deixant F9–F12 com a "semàntica indefinida". **Causa real:** el `Glob` respecta `.gitignore` i el CSV hi està ignorat; el fitxer sí que és a l'arrel. L'usuari ho va corregir. **Lliçó operativa:** per comprovar l'existència d'un fitxer que pot estar gitignorat, no fiar-se del `Glob` — usar `ls`/`test -f` directe.
+> >> * **Pegat local a `SegmentItem` per al conflicte de fletxes.** La primera versió aturava la propagació d'Alt+fletxes només dins de `SegmentItem`. Substituït per un guard CENTRAL a `useKeyboardShortcuts` (cobreix tots els camps editables i totes les combinacions de fletxa, no només Alt dins d'un component) → el pegat local es va retirar.
+>
+> >>#### **Solució:**
+> >> * Defaults de `DEFAULT_SHORTCUTS.subtitlesEditor` alineats a la Secció D sencera: cursor 1 s (`←/→`), 1 frame (`Ctrl+←/→`, fps d'`EDITOR_FPS`), nudge Nuendo (`Alt+←/→` inici, `Shift+Alt+←/→` final), línia (`Alt+↑/↓`), fixar inici/final (`F11`/`F12`), inici+ripple (`F9`), final+següent (`F10`), inserir (`Shift+F9`), dividir (`Ctrl+Alt+V`), fusionar (`Ctrl+Shift+M`). Combos escrits en l'ordre canònic Ctrl→Shift→Alt de `comboFromEvent`.
+> >> * Handlers nous als DOS editors (nudge, `seekByFrames`, `fixInRipple`, `fixOutNext`) reutilitzant `handleCueStart/End`/`handleRippleFromCue`; a la vista standalone s'hi van AFEGIR `handleSetTcIn`/`handleSetTcOut`, que només existien a la gestionada.
+> >> * **Conflicte fletxes↔text (guard central):** a `useKeyboardShortcuts`, si el focus és en un camp editable i la tecla és de navegació (fletxes/Home/End, amb o sense modificador), es retorna abans de matchejar → navegació de cursor/paraula NATIVA, cap `preventDefault`. Com que el hook filtra per `appId`, les fletxes nues només actuen dins de l'editor de subtítols.
+> >> * **Canvis de default:** `SET_TC_IN` Q→F11, `SET_TC_OUT` W→F12, `INSERT_SUBTITLE` Alt+N→Shift+F9, `SPLIT_SEGMENT` Ctrl+K→Ctrl+Alt+V (personalitzables; els overrides de `localStorage` es mantenen).
+>
+> >>#### **Arxius modificats:**
+> >> * `frontend/constants.ts` (Secció D), `frontend/hooks/useKeyboardShortcuts.ts` (guard de navegació en inputs), `VideoSubtitlesEditorView.tsx` i `VideoSrtStandaloneEditorView.tsx` (handlers + casos + `EDITOR_FPS`; `handleSetTcIn/Out` a la standalone), `SegmentItem.tsx` (retirat el pegat Alt+fletxes).
+>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` frontend EXIT 0 + `vite build` EXIT 0. Matching de combos verificat byte-a-byte. Disparament real al navegador passat a l'usuari (SPS-0025).
+>
+> >>#### **Lliçó:**
+> >> Dos punts. (1) Un joc de dreceres amb tecles de navegació nues i un listener global de `window` es reconcilia amb l'edició de text amb UN guard central (navegació en inputs = nativa), no amb pegats per component. (2) `Glob` respecta `.gitignore`: no serveix per verificar l'existència d'un fitxer potencialment ignorat — usar `ls`/`test -f`.
+>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> Passos de cursor configurables (0.5 frame, 1 s ajustable) i snapping a canvis de pla queden com a futur a SPS-0025/SPS-0026.
+> ---
+
+> ---
+> ## **H-00031** — Fase B2 de l'ona: crear-arrossegant amb rang provisional + relocalització del scrub; Part 3 (enllaç de veí) ajornada per manca de contracte de 2 segments
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Fita (nova infraestructura d'interacció a l'ona) + decisió d'abast.
+>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0028 (→ EN_PROCES). Part de l'umbrella SPS-0025.
+>
+> >>#### **Síntoma / Context:**
+> >> Faltava poder crear un subtítol arrossegant sobre l'ona buida. `WaveformTimeline` no era focusable ni tenia `onKeyDown` (tota la gestió de tecles vivia al pare) i l'arrossegar-buit ja estava ocupat pel scrub.
+>
+> >>#### **El que NO ha funcionat:**
+> >> * **Inserir directament al `mouseup` del drag.** El pla demanava un rang PROVISIONAL confirmat amb Enter (Esc cancel·la) per no crear per accident; s'ha fet així (l'ona rep focus en acabar el drag).
+> >> * **Decidir el gest de crear només pels modificadors.** La primera versió armava "crear" també a la regla de timecodes (on `hitTestSegment` sempre és null), trencant l'invariant que la regla fa scrub. La revisió adversarial ho va detectar → es condiciona "crear" a `downZone === 'content'`.
+> >> * **`handleKeyDown` sense guard de gest viu.** Com que el focus salta al div arrel al `mousedown`, Enter/Esc premuts amb el botó encara premut interferien amb el drag (rang reaparegut, doble inserció). Corregit: `handleKeyDown` no fa res si hi ha un gest de ratolí actiu.
+> >> * **Nudge de Fase C trepitjant el text.** En afegir Alt+fletxes (Fase C), calia que dins del camp editable no disparessin el nudge → `SegmentItem` en fa `stopPropagation`.
+> >> * **Part 3 (Alt+arrossegar vora = enllaça veí <500 ms): NO implementada.** `onSegmentUpdate` només actualitza UN segment; enllaçar el veí exigeix un contracte nou d'actualització atòmica de dos segments. És la part de menys valor i més risc → ajornada abans que implementar-la a mitges i cega.
+>
+> >>#### **Solució:**
+> >> * Nou estat `createRange` + refs (`emptyGestureRef`, `createMovedRef`, `createRangeRef`, `rootRef`), dibuix del rang provisional a `drawVisible`, div arrel `tabIndex=0` amb `onKeyDown` (Enter confirma → `onCreateSegment`, Esc cancel·la). Nou `handleCreateSegment` als dos editors (reutilitza `handleInsertSegmentAtCursor`, avorta si el rang solapa un esdeveniment). `onCreateSegment` afegit al comparador de `React.memo`.
+> >> * El scrub es relocalitza: arrossegar-buit sense modificador = crear; amb qualsevol modificador (Alt+Shift inclòs) o a la regla = scrub. El tipus es latcha al `mousedown` (SPS-0029).
+>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoEditor/WaveformTimeline.tsx` (refs/estat/dibuix/handlers/teclat/memo), `VideoSubtitlesEditorView.tsx` + `VideoSrtStandaloneEditorView.tsx` (`handleCreateSegment` + prop), `SegmentItem.tsx` (guard Alt+fletxes).
+>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` frontend EXIT 0 + `vite build` EXIT 0. Revisió adversarial (2 agents en paral·lel) → 3 troballes majors corregides. Interacció de ratolí/teclat passada a verificació d'usuari (SPS-0028).
+>
+> >>#### **Lliçó:**
+> >> En una màquina d'estats de ratolí afinada per capes (SPS-0029..0036), afegir un gest nou obliga a decidir explícitament la ZONA (regla vs contingut) i a tancar tots els camins de sortida (mouseleave, Enter/Esc mid-drag, focus robat) — no només el camí feliç. Un rang provisional focusable barreja el model de ratolí amb el de teclat i cada frontera s'ha de segellar.
+>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> Part 3 (Alt+vora enllaça veí) com a ítem obert a la subsecció d'usuari de SPS-0028.
+> ---
+
+> ---
+> ## **H-00030** — Els presets de temps per frames són GLOBALS, no per projecte: fps com a capa de presentació sobre valors en ms
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Decisió arquitectònica (on viu el paràmetre fps)
+>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0027 (→ EN_PROCES).
+>
+> >>#### **Síntoma / Context:**
+> >> `minDurationMs` / `minGapMs` es guarden en mil·lisegons; l'usuari demanava presets seleccionables **per projecte** expressats en FRAMES segons perfil (TV 25 fps, Cine 24 fps).
+>
+> >>#### **Descobriment que simplifica el disseny:**
+> >> `minDuration` / `minGap` **ja són preferències GLOBALS d'usuari** (`localStorage` `EDITOR_MIN_GAP_MS` / `EDITOR_MIN_DURATION_MS`), no per projecte. No existeix cap sistema de settings d'editor **per-projecte** al qual penjar el fps.
+>
+> >>#### **El que NO ha funcionat:**
+> >> * **Lligar `minDuration`/`minGap` a un fps-per-projecte.** Hauria exigit **crear de zero** una capa de settings d'editor per-projecte inexistent (endpoint `PATCH /projects/:id/settings` + funció a `api.ts` + model) — arquitectura nova sencera per satisfer una demanda que és, en el fons, de **presentació** (mostrar frames en lloc de ms). Descartat: improvisar arquitectura per una millora cosmètica trenca la regla de canvi mínim.
+>
+> >>#### **Solució:**
+> >> * fps + presets viuen al **MATEIX nivell GLOBAL** que min duration/gap (a `SettingsModal`). Els valors se segueixen **guardant en MS** (contracte intacte amb tots els consumidors de l'editor); **frames és només capa de presentació**. Nou `EDITOR_FPS` (`localStorage`, default 25) + `factoryReset`. Nou helper **pur** `frameTime.ts` (`framesToMs`/`msToFrames`/`FPS_PRESETS`/`presetToMs`/`detectActivePreset`). UI: bloc "Perfil de temps (frames)" amb TV (25 fps) / Cine (24 fps) / Personalitzat + input fps + equivalent en frames al costat dels ms.
+> >> * `fps?` afegit a `TranscriptionSettingsDto` (dins `project.settings`) al backend com a **ganxo forward-looking**, sense migració ni tocar `api.ts` — per si la necessitat per-projecte es materialitza més endavant.
+>
+> >>#### **Arxius modificats:**
+> >> * `frontend/constants.ts` (`EDITOR_FPS`), `frontend/utils/factoryReset.ts`, `frontend/utils/SubtitlesEditor/frameTime.ts` (nou, pur), `frontend/components/SettingsModal.tsx` (bloc de perfil de temps); `backend_nest_mvp/.../projects/dto/create-project.dto.ts` (`fps?`).
+>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` frontend+backend EXIT 0. No verificat en navegador (judici de gust d'etiquetes/valors passat a tasques de l'usuari a SPS-0027).
+>
+> >>#### **Lliçó:**
+> >> Quan la demanda ("per projecte") xoca amb l'arquitectura existent (settings globals), no s'inventa la capa que falta per una millora de **presentació**: es resol al nivell que ja existeix (global, en ms) i es deixa un ganxo mínim (`fps` a `project.settings`) per si la necessitat per-projecte esdevé real. Els frames són una vista sobre els ms, no un model de dades nou.
+>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * fps editable **per projecte** post-creació requeriria `PATCH /projects/:id/settings` + funció a `api.ts` (pendent dins SPS-0027).
+> ---
+
+> ---
+> ## **H-00029** — Detecció de canvis de pla (shot changes): backend FFmpeg amb cache per SHA-256, frontend ajornat amb el redisseny d'ona
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Fita (primer bloc d'una feature) + decisió d'abast (separar backend de frontend)
+>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0026 (→ EN_PROCES). Fase frontend ajornada amb SPS-0025.
+>
+> >>#### **Síntoma / Context:**
+> >> L'usuari vol detecció de canvis de pla qualitat tipus Premiere per enganxar-hi (snapping) les vores dels subtítols. Subtitle Edit ho fa amb FFmpeg (`select=gt(scene\,0.4),showinfo`, llindar 0.4 configurable, desat en `.shotchanges`).
+>
+> >>#### **Solució:**
+> >> * `ShotChangesService` executa FFmpeg `select='gt(scene,0.4)',showinfo` (llindar default 0.4, configurable), parseja `pts_time` de stderr i **persisteix un JSON per SHA-256** a `{CACHE_ROOT}/shotchanges/{sha256}.json` — **el mateix patró que `MediaCacheService`** de la waveform, idempotent. Endpoints `GET/POST /media/:docId/shotchanges` sota `JwtAuthGuard`. **Cap dependència nova** (FFmpeg del sistema, com ja fa media-cache).
+>
+> >>#### **El que NO ha funcionat:**
+> >> * **PySceneDetect (content-aware).** Millor amb fosos/moviment i ja hi ha worker Python (WhisperX), però afegeix una dependència i un salt d'infraestructura per a un guany que l'FFmpeg `scene` —ja disponible i prou— no justifica encara. Descartat de moment.
+> >> * **Fer també el frontend en aquesta tasca.** Pintar les línies i el snapping de vores acobla amb el **redisseny d'interacció d'ona** (SPS-0025), que té la seva pròpia verificació pesada; barrejar-ho hauria bloquejat un backend barat i verificable sol darrere d'una fase gran. Separat expressament.
+>
+> >>#### **Arxius modificats:**
+> >> * `backend_nest_mvp/src/modules/media/shot-changes.service.ts` (nou), `media.module.ts`, `media.controller.ts`.
+>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` backend EXIT 0. **No** provat amb un FFmpeg real sobre un vídeo (llindars, cache HIT, asset àudio-only) — passat a tasques de l'usuari a SPS-0026.
+>
+> >>#### **Lliçó:**
+> >> Reutilitzar el patró de cache **per SHA-256** ja provat (waveform) manté la **identitat de l'asset** com a clau (no el nom ni la ruta), coherent amb el model de Media, i dona idempotència gratis. I separar un backend barat/idempotent d'un frontend acoblat a un redisseny gran evita que l'un quedi ostatge de l'altre.
+>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * Fase frontend (línies de shot change al `WaveformTimeline` + snapping de vores) pendent, dins SPS-0026, lligada a SPS-0025.
+> ---
+
+> ---
+> ## **H-00028** — Treure el JWT de la URL de streaming amb una cookie només-media — i per què el same-site de dev no és el de producció
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Decisió arquitectònica (autenticació del streaming) + bug de seguretat resolt (token a la query string)
+>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0023 (→ EN_PROCES). Deute de seguretat **preexistent**, marcat a la revisió de SPS-0007 (no introduït per ell).
+>
+> >>#### **Síntoma / Context:**
+> >> `api.streamUrlWithToken(docId)` passava el JWT com a query param (`?token=...`) al `src` del `<video>`. Els tokens a la query string es filtren a **logs d'accés del servidor, historial del navegador, capçalera `Referer` i proxies**.
+>
+> >>#### **El que NO ha funcionat:**
+> >> * **Un token media dedicat, signat a part.** Afegeix una **segona lògica de signat i d'expiració** sense cap guany real sobre **reutilitzar el JWT existent** com a valor de cookie. Descartat.
+> >> * **Retirar el `?token=` global.** L'estratègia JWT (i el seu extractor de query) és **compartida per tots els endpoints** → treure'l és **blast-radius alt** i innecessari: la fuita real (el token al `<video src>`) ja queda tancada sense tocar-lo. Mantingut transitòriament.
+>
+> >>#### **Solució:**
+> >> * Enfocament **(b) cookie**. Nou `POST /media/session` (autenticat per header) emet cookie `media_token` = **JWT reutilitzat**, `HttpOnly, SameSite=Lax, Path=/media`, `Secure` només sota HTTPS, `maxAge` alineat amb `exp` del JWT. `jwt.strategy` afegeix un **extractor de cookie** (entre header i query). Frontend: `ensureMediaCookie()` (POST /media/session) i després `streamUrl(docId)` **sense token** al `<video src>`; els dos editors fan await de la cookie abans del `src`. `cookie-parser` ja hi era (cap dep nova).
+>
+> >>#### **⚠️ Avís per a producció (documentat expressament):**
+> >> Funciona perquè en **dev** el front i l'API són **same-site** (`localhost:3000` ↔ `8000`, mateix domini registrable → `Lax` envia la cookie al subrecurs `<video>`). Si en **PRODUCCIÓ** el `<video>` i l'API queden en dominis registrables **DIFERENTS** (cross-site real), `Lax` **bloquejaria** la cookie i el vídeo no carregaria → caldria `SameSite=None; Secure` + `<video crossorigin="use-credentials">` + CORS amb credencials i origin explícit. **No forçat**: depèn del domini real de producció.
+>
+> >>#### **Arxius modificats:**
+> >> * `backend_nest_mvp/src/modules/auth/jwt.strategy.ts` (extractor de cookie), `media/media.controller.ts` (`POST /media/session`); `frontend/services/api.ts` (`ensureMediaCookie`, `streamUrl` sense token), `VideoSubtitlesEditorView.tsx`, `VideoSrtStandaloneEditorView.tsx`, `__main_wave_harness.tsx`.
+>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` backend+frontend EXIT 0. **No** verificat en app real (Network sense `?token=`, cookie amb els flags, 401 sense auth) ni en el desplegament real (same-site vs cross-site) — passat a tasques de l'usuari a SPS-0023.
+>
+> >>#### **Lliçó:**
+> >> Una cookie `SameSite=Lax` que "funciona" en dev pot ser una il·lusió de same-site: la política de cookies es valida contra la **topologia de dominis de producció**, no la de `localhost`. I retirar un mecanisme **compartit** (l'extractor `?token=`) només perquè un consumidor concret ja no el necessita és obrir blast-radius sense tancar cap fuita — la fuita es tanca al punt exacte on el secret s'exposava (el `<video src>`).
+> ---
+
+> ---
+> ## **H-00027** — El fals-verd del typecheck: sense `@types/react`, un `tsc` net no valida gairebé res — i amagava dos bugs de runtime
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Incidència d'higiene de tooling (fals-verd) + dos bugs de runtime descoberts de passada
+>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0021 (→ EN_PROCES). Genera **SPS-0040** (nova, a PENDENTS).
+>
+> >>#### **Síntoma / Context:**
+> >> El frontend no tenia `@types/react` enlloc. `npx tsc --noEmit` passava, però tot `React.*` es resolia com a **`any` silenciós** → el typecheck validava **molt menys** del que semblava (ja marcat com a baseline feble a la revisió de SPS-0006, on va provocar un TS2347 derivat de la cadena d'*any*).
+>
+> >>#### **El que NO ha funcionat:**
+> >> * **Confiar en el `tsc` verd previ com a senyal de correcció.** Era un **fals-verd**. Instal·lar els `@types` va destapar **7 errors TS2322 reals** (prop `style` no declarada) i, per sota d'ells, **2 bugs de runtime**: `icons.tsx` (48 components) i `ControlButton` **declaren** `style` però el cos **no el reenvia** a l'element → el tint d'accent que 6+1 call-sites hi passen es **descarta silenciosament**. Un tipus i un runtime desalineats que el typecheck cec no podia veure.
+>
+> >>#### **Solució:**
+> >> * Instal·lats `@types/react@19.2.17` + `@types/react-dom@19.2.3` (devDeps, major 19 casant amb `react ^19.2`). Els 7 errors arreglats **només de tipus** (afegint `style?: React.CSSProperties` a la forma d'icona compartida i a `ControlButton`), **sense tocar runtime** → nova línia base real (0 errors amb els `@types`).
+> >> * Els 2 bugs de runtime **registrats com a SPS-0040**, no arreglats aquí: reenviar `style` és un canvi de **comportament visual** (judici de gust) i barrejar-lo amb el fix de tipus violaria el canvi mínim.
+>
+> >>#### **Arxius modificats:**
+> >> * `frontend/package.json` (`@types/react`, `@types/react-dom` a devDeps), `frontend/components/icons.tsx` (`style?` a la forma compartida), `frontend/components/VideoEditor/VideoEditorToolbar.tsx` (`style?` a `ControlButton`).
+>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` frontend EXIT 0 — i ara sí **significatiu**, perquè amb els `@types` el compilador comprova de debò els tipus de React.
+>
+> >>#### **Lliçó:**
+> >> Un `tsc` verd no val res sense els `@types` del framework: sense ells TypeScript no comprova el que sembla que comprova, i el verd és cosmètic. Afegir-los sol destapar deute latent — aquí, un desalineament tipus↔runtime que amagava una prop descartada. I separar el fix de **tipus** (segur, mecànic) del fix de **runtime** (judici visual) evita colar un canvi de comportament dins una tasca de tooling.
+>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * **SPS-0040** — reenviar `style` a `<svg>`/`<button>` a `icons.tsx` i `ControlButton` per recuperar el tint d'accent que els call-sites ja pretenen (decisió visual pendent).
+> ---
+
+> ---
+> ## **H-00026** — El write de `linkedMediaId` es mou al mòdul `projects` per poder sincronitzar `mediaDocumentId` — canvi de contracte sense backfill
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Decisió arquitectònica (frontera `projects` ↔ `library`) + bug de coherència de registre resolt
+>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0019 (→ EN_PROCES). Continuació directa de SPS-0005.
+>
+> >>#### **Síntoma / Context:**
+> >> SPS-0005 llegeix l'últim vídeo des de `linkedMediaId` de l'SRT, però `project.mediaDocumentId` quedava **obsolet** (apuntant al vídeo de creació). No afecta l'obertura (ja no és la font primària), però qualsevol llistat/report/lògica futura que llegís `mediaDocumentId` veuria el vídeo antic.
+>
+> >>#### **Solució:**
+> >> * `api.linkMediaToSrt` **reencaminada** de `PATCH /documents/:id` a un nou `PATCH /projects/link-media/:srtDocumentId`. `ProjectsService.linkMediaToSrt(ownerId, srtDocumentId, mediaDocumentId)` escriu `linkedMediaId` de l'SRT (**delegant** a `library.updateDocument` — direcció `projects → library`, permesa) i sincronitza `project.mediaDocumentId` via `updateOne({ srtDocumentId })` **només si `mediaDocumentId` no és null** (idempotent; si l'SRT no té projecte, 0 matches). `PATCH /documents/:id` es manté **intacte**.
+>
+> >>#### **El que NO ha funcionat / limitació conscient:**
+> >> * **Sense backfill** per a projectes antics: el `mediaDocumentId` ranci només es corregeix **al proper re-vincle**. Acceptat perquè `mediaDocumentId` ja **no** és la font primària d'obertura (SPS-0005 prioritza `linkedMediaId`), així que el desajust és inert fins que es re-vinculi.
+>
+> >>#### **Arxius modificats:**
+> >> * `backend_nest_mvp/.../projects/projects.service.ts` (`linkMediaToSrt`), `projects.controller.ts` (`@Patch('/link-media/:srtDocumentId')`); `frontend/services/api.ts` (reencaminament de `linkMediaToSrt`).
+>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` backend+frontend EXIT 0. SPS-0005 intacte (`App.tsx` segueix prioritzant `linkedMediaId`). No verificat en app real / BD (canvi de vídeo, cas null, SRT standalone) — passat a tasques de l'usuari a SPS-0019.
+>
+> >>#### **Lliçó:**
+> >> Quan un sol write ha de mantenir coherents **dues** entitats (`SRT.linkedMediaId` + `project.mediaDocumentId`), el propietari del write ha de ser el mòdul que pot veure **totes dues** — d'aquí que passi a `projects`, que delega a `library` per l'una i escriu directament l'altra. La separació de paquets es respecta amb la **direcció** correcta de la dependència (`projects → library`), no creant-ne una de prohibida en sentit invers.
+> ---
+
+> ---
 > ## **H-00025** — Entorn local (Docker/Mongo/Redis) + inventari de contingut NOMÉS local abans d'un trasllat de disc
 > >> ###### *[2026-07-15]*
 >
