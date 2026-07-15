@@ -23,7 +23,7 @@ import TranscriptCorrectionModal, { ChangeRecord as CorrectionChangeRecord, Corr
 
 import { Segment, GeneralConfig } from '../../types/Subtitles';
 import { parseSrt, serializeSrt } from '../../utils/SubtitlesEditor/srtParser';
-import { computeSmartSplit } from '../../utils/SubtitlesEditor/splitHelpers';
+import { computeSmartSplit, computeSplitTimes } from '../../utils/SubtitlesEditor/splitHelpers';
 
 import { api } from '../../services/api';
 import { buildTakeRangesFromScript } from '../../utils/EditorDeGuions/takeRanges';
@@ -746,48 +746,79 @@ const handleSave = useCallback(() => {
   });
 }, [isEditing, subsHistory, currentDoc.id, dispatch, useBackend]);
 
+  const applySplit = useCallback((idx: number, leftText: string, rightText: string, ratio: number, cutTime?: number) => {
+    const target = segments[idx];
+    const times = computeSplitTimes({
+      startTime: target.startTime,
+      endTime: target.endTime,
+      ratio,
+      cutTime,
+      minDurSec: Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000,
+      gapSec: (generalConfig.minGapMs ?? 160) / 1000,
+    });
+    if (!times) return;
+
+    const newSeg1 = { ...target, endTime: times.leftEnd, originalText: leftText, richText: leftText };
+    const newSeg2 = { id: Date.now(), startTime: times.rightStart, endTime: target.endTime, originalText: rightText, richText: rightText };
+
+    const newSegments = [...segments];
+    newSegments.splice(idx, 1, newSeg1, newSeg2);
+    subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
+  }, [segments, subsHistory, generalConfig.minGapMs, generalConfig.minDurationMs]);
+
   const handleSplitSegmentAtCursor = useCallback((idParam?: number) => {
     // Consumim el payload sempre: els ids es renumeren a cada commit, i un
     // payload obsolet s'aplicaria després a un segment equivocat.
     const payload = splitPayloadRef.current;
     splitPayloadRef.current = null;
 
+    if (!isEditing) return;
+
     if (payload && (idParam === undefined || payload.id === idParam)) {
-        const idx = segments.findIndex(s => s.id === payload.id);
-        if (idx === -1) return;
-
-        const target = segments[idx];
-        const totalDuration = target.endTime - target.startTime;
-        const splitPoint = target.startTime + (totalDuration * payload.splitRatio);
-
-        const newSeg1 = { ...target, endTime: splitPoint, originalText: payload.leftText, richText: payload.leftText };
-        const newSeg2 = { id: Date.now(), startTime: splitPoint + 0.001, endTime: target.endTime, originalText: payload.rightText, richText: payload.rightText };
-
-        const newSegments = [...segments];
-        newSegments.splice(idx, 1, newSeg1, newSeg2);
-
-        subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
-        return;
+      const idx = segments.findIndex(s => s.id === payload.id);
+      if (idx === -1) return;
+      applySplit(idx, payload.leftText, payload.rightText, payload.splitRatio);
+      return;
     }
 
     const targetId = idParam ?? activeSegmentId;
-    if (!targetId || !isEditing) return;
+    if (!targetId) return;
 
     const idx = segments.findIndex(s => s.id === targetId);
     if (idx === -1) return;
 
-    const target = segments[idx];
-    const smart = computeSmartSplit(target.originalText || '');
+    const smart = computeSmartSplit(segments[idx].originalText || '');
     if (!smart) return;
-    const splitPoint = target.startTime + (target.endTime - target.startTime) * smart.splitRatio;
+    applySplit(idx, smart.leftText, smart.rightText, smart.splitRatio);
+  }, [activeSegmentId, segments, isEditing, applySplit]);
 
-    const newSeg1 = { ...target, endTime: splitPoint, originalText: smart.leftText, richText: smart.leftText };
-    const newSeg2 = { id: Date.now(), startTime: splitPoint + 0.001, endTime: target.endTime, originalText: smart.rightText, richText: smart.rightText };
+  // Ctrl+Shift+K: divideix pel PLAYHEAD, no pel cursor de text. El primer bloc acaba
+  // exactament al playhead i el segon arrenca un gap més tard (computeSplitTimes encara
+  // hi fa respectar la durada mínima); el text es reparteix pel punt lògic més proper a
+  // la proporció del playhead dins del bloc. Si el text no admet divisió (buit, un sol
+  // caràcter), queda sencer al primer bloc. Si el playhead no és dins de cap subtítol,
+  // no fa res.
+  const handleSplitSegmentAtPlayhead = useCallback(() => {
+    if (!isEditing) return;
+    // Lectura directa del <video> per precisió (vegeu handleSetTcIn).
+    const t = videoRef.current ? videoRef.current.currentTime : currentTimeRef.current;
+    const idx = segments.findIndex(s => t > s.startTime && t < s.endTime);
+    if (idx === -1) return;
 
-    const newSegments = [...segments];
-    newSegments.splice(idx, 1, newSeg1, newSeg2);
-    subsHistory.commit(newSegments.map((s, i) => ({ ...s, id: i + 1 })));
-  }, [activeSegmentId, segments, isEditing, subsHistory]);
+    const target = segments[idx];
+    const dur = target.endTime - target.startTime;
+    if (dur <= 0) return;
+    const ratio = (t - target.startTime) / dur;
+
+    const smart = computeSmartSplit(target.originalText || '', ratio);
+    applySplit(
+      idx,
+      smart ? smart.leftText : (target.originalText || ''),
+      smart ? smart.rightText : '',
+      ratio,
+      t,
+    );
+  }, [isEditing, segments, applySplit]);
 
   const handleInsertSegment = useCallback((id: number, position: 'before' | 'after') => {
     if (!isEditing) return;
@@ -930,6 +961,11 @@ const handleSave = useCallback(() => {
   }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
 
   // ── Modificador+clic a l'ona (estil Subtitle Edit): fixa cues de l'esdeveniment ACTIU al temps clicat ──
+  // Els 6 handlers que arriben a WaveformTimeline (aquests 4 + handleSegmentUpdate/UpdateEnd) depenen
+  // dels MÈTODES de subsHistory (`commit`, `updateDraft`), no de l'objecte: useDocumentHistory en retorna
+  // un literal nou a cada render, i amb l'objecte a les deps el comparador del React.memo de l'ona no
+  // bloquejava mai (SPS-0036). La resta de handlers d'aquest fitxer no els compara ningú i poden seguir
+  // depenent de l'objecte.
   const handleCueStart = useCallback((t: number) => {
     if (!isEditing || !activeSegmentId) return;
     const gap = (generalConfig.minGapMs ?? 160) / 1000;
@@ -943,7 +979,7 @@ const handleSave = useCallback(() => {
     if (startTime >= seg.endTime - minDurSec) startTime = seg.endTime - minDurSec;
     if (startTime < 0) startTime = 0;
     subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, startTime } : s));
-  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory.commit]);
 
   const handleCueEnd = useCallback((t: number) => {
     if (!isEditing || !activeSegmentId) return;
@@ -957,7 +993,7 @@ const handleSave = useCallback(() => {
     const minDurSec = Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000;
     if (endTime - seg.startTime < minDurSec) endTime = seg.startTime + minDurSec;
     subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, endTime } : s));
-  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory]);
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, generalConfig.minDurationMs, subsHistory.commit]);
 
   const handleCueStartKeepDuration = useCallback((t: number) => {
     if (!isEditing || !activeSegmentId) return;
@@ -976,7 +1012,7 @@ const handleSave = useCallback(() => {
     if (startTime < 0) startTime = 0;
     const endTime = startTime + dur;
     subsHistory.commit(segments.map(s => s.id === activeSegmentId ? { ...s, startTime, endTime } : s));
-  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory, duration]);
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory.commit, duration]);
 
   const handleRippleFromCue = useCallback((t: number) => {
     if (!isEditing || !activeSegmentId) return;
@@ -990,7 +1026,7 @@ const handleSave = useCallback(() => {
     if (startTime < 0) startTime = 0;
     const delta = startTime - seg.startTime;
     subsHistory.commit(segments.map((s, i) => i < idx ? s : { ...s, startTime: s.startTime + delta, endTime: s.endTime + delta }));
-  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory]);
+  }, [isEditing, activeSegmentId, segments, generalConfig.minGapMs, subsHistory.commit]);
 
   useKeyboardShortcuts('subtitlesEditor', (action) => {
     switch (action) {
@@ -1005,6 +1041,7 @@ const handleSave = useCallback(() => {
       case 'REDO': subsHistory.redo(); break;
       case 'SAVE': handleSave(); break;
       case 'SPLIT_SEGMENT': handleSplitSegmentAtCursor(); break;
+      case 'SPLIT_AT_PLAYHEAD': handleSplitSegmentAtPlayhead(); break;
       case 'MERGE_SEGMENT': handleMergeSegmentWithNext(); break;
       case 'SET_TC_IN': handleSetTcIn(); break;
       case 'SET_TC_OUT': handleSetTcOut(); break;
@@ -1032,7 +1069,12 @@ const handleSave = useCallback(() => {
       if (prevSeg && startTime < prevSeg.endTime + gap) startTime = prevSeg.endTime + gap;
       if (nextSeg && endTime > nextSeg.startTime - gap) endTime = nextSeg.startTime - gap;
       const minDurSec = Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000;
-      if (endTime - startTime < minDurSec) endTime = startTime + minDurSec;
+      if (endTime - startTime < minDurSec) {
+        // Estirar fins a la durada mínima no pot trepitjar el veí: el no-solapament
+        // mana sobre la durada mínima (un bloc curt és vàlid; un de solapat, no).
+        const hardEnd = nextSeg ? nextSeg.startTime - gap : Infinity;
+        endTime = Math.min(startTime + minDurSec, Math.max(hardEnd, startTime + MIN_SEG_DURATION_MS / 1000));
+      }
       return prev.map(s => s.id === updated.id ? { ...updated, startTime, endTime } : s);
     });
   }, [isEditing, subsHistory, generalConfig.minGapMs, generalConfig.minDurationMs]);
@@ -1060,12 +1102,12 @@ const handleSave = useCallback(() => {
   const handleSegmentUpdate = useCallback((id: Id, newStart: number, newEnd: number) => {
     if (!isEditing) return;
     subsHistory.updateDraft(prev => prev.map((seg) => (seg.id === id ? { ...seg, startTime: newStart, endTime: newEnd } : seg)));
-  }, [isEditing, subsHistory]);
+  }, [isEditing, subsHistory.updateDraft]);
 
   const handleSegmentUpdateEnd = useCallback(() => {
     if (!isEditing) return;
     subsHistory.commit();
-  }, [isEditing, subsHistory]);
+  }, [isEditing, subsHistory.commit]);
 
   const handleOpenAIOperations = useCallback((m: 'whisper' | 'translate' | 'revision') => {
     setAiMode(m);

@@ -3,7 +3,7 @@ import { Segment, GeneralConfig } from '../../types/Subtitles';
 import * as TextMetrics from '../../utils/SubtitlesEditor/textMetrics';
 import * as RichText from '../../utils/SubtitlesEditor/richTextHelpers';
 import useLocalStorage from '../../hooks/useLocalStorage';
-import { LOCAL_STORAGE_KEYS } from '../../constants';
+import { LOCAL_STORAGE_KEYS, MIN_SEG_DURATION_MS } from '../../constants';
 import { TimecodeInput } from './TimecodeInput';
 import { useSubtitleEditor } from '../../context/SubtitleEditorContext';
 
@@ -224,6 +224,10 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
 
   const duration = segment.endTime - segment.startTime;
 
+  const minDurSec = Math.max(MIN_SEG_DURATION_MS, generalConfig.minDurationMs ?? 1000) / 1000;
+  // Tolerància de mig ms: els timecodes tenen resolució de ms i el float no és exacte.
+  const isBelowMinDuration = duration > 0 && duration + 0.0005 < minDurSec;
+
   const gridCellStyle: React.CSSProperties = {
     borderWidth: gridOpacity > 0 ? '1px' : '0px',
     borderStyle: 'dashed',
@@ -332,8 +336,9 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isEditable) return;
 
-    // Ctrl+K: dividir segment al cursor
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    // Ctrl+K: dividir segment al cursor. Amb Shift no: Ctrl+Shift+K és el split
+    // pel playhead i l'ha de veure el listener global (aquí en faríem stopPropagation).
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       e.stopPropagation();
       performSplitAtCaret();
@@ -601,7 +606,14 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             className="flex flex-col items-center flex-shrink-0 w-[22px]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-center" style={{ height: 'var(--us-sub-row-height)' }}>
+            {/* Tot el canal de 22px fa de diana: el botó de 14px sol deixava zona morta als costats.
+                El botó atura la propagació, per tant un clic directe a sobre no fa doble toggle. */}
+            <div
+              className="flex items-center justify-center w-full cursor-pointer"
+              style={{ height: 'var(--us-sub-row-height)' }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => { e.stopPropagation(); onToggleSelect(segment.id as number, e.shiftKey); }}
+            >
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
@@ -814,7 +826,11 @@ const SegmentItem: React.FC<SegmentItemProps> = ({
             </div>
 
             {/* Columna 3: Timecodes editables */}
-            <div style={gridCellStyle} className="flex items-center px-1">
+            <div
+              style={gridCellStyle}
+              className={`flex items-center px-1 ${isBelowMinDuration ? 'bg-red-500/10' : ''}`}
+              title={isBelowMinDuration ? `Durada per sota del mínim configurat (${Math.round(minDurSec * 1000)} ms)` : undefined}
+            >
               {i === 0 ? (
                 <TimecodeInput
                   value={segment.startTime}

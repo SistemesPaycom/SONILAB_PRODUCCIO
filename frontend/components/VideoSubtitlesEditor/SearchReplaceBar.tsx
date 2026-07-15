@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { findGeneralShortcutAction } from '../../hooks/useKeyboardShortcuts';
 
 interface SearchReplaceBarProps {
   query: string;
@@ -17,7 +18,7 @@ interface SearchReplaceBarProps {
   onNext: () => void;
   onPrev: () => void;
   onReplace: () => void;
-  /** Substituir-ho tot; retorna el nombre de substitucions fetes (per al missatge). */
+  /** Substituir-ho tot; retorna les coincidències dels segments realment modificats (0 = cap canvi). */
   onReplaceAll: () => number;
   onClose: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -34,26 +35,40 @@ const SearchReplaceBar: React.FC<SearchReplaceBarProps> = ({
   matchCount, activeIndex, canReplace,
   onNext, onPrev, onReplace, onReplaceAll, onClose, inputRef,
 }) => {
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; done: boolean } | null>(null);
   const msgTimerRef = useRef<number | null>(null);
 
-  // El missatge desapareix en canviar el terme…
-  useEffect(() => { setMessage(null); }, [query]);
+  // El missatge desapareix en canviar el terme o la substitució (si no, el "Cap substitució"
+  // es quedaria contradient el text que l'usuari acaba d'escriure al camp de substitució)…
+  useEffect(() => { setMessage(null); }, [query, replaceText]);
   // …i el temporitzador es neteja al desmuntar.
   useEffect(() => () => { if (msgTimerRef.current) window.clearTimeout(msgTimerRef.current); }, []);
 
   const showReplaceAllMessage = (n: number) => {
-    setMessage(n === 1 ? "S'ha fet 1 substitució" : `S'han fet ${n} substitucions`);
+    setMessage(
+      n === 0
+        ? { text: 'Cap substitució', done: false }
+        : { text: n === 1 ? "S'ha fet 1 substitució" : `S'han fet ${n} substitucions`, done: true }
+    );
     if (msgTimerRef.current) window.clearTimeout(msgTimerRef.current);
     msgTimerRef.current = window.setTimeout(() => setMessage(null), 4000);
   };
 
-  // stopPropagation de TOTES les tecles: aïlla els inputs de la barra de les dreceres
+  // Les dreceres GENERALS de l'app (Desfer/Refer/Guardar) travessen la barra: amb el focus
+  // aquí, Ctrl+Z ha de desfer el DOCUMENT, no l'input (criteri Word/VSCode). Es consulta la
+  // configuració real de dreceres (personalitzable), no una llista de combos hardcodeada, i
+  // s'exigeix Ctrl/Cmd perquè un remapeig a tecla simple no pugui robar el text que s'escriu.
+  // El listener de window ja fa preventDefault → l'undo natiu de l'input no s'arriba a executar.
+  const isGlobalShortcut = (e: React.KeyboardEvent) =>
+    (e.ctrlKey || e.metaKey) && findGeneralShortcutAction(e) !== null;
+
+  // stopPropagation de la resta de tecles: aïlla els inputs de la barra de les dreceres
   // globals de useKeyboardShortcuts. Imprescindible per a la tecla Delete: la combo
   // 'Delete' (sub_delete) està registrada i el hook fa e.preventDefault() encara que
   // cap vista tracti l'acció — sense stopPropagation, Supr no esborraria text a l'input.
   // Ctrl+F es tracta aquí mateix (el listener global ja no el veu): re-selecciona el camp.
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (isGlobalShortcut(e)) return;
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -67,6 +82,7 @@ const SearchReplaceBar: React.FC<SearchReplaceBarProps> = ({
     }
   };
   const handleReplaceKeyDown = (e: React.KeyboardEvent) => {
+    if (isGlobalShortcut(e)) return;
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -166,13 +182,13 @@ const SearchReplaceBar: React.FC<SearchReplaceBarProps> = ({
           >Substituir</button>
           <button
             type="button"
-            onClick={() => { const n = onReplaceAll(); if (n > 0) showReplaceAllMessage(n); }}
+            onClick={() => showReplaceAllMessage(onReplaceAll())}
             disabled={!hasMatches}
             className={`${actionBtnClass} bg-white/5 hover:bg-white/15`}
             style={{ color: 'var(--th-editor-meta)' }}
           >Substituir-ho tot</button>
           {message && (
-            <span className="text-[10px] text-emerald-400 whitespace-nowrap select-none">{message}</span>
+            <span className={`text-[10px] whitespace-nowrap select-none ${message.done ? 'text-emerald-400' : 'text-gray-400'}`}>{message.text}</span>
           )}
         </div>
       )}

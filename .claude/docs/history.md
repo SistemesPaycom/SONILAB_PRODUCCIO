@@ -74,6 +74,452 @@ Notes:
 ---
 
 > ---
+> ## **H-00025** — Entorn local (Docker/Mongo/Redis) + inventari de contingut NOMÉS local abans d'un trasllat de disc
+> >> ###### *[2026-07-15]*
+>
+> >>#### **Tipus:**
+> >> Incidència (documentació d'entorn, no de codi)
+>
+> >>#### **Tasques relacionades:**
+> >> * Cap SPS directa — coneixement operatiu que no vivia enlloc versionat.
+>
+> >>#### **Síntoma / Context:**
+> >> Abans de traslladar aquest projecte a un altre disc dur, es revisa què quedaria fora si el trasllat es fes amb un `git clone` en lloc de copiar la carpeta sencera. Dos temes calia deixar escrits perquè només vivien en memòria personal de Claude (`~/.claude/projects/<ruta-antiga>/memory/`, lligada al path exacte d'aquest checkout — **no viatja** a un path nou, encara que sigui la mateixa màquina) o no vivien enlloc:
+> >>
+> >> **1. Dependència d'entorn local no documentada:** `backend_nest_mvp` depèn de **MongoDB (port 27017)** i **Redis (port 6379)** corrent dins de **Docker Desktop** (`backend_nest_mvp/docker-compose.yml`, contenidors `script_editor_mongo`/`script_editor_redis`, imatges mongo:7/redis:7). BD real `script_editor` a `mongodb://localhost:27017/script_editor`, usuaris a `users` amb bcrypt cost 12. **Símptoma → causa:** login amb «Failed to fetch» al frontend, o el backend repetint `ERROR [MongooseModule] ... ECONNREFUSED 127.0.0.1:27017` → gairebé sempre Docker Desktop tancat. **Fix:** obrir Docker Desktop, esperar el motor, `cd backend_nest_mvp && docker compose up -d`; `nest --watch` es reconnecta sol (no cal reiniciar-lo). MongoDB NO és un servei natiu instal·lat (no hi ha `mongod.exe` local). Reset de contrasenya admin: `node backend_nest_mvp/scripts/reset-admin-password.js` (default `admin@sonilab.cat` / `Admin1234`); no cal reiniciar el backend, valida contra la BD a cada login.
+> >>
+> >> **2. Contingut real només al disc, mai a GitHub** (a banda del `.gitignore` habitual de secrets/build): en revisar `git status` hi havia ~15 fitxers de `frontend/` amb canvis substancials **sense commitejar** (bugs i millores de l'ona/subtítols descoberts avaluant SPS-0015, ja documentats a H-00015..H-00024) + 4 fitxers de harness sense trackejar. Més enllà d'això, **gitignorat per disseny i per tant invisible a `git status` també**: `.claude/to_claude/` (material privat, inclou `waveform-harness/` — banc de proves amb README usat per verificar SPS-0016/0029/etc.), `docs/superpowers/` (specs+plans del flux autònom habitual, 16 fitxers / 324 KB — veure `.gitignore` arrel: `/docs/`), i els `.env` reals de `backend_nest_mvp/` i `frontend/` (secrets; només es versionen els `.env.example`).
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **Assumir que «tot el important ja és a `.claude/docs/`, doncs ja està cobert»:** fals — `.claude/docs/tasks.md`/`history.md` documenten el disseny i la decisió, però el **codi font en si** (els ~15 fitxers modificats) i els **harnesses de verificació** (`.claude/to_claude/waveform-harness/`, gitignorat expressament) només existeixen al disc. Un `git clone` fresc a la ubicació nova reconstruiria els docs però **no** el codi uncommitted ni els harnesses ni els specs/plans de `docs/superpowers/`.
+> >>
+> >>#### **Solució:**
+> >> * Aquesta entrada + una nota explícita a `tasks.md` (secció EN_PROCES, 2026-07-15) deixen escrit que el mètode de trasllat de disc ha de ser una **còpia de la carpeta sencera del projecte**, no un `git clone` nou — l'únic mètode que preserva alhora el treball uncommitted i tot el contingut gitignorat per disseny (`to_claude/`, `docs/`, `.env`).
+> >> * El fet Docker/Mongo/Redis (punt 1) queda documentat aquí perquè no depengui de memòria personal no versionada: és operatiu i necessari per fer arrencar `backend_nest_mvp` en qualsevol disc/màquina nova.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `.claude/docs/history.md` (aquesta entrada).
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` i `vite build` nets sobre l'arbre de treball complet (incloent-hi tot el WIP uncommitted descrit al punt 2) — el codi compila i buildeja correctament tal com està, encara sense commitejar.
+> >>
+> >>#### **Lliçó:**
+> >> `.gitignore` decideix què **mai** arriba a GitHub encara que es faci commit; per tant «ja ho tinc commitejat» no és el mateix que «ja és segur davant d'un trasllat/pèrdua de disc» quan hi ha carpetes gitignorades a propòsit (`to_claude/`, `docs/`) amb contingut de treball real. La memòria personal de Claude (no `.claude/`) tampoc viatja si canvia el path del projecte, encara que sigui el mateix disc — qualsevol fet operatiu (com dependre de Docker) que calgui recordar entre màquines ha d'anar a `.claude/docs/`, no confiar-se a la memòria personal.
+> >>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * Decidir si commitejar el WIP de ~15 fitxers pendent (grup SPS-0016/17/18/22/29..39) abans del trasllat, o confiar exclusivament en la còpia de carpeta sencera.
+> ---
+
+> ---
+> ## **H-00024** — Un camp de text que aïlla les seves tecles ha de decidir QUINES aïlla: delegació de les dreceres `general` des de la barra de cerca
+> >> ###### *[2026-07-14]*
+>
+> >>#### **Tipus:**
+> >> Decisió arquitectònica (frontera entre els inputs i el sistema global de dreceres) + bug latent de pèrdua de format descobert de passada
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0022 (→ EN_PROCES). Deute deixat pel review final de SPS-0006 (veure H-00019). Follow-up obert: SPS-0039.
+> >>
+> >>#### **Síntoma / Context:**
+> >> Els inputs de `SearchReplaceBar` feien `e.stopPropagation()` a **TOTES** les tecles. Era una decisió deliberada i documentada al codi: la combo `Delete` està registrada com a drecera (`sub_delete`) i `useKeyboardShortcuts` fa `preventDefault()` en trobar-la **encara que cap vista tracti l'acció** → sense l'aïllament, la tecla Supr no esborraria text dins de l'input. El preu d'aquest «tallafoc total» és que **cap** drecera global travessa la barra: amb el focus al camp de cerca, Ctrl+Z feia l'undo natiu **de l'input** en comptes del del document (Word i VSCode enruten l'undo al document), i Ctrl+S obria el diàleg de desar **del navegador**.
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **El prop `onUndo` que proposava la fitxa de la tasca.** Passar `onUndo` a la barra i cridar-lo des d'un `if (ctrl && key === 'z')` funciona, però **hardcodeja la combo**: les dreceres d'aquest projecte són **personalitzables** (`SettingsModal` → `LOCAL_STORAGE_KEYS.SHORTCUTS`). Un usuari que remapegés Desfer tindria la seva combo funcionant a tot arreu **menys** a la barra, i la barra desfent amb una combo que ja no és la seva. La solució correcta no és cablejar la tecla, sinó **preguntar a la configuració real** quina acció li correspon: `findGeneralShortcutAction(e)`. La regla que se'n deriva: si el sistema de dreceres és configurable, **cap component pot comparar `e.key` amb una lletra concreta** per a una acció que ja existeix al registre.
+> >> * **Deixar passar totes les combos amb modificador.** Temptador (una línia) i trencat: Ctrl+A / Ctrl+C / Ctrl+V / Ctrl+X són edició nativa de l'input, i qualsevol drecera de mòdul remapejada a una d'elles se les quedaria. El filtre correcte no és «té modificador» sinó «**és una drecera de la llista `general`**» (Desfer/Refer/Guardar: les tres que semànticament pertanyen al **document**, no al camp de text). La llista `general` ja existia i ja era exactament aquesta frontera — només calia llegir-la.
+> >>
+> >>#### **Solució:**
+> >> * `useKeyboardShortcuts.ts` exporta **`findGeneralShortcutAction(e)`**: donat un event (natiu o sintètic de React), retorna l'acció de la llista `general` que li correspon segons la **configuració real** de l'usuari, o `null`. El matching de combos s'ha extret a `mapKeyName`/`comboFromEvent`/`normalizeCombo` per no duplicar-lo (equivalència amb el codi anterior auditada cas per cas: modificadors sols, `Space/Plus/Minus/Comma`, la guarda `isInput && !hasMod && len === 1`).
+> >> * `SearchReplaceBar` fa `stopPropagation` de tot **excepte** quan la combo premuda porta Ctrl/Cmd **i** correspon a una drecera `general` → l'event arriba al `window` i la vista fa `subsHistory.undo()` / `.redo()` / `handleSave()`. L'exigència de **Ctrl/Cmd** és una guarda contra un remapeig a tecla simple, que altrament es menjaria el text que s'està escrivint (no s'amplia a `altKey`: als teclats ES/CAT, AltGr = Ctrl+Alt).
+> >> * **No cal `preventDefault()` a la barra:** el `useKeyboardShortcuts` del propi `SubtitlesEditor` (sempre actiu) ja el fa en reconèixer la combo, abans de despatxar l'acció. Per això l'undo natiu de l'input no s'arriba a executar.
+> >> * **`handleReplaceAll`** deixa de posar al batch (i de comptar) els segments que queden **byte-idèntics**: el missatge deia «S'han fet N substitucions» mentre el commit feia *bail* per igualtat profunda. Ara, si el total real és 0, la barra diu «Cap substitució».
+> >>
+> >>#### **Descobriment que simplifica el disseny:**
+> >> El comptador honest de `handleReplaceAll` **no era només cosmètic: tapava una pèrdua de dades real.** `handleSegmentsBatchChange` posa `richText: ''` a tots els segments del batch (patró de `syncEditorsToState`: un `richText` ranci exportaria text antic). Per tant, una substitució idèntica (terme == substitució) sobre un bloc **amb format** li **esborrava el `richText`** i empenyia un pas d'undo fantasma — tot això mentre la barra celebrava «N substitucions». La guarda `raw === original` ho talla d'arrel. Lliçó lateral: un comptador que menteix sovint és la punta visible d'una escriptura que no hauria d'existir.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/hooks/useKeyboardShortcuts.ts` (nou export `findGeneralShortcutAction`; matching de combos extret a funcions pures; `useRef` mort tret)
+> >> * `frontend/components/VideoSubtitlesEditor/SearchReplaceBar.tsx` (delegació selectiva; missatge «Cap substitució»; el missatge també es neteja en editar el camp de substitució)
+> >> * `frontend/components/VideoSubtitlesEditor/SubtitlesEditor.tsx` (`handleReplaceAll`: guarda `raw === original`)
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` net. Revisió adversarial en paral·lel (2 lents: regressió del refactor · encaix amb el codi existent): cap troballa MAJOR; confirmat que cap acció es dispara dues vegades (els listeners `scriptEditor` d'`App.tsx` estan desactivats en aquests modes i el hook de `SubtitlesEditor` ignora tot el que no sigui `FIND`). **App real** (backend + Mongo/Redis en Docker + Vite, editor SRT standalone, usuari i doc de prova sembrats i esborrats després): substitució idèntica → «Cap substitució» i els 5 blocs byte-idèntics; substitució real → «S'han fet 5 substitucions» i text canviat; des del camp de cerca, Ctrl+Z desfà el **document** deixant el text de l'input intacte, Ctrl+Shift+Z refà, Ctrl+S dispara el `PATCH` de guardat; `defaultPrevented === true` per a Ctrl+Z/Ctrl+Shift+Z/Ctrl+S/Ctrl+F (cap default del navegador s'escapa) i **fals** per a `x` i Supr, que segueixen sense arribar a `window` (l'aïllament original intacte).
+> >>
+> >>#### **Lliçó:**
+> >> Un `stopPropagation()` total és una decisió d'arquitectura disfressada d'una línia: declara que **cap** drecera de l'app existeix mentre el focus és aquí dins. La pregunta correcta no és «aïllo o no aïllo», sinó **quines tecles pertanyen al camp i quines al document**. En aquest projecte la resposta ja estava escrita: la llista `general` del registre de dreceres **és** aquesta frontera.
+> >>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> **SPS-0039** — `SettingsModal.tsx` té la seva **pròpia còpia** de la conversió event→combo. Ara que el hook n'exporta la versió canònica hi ha dues fonts de veritat: qui grava el combo i qui el reconeix poden divergir en silenci (una drecera desada deixaria de casar, sense cap error visible).
+> ---
+
+> ---
+> ## **H-00023** — La drecera morta `SPLIT_AT_PLAYHEAD`: una proporció no és un punt de tall, i una tecla no és teva fins que arriba al listener
+> >> ###### *[2026-07-14]*
+>
+> >>#### **Tipus:**
+> >> Feature implementada (drecera declarada però sense `case`) + bug latent de propagació de teclat
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0037 (→ EN_PROCES). Follow-up obert per H-00022; reutilitza `computeSplitTimes`/`computeSmartSplit` de SPS-0016.
+> >>
+> >>#### **Síntoma / Context:**
+> >> `SPLIT_AT_PLAYHEAD` (Ctrl+Shift+K) estava declarada a `constants.ts`, `useKeyboardShortcuts` li feia `preventDefault()` — o sigui que **es menjava la tecla** — i cap dels dos switch d'accions tenia el `case`: la drecera no feia res. La decisió era implementar-la o retirar-la; es va implementar perquè SPS-0016 ja havia centralitzat la lògica de temps i l'usuari ja veu la drecera documentada («Dividir al playhead»).
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **Derivar un `ratio` del playhead i passar-lo a `computeSplitTimes`** — que és exactament el que proposava la fitxa de la tasca, i el pla inicial. **El tall no cau al playhead.** `computeSplitTimes` aplica el `ratio` sobre la durada **útil** (`total − gap`), no sobre la total: amb un bloc de 10→14 s, gap 160 ms i el playhead a 11,5 s, el tall queia a **11,44 s**; amb el playhead a 13,0 s, el gap queia a l'altre costat de la línia. L'error és petit (fins a un gap) i **invisible en un test de lògica pura si només mires que les durades siguin vàlides** — però el playhead és l'única cosa que l'usuari mira en aquesta operació. Una proporció del text i un punt de tall del temps no són la mateixa magnitud, encara que tots dos siguin un número entre 0 i 1. Solució: paràmetre `cutTime` (absolut) que mana sobre `ratio`, amb les mateixes guardes de durada mínima i gap.
+> >> * **Donar per fet que afegir el `case` al switch ja fa viva la drecera.** El handler de Ctrl+K del contenteditable de `SegmentItem` era `(e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k'` — **sense mirar Shift** — i feia `stopPropagation()`. Com que React arrela els listeners al contenidor de l'app, aturar la propagació allà **impedeix que l'esdeveniment arribi mai al `window`**, on escolta `useKeyboardShortcuts`. Amb el cursor dins del text (el cas normal!), Ctrl+Shift+K hauria dividit pel cursor en silenci. Un `case` nou en un switch global no serveix de res si algú de més avall ja s'ha quedat la tecla.
+> >>
+> >>#### **Solució:**
+> >> * **`computeSmartSplit(text, targetRatio = 0.5)`** — el tall del text ja no és sempre el centre sinó el candidat (salt de línia o espai) més proper a `totalLen × targetRatio`. Default = comportament idèntic al d'abans; el split pel playhead hi passa la proporció temporal. Els ratios extrems es clampen perquè cap meitat quedi buida.
+> >> * **`computeSplitTimes({ ..., cutTime? })`** — punt de tall absolut. El primer bloc acaba exactament al playhead i el segon arrenca un gap més tard (estil Subtitle Edit). La jerarquia d'H-00022 es manté **per sobre**: si el playhead cau massa a prop d'una vora, la durada mínima mana i el tall es desplaça.
+> >> * **`handleSplitSegmentAtPlayhead`** a les dues vistes, amb `applySplit` extret a un `useCallback` compartit amb el split pel cursor. Opera sobre el bloc que **conté** el playhead (no sobre l'actiu): si el playhead no és dins de cap subtítol, no fa res. Lectura directa de `videoRef.current.currentTime` (el ref de `currentTime` va fins a ~250 ms endarrerit; vegeu `handleSetTcIn`).
+> >> * **Guarda `!e.shiftKey`** al handler de Ctrl+K de `SegmentItem`.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/utils/SubtitlesEditor/splitHelpers.ts` — `targetRatio` a `computeSmartSplit`, `cutTime` a `computeSplitTimes`
+> >> * `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx` — `applySplit` compartit + `handleSplitSegmentAtPlayhead` + `case` al switch
+> >> * `frontend/components/VideoSubtitlesEditor/VideoSrtStandaloneEditorView.tsx` — idem
+> >> * `frontend/components/VideoSubtitlesEditor/SegmentItem.tsx` — guarda `!e.shiftKey`
+> >> * `constants.ts` i `useKeyboardShortcuts.ts` **no** s'han tocat: la declaració ja hi era i era correcta.
+> >>
+> >>#### **Verificació:**
+> >> * `tsc --noEmit` net.
+> >> * **Navegador, mòdul real servit per Vite** (13 casos): default 0.5 idèntic a abans, ratio proporcional, extrems sense meitats buides, tags `<i>` reequilibrats, text buit/1 caràcter → `null`, bloc massa curt → `null`.
+> >> * **Navegador, `SegmentItem` + `useKeyboardShortcuts` REALS** (harness temporal, esborrat), amb el cursor dins del contenteditable: Ctrl+K → payload de split pel cursor i cap acció global; Ctrl+Shift+K → acció global `SPLIT_AT_PLAYHEAD` i cap split pel cursor. Sense la guarda de Shift, aquest segon cas hauria fet el primer.
+> >> * **No verificat:** l'editor complet amb vídeo (el login demana backend + credencials). Passat a tasques de l'usuari.
+> >>
+> >>#### **Lliçó:**
+> >> Dues, i totes dues són sobre **la frontera entre el que calcules i el que l'usuari veu**. (1) Reutilitzar una funció existent perquè «la lògica ja hi és» amaga que el seu contracte pot no ser el que necessites: `ratio` era exacte per al cas per al qual es va escriure (repartir text) i aproximat per al nou (clavar un temps). (2) Una drecera global no existeix perquè la declaris ni perquè el switch la gestioni: existeix si l'esdeveniment **arriba** al listener. Abans de donar per viva una tecla nova, comprova qui la pot interceptar pel camí — i comprova-ho amb el focus on el tindrà l'usuari de veritat, no amb el focus al `body`.
+> ---
+
+> ---
+> ## **H-00022** — Decisió: el split ja no pot fabricar blocs invàlids — jerarquia `minDur > minGap`, i el no-solapament per sobre de tots dos
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt + decisió de disseny (jerarquia d'invariants de temps de l'editor)
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0016 (→ EN_PROCES). Follow-up obert per H-00004; completa els 6 punts d'enforcement de SPS-0001/H-00003.
+> >>
+> >>#### **Síntoma / Context:**
+> >> El split (per cursor o lògic) repartia la durada del bloc proporcionalment al text (`splitPoint = start + total * ratio`) i separava les dues meitats amb un **gap fix d'1 ms**, sense mirar ni `minDurationMs` ni `minGapMs`. Dividir un bloc de 2 s amb la config per defecte deixava dues meitats d'~1 s enganxades: cap dels dos paràmetres que l'usuari havia configurat es respectava. Era l'únic punt de l'editor que podia fabricar un estat que la resta de l'editor prohibeix.
+> >>
+> >>#### **La pregunta real (i la resposta):**
+> >> La fitxa plantejava «bloquejar el split o només avisar». La revisió va demostrar que **la pregunta important era una altra: qui mana quan els dos paràmetres no hi caben alhora?**. Amb els defaults (minDur 1000 ms, gap 160 ms) un bloc necessita 2160 ms per satisfer tots dos, i **la majoria de subtítols reals fan menys de 2,16 s**. Segons quin invariant cedeixi primer, el mateix bloc de 2,1 s acaba amb dues meitats vàlides o amb dues d'invàlides.
+> >> Jerarquia adoptada, llegida del comportament ja existent (`handleSetTcIn/Out`, `handleCueStart/End`, `handleSegmentChange`): **no-solapament > durada mínima > gap mínim**. El gap és una preferència estètica; la durada mínima és de llegibilitat; el solapament és corrupció del fitxer.
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **`usable = total - gap` i repartir el que quedi** (el primer esborrany del pla). Inverteix la jerarquia: reserva el gap sencer *abans* de mirar les durades, i per a tot bloc entre 2,00 s i 2,16 s degrada **les dues meitats per sota del mínim** quan n'hi hauria prou amb encongir el gap 60 ms. Empitjorava el cas més freqüent respecte del codi que volia arreglar.
+> >> * **Bloquejar el split quan no hi caben dues meitats mínimes.** Descartat: l'editor **no té cap canal de notificació** (no hi ha toasts als editors de subtítols), i un botó que no fa res sense dir per què és pitjor que un resultat imperfecte i visible. A més contradiu el precedent d'`handleInsertSegment`, que ja degrada abans que bloquejar.
+> >> * **Justificar la degradació dient «ja saltarà l'alerta de durada mínima»** — un comentari del codi (`VideoSubtitlesEditorView.tsx`, `handleInsertSegment`) prometia aquesta alerta, **però no existia**: l'única validació visual del `SegmentItem` era el CPS > 20. La degradació silenciosa hauria deixat l'usuari sense saber mai que tenia blocs invàlids.
+> >>
+> >>#### **Solució:**
+> >> * **`computeSplitTimes` (funció pura, `splitHelpers.ts`)**, única font de veritat per als **4 camins** de split (2 vistes × payload del cursor / fallback lògic). Càlcul en **mil·lisegons sencers** (els timecodes SRT tenen resolució de ms i `secondsToSrtTime` arrodoneix: un split en float podia generar `,1000`). Ordre de concessions: si el bloc no dona per a `2 × minDur + gap`, **s'encongeix el gap** (fins a 1 ms — mai 0: dos subtítols no poden compartir timecode); només si ni així hi caben, es **degraden les dues durades per igual**, amb pis absolut `MIN_SEG_DURATION_MS`. `ratio` es clampa a [0,1] (el del payload es calcula amb numerador del DOM i denominador de l'estat: pot sortir de rang si divergeixen). Retorna `null` si el bloc no admet ni dues meitats del pis absolut. **`endTime` del bloc original no es toca mai** → el buit amb el subtítol següent queda intacte per construcció.
+> >> * **Fuita col·lateral tancada a `handleSegmentChange` (les dues vistes):** clampava el final contra el veí i *tot seguit* l'estirava incondicionalment a `startTime + minDur`, de manera que **qualsevol bloc més curt que el mínim es menjava el següent a la primera tecla**. Ara l'estirada està limitada per la frontera del veí. Sense això, les meitats degradades del split es convertien en solapament real en començar a escriure-hi.
+> >> * **Marcador de validació (l'«avisar» de la fitxa):** `SegmentItem` tenyeix la columna de timecodes de vermell (`bg-red-500/10` + tooltip amb el mínim configurat) quan la durada queda sota el mínim — mateix idioma visual que l'alerta de caràcters per línia. Cap component nou.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/utils/SubtitlesEditor/splitHelpers.ts` — `computeSplitTimes` (nova, pura)
+> >> * `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx` — split unificat (`applySplit`), guarda `isEditing` també al camí del payload, fix d'`handleSegmentChange`
+> >> * `frontend/components/VideoSubtitlesEditor/VideoSrtStandaloneEditorView.tsx` — idem
+> >> * `frontend/components/VideoSubtitlesEditor/SegmentItem.tsx` — marcador de durada sota el mínim
+> >>
+> >>#### **Verificació:**
+> >> * **78/78 asserts** de la lògica pura (tsc + node, el patró d'H-00004): bloc llarg, ratio 0/1/fora de rang, gap encongit, degradació uniforme, config extrema (minDur 5000, minGap 0, minGap 1000), bloc degenerat → null, quantització a ms.
+> >> * `tsc --noEmit` net · `vite build` net.
+> >> * **Navegador, vista REAL** (harness temporal amb `VideoSubtitlesEditorView` sense backend, esborrat en acabar): bloc de 5 s → 2466 ms + **gap 160** + 2374 ms; bloc de 2,1 s → **1000 + gap 100 + 1000** (cedeix el gap, no les durades); bloc d'1,5 s → 750 + 1 + 749, marcats en vermell. Escrivint dins d'una meitat degradada, el final s'atura a `inici del següent − gap` (15,591) en comptes d'estirar-se a 16,000 i solapar.
+> >>
+> >>#### **Lliçó:**
+> >> Quan dos paràmetres configurables poden entrar en conflicte, la feature no està definida fins que no hi ha una **jerarquia explícita** entre ells — i la jerarquia no s'inventa: es llegeix del comportament que la resta del sistema ja té. La pregunta «bloquejar o avisar» era una distracció; la que decidia el resultat era «quin invariant cedeix primer». I un invariant només és real si sobreviu al *següent* gest de l'usuari: emetre estat vàlid no serveix de res si el primer keystroke el corromp.
+> >>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * `SPLIT_AT_PLAYHEAD` (Ctrl+Shift+K) està declarat a `constants.ts` i menja la tecla, però **no té cap `case`** als switch de les dues vistes: drecera morta (SPS-0037).
+> ---
+
+---
+
+> ---
+> ## **H-00021** — El memo de l'ona ja bloqueja al pare principal — i el harness sintètic que ho «provava» no podia fallar
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt (tanca l'arrel oberta a H-00020) + lliçó de mètode de verificació (la part que val)
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0036 (→ EN_PROCES). Continuació directa de SPS-0035 / H-00020. Fa útil el comparador de SPS-0034.
+> >>
+> >>#### **Síntoma / Context:**
+> >> H-00020 va descobrir que el `React.memo` de `WaveformTimeline` **no havia bloquejat mai, enlloc**, perquè els handlers que el comparador compara porten l'**objecte** `subsHistory` a les deps i `useDocumentHistory` en retorna un literal nou a cada render. SPS-0035 ho va arreglar **només al standalone**; al pare principal (`VideoSubtitlesEditorView`) els 6 handlers equivalents tenien el mateix defecte. Aquesta entrada tanca aquell forat, però **el que val la pena recordar és com es va verificar**.
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **El harness de SPS-0035 (pare sintètic) reaplicat al pare principal → INSERVIBLE, i s'ha llençat.** Un harness que **re-implementa** el cablejat del pare respon «sí, el memo bloqueja» **per construcció**: no pot descobrir que una prop real del pare real (p. ex. `handleSegmentClick`, `generalConfig`, `onSeek`) tingui identitat inestable, perquè no les conté. Passaria igual amb el fix, sense el fix, o amb el fix a mitges. És el **tercer** cop que aquest projecte escriu un test infalsificable sobre aquest mateix memo (SPS-0034 el va sanejar a cegues, SPS-0035 el va mesurar sobre un pare fals). El que sí serveix: muntar el **component real dins la vista real**.
+> >> * **El criteri d'acceptació «ha de bloquejar el 100 % dels ticks» → FALS al pare real.** Durant la reproducció **no** només canvia `currentTime`: `handleTimeUpdateThrottled` fa `setActiveSegmentId` a cada **frontera de subtítol** quan `syncSubsEnabled` (per defecte **true**), i `activeId` **és una prop comparada**. El bail-out correcte és «0 renders entre fronteres, **1 per frontera**». Si s'hagués aplicat el criteri del 100 %, la mesura correcta s'hauria llegit com un fracàs. (Corol·lari: el «100 %» que H-00020 dona per mesurat al standalone també és un artefacte del pare sintètic — allà la sincronització per temps existeix igualment.)
+> >> * **La via d'arrel (`useMemo` al `return` de `useDocumentHistory`) → DESCARTADA de nou, però pel motiu correcte.** H-00020 la va descartar sobretot per por de congelar `isDirty` (guarda del factory reset); amb deps completes això **no** passaria. El motiu sòlid és un altre: el hook té **4 call-sites** (les dues vistes de subtítols **i `App.tsx` × 2 — l'editor de guió**) i **36 dep-arrays** en consumeixen el retorn. Avui es recreen a cada render, cosa que **emmascara deps incompletes**; estabilitzar l'objecte les congela **totes de cop, en silenci**, i el frontend **no té eslint** (`react-hooks/exhaustive-deps` inclòs) que pogués agafar-ne cap. Radi d'impacte molt superior al problema.
+> >>
+> >>#### **Solució:**
+> >> * Els 6 handlers que el comparador compara al pare principal (`handleCueStart`, `handleCueEnd`, `handleCueStartKeepDuration`, `handleRippleFromCue`, `handleSegmentUpdate`, `handleSegmentUpdateEnd`) depenen ara dels **mètodes** (`subsHistory.commit` / `.updateDraft`), no de l'objecte. Els **15** dep-arrays restants del fitxer segueixen amb l'objecte a posta: **ningú els compara** (teclat, split, merge, insert, delete, batch, save) i tocar-los seria obrir radi d'impacte per res. La convivència dels dos estils queda explicada en un comentari al costat dels 6, com al standalone.
+> >> * Comentari del comparador (`WaveformTimeline.tsx`) reescrit: deia «les props de callback NO hi són a propòsit» quan el codi de sota **en compara 8**. Ara distingeix els **dos grups no intercanviables**: les **8 d'interacció** (s'han de comparar; el preu és que els pares les mantinguin estables) i les **7 de la toolbar** (queden fora; el que les manté fresques és comparar el *valor d'estat que capturen*). S'hi afegeixen les dues excepcions que feien la «regla 1» literalment falsa: `videoRef` i `currentTime`.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoSubtitlesEditor/VideoSubtitlesEditorView.tsx` — 6 dep-arrays (objecte → mètode) + comentari de simetria.
+> >> * `frontend/components/VideoEditor/WaveformTimeline.tsx` — **només el comentari** del comparador (cap canvi de lògica).
+> >>
+> >>#### **Verificació:**
+> >> **Mesurat amb la vista REAL** (`VideoSubtitlesEditorView` muntada dins dels providers reals, sense backend, amb un WAV sintètic de 30 s injectat pel camí real del `syncRequest` i `api.streamUrlWithToken`/`getWaveform` monkeypatchats). Comptadors de render temporals als dos components, retirats en acabar (`git diff` comprovat). Finestra de 26 s de reproducció real, 4 subtítols:
+> >> * **ABANS:** 99 renders del pare → **99 de l'ona** (1:1 — el memo no bloquejava mai). **El test és capaç de fallar: aquest és el bug, reproduït al pare real.**
+> >> * **DESPRÉS:** 99 renders del pare → **5 de l'ona**, i el log de fronteres confirma **exactament 1 render per frontera de subtítol i 0 entremig**. És el màxim assolible: la resta de re-renders els provoca `activeId`, que **ha** de propagar-se.
+> >> * **L'edició no queda congelada** (el risc real): amb el memo actiu i el vídeo en marxa, arrossegar un bloc a l'ona el mou (00:00:02,000 → 00:00:02,420), habilita **Desfer** (o sigui, `onSegmentUpdate` **i** `onSegmentUpdateEnd` arriben amb closures fresques), re-renderitza l'ona 9 cops **durant** el drag, i en deixar anar **torna a bloquejar el 100 %** dels ticks (0 renders de l'ona en 3 s).
+> >> * `tsc --noEmit` net (i, com sempre en aquest fitxer, irrellevant per si sol).
+> >> * **No verificat** (a les tasques de l'usuari): sincronització amb el guió, correccions pendents, takes, `useResumePosition` i la toolbar de l'ona amb un vídeo i un projecte de debò. La mesura de dalt exercita el memo, no aquests fluxos.
+> >>
+> >>#### **Lliçó:**
+> >> **Un test que munta una còpia del pare no prova res sobre el pare.** La pregunta d'aquesta tasca era «les props reals són estables?», i qualsevol harness que reescrigui el cablejat contesta que sí abans de començar. Muntar el component **real dins la vista real** va costar una hora (providers, un WAV generat, dos monkeypatches d'`api`) i va donar un número que **pot** ser dolent — que és l'única mena de número que serveix.
+> >> **Segona:** abans de mesurar, escriu el criteri d'acceptació **derivant-lo del codi**, no de la intuïció. «Ha de bloquejar el 100 %» era intuïtiu i fals; el codi deia «tot menys les fronteres de subtítol». Un criteri equivocat converteix una mesura bona en un fals negatiu.
+> >>
+> >>#### **Follow-ups (a tasks.md):**
+> >> * L'invariant d'H-00020 queda **corregit allà mateix** (tres clàusules; la versió original només valia per al standalone).
+> >> * Queda oberta la pregunta que planteja SPS-0036: el guany real és petit (s'estalvien ~4 passades de VDOM per segon, i el canvas no es redibuixava en cap d'elles). Si l'usuari prefereix la coherència de **treure el memo**, és una reversió petita — ara, però, amb la mesura a la mà.
+> ---
+
+> ---
+> ## **H-00020** — Descobriment: el `React.memo` de l'ona **no ha bloquejat mai**, en cap de les dues vistes — una dep d'objecte retornat per un hook és una memoització falsa
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt (parcial: standalone) + decisió arquitectònica (on va el fix d'arrel) + correcció d'una premissa falsa que ja havia contaminat dues fitxes
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0035 (→ EN_PROCES). SPS-0036 (nova, l'arrel al pare principal). Correcció dins SPS-0034.
+> >>
+> >>#### **Síntoma / Context:**
+> >> SPS-0035 denunciava que al pare **standalone** el memo de `WaveformTimeline` no bloqueja mai perquè **dos** handlers (`handleSegmentUpdate`, funció plana; `onSegmentUpdateEnd`, arrow inline) tenen identitat nova a cada render, i afirmava que **al pare principal sí que funciona**. En anar a implementar-ho, les dues afirmacions han resultat ser incorrectes.
+> >>
+> >>#### **Descobriment que canvia el disseny:**
+> >> **`useDocumentHistory` retorna un objecte literal nou a cada render** (`frontend/hooks/useDocumentHistory.ts:108-119`). Els seus mètodes **sí** són estables (`updateDraft` = `useCallback([])`, `commit` = `useCallback([draft])`), però l'embolcall no ho és mai. I hi ha **~20 dep-arrays** als dos editors escrits com `[..., subsHistory]` — o sigui, **20 `useCallback` que no memoitzen res**. Entre ells, els **6 handlers que el comparador del memo compara**, als **dos** pares. Conseqüència: el comparador retorna sempre `false` i **el bail-out no ha saltat mai, enlloc**. El memo és decoratiu des del dia que es va escriure.
+> >> Corol·lari incòmode: el comparador que **SPS-0034** acaba de sanejar (afegint-hi `minGapMs`/`minDurationMs`) és **codi que no s'ha exercitat mai en producció**, i la verificació humana que aquella fitxa demanava («provar-ho a la vista principal, que és on el memo sí bloqueja») hauria **passat igual sense el fix**: un test infalsificable. El fix de SPS-0034 no deixa de ser correcte —de fet passa a ser **necessari**—, perquè activar el bail-out sense ell desperta el seu bug de debò.
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **El pla literal de la fitxa (memoitzar els dos handlers que hi surten) → NO assoleix el seu propi objectiu.** El comparador mira **8** props de callback; els **4 cue handlers** (`handleCueStart`/`End`/`KeepDuration`/`RippleFromCue`) **ja eren `useCallback`** i per això no havien aixecat sospites — però amb `subsHistory` a les deps. Memoitzant només els dos «obvis», el memo hauria continuat **igual de mort**, i el canvi hauria semblat fet.
+> >> * **`useMemo` al `return` de `useDocumentHistory` (la via d'arrel temptadora) → DESCARTADA.** Arreglaria els dos pares de cop sense tocar cap dep-array, però: (a) `isDirty` (L116) es calcula **inline amb `JSON.stringify` a cada render** i `App.tsx:469-476` el publica a `window.__sonilabIsDirtyRef`, que és **la guarda que SettingsModal consulta abans del factory reset** → una dep oblidada al `useMemo` el congela i el reset esborra estat creient que no hi ha res brut: **risc de pèrdua de dades en una tasca de rendiment**; (b) activaria el bail-out **a l'editor principal en silenci**, canviant la semàntica de ~20 dep-arrays alhora, i just amb `WaveformTimeline.tsx` ple de canvis sense commitejar; (c) conceptualment **amaga** dep-lists imprecises darrere la identitat d'un objecte memoitzat, en lloc de dir la veritat sobre la dependència real (que és el **mètode**, no l'objecte).
+> >> * **Confiar en `tsc --noEmit` com a verificació.** Aquí no prova absolutament res: l'objectiu de la tasca és «el memo ara bloqueja», que és una propietat de **runtime**. (Agreujant, per SPS-0021 el frontend no té `@types/react` → tot `React.*` és `any`.) La verificació real —comptador de renders durant la reproducció— queda a mans de l'usuari, i s'ha dit explícitament en comptes d'afirmar que funciona.
+> >>
+> >>#### **Solució:**
+> >> * Al standalone, els 6 handlers depenen ara dels **mètodes** (`subsHistory.commit`, `subsHistory.updateDraft`) i no de l'**objecte**. És la dep certa: `updateDraft` no canvia mai, i `commit` canvia exactament quan canvia el `draft` — o sigui, **mai més tard** que `segments`, que ja és a la llista.
+> >> * `onSegmentUpdateEnd` deixa de ser una arrow inline i passa a ser un `handleSegmentUpdateEnd` memoitzat amb la guarda `if (!isEditing) return` (simetria amb el pare principal; funcionalment un no-op, perquè `commitHistory` ja descarta un draft idèntic).
+> >> * **L'arrel es deixa viva a posta** i es registra com a **SPS-0036** amb les tres vies (memoitzar el hook / repetir el fix local al pare principal / treure el memo), perquè activar el bail-out a l'editor principal —script sync, correccions, takes— mereix la seva pròpia verificació i no es cola dins una tasca de dues línies.
+> >> * **Invariant que sosté la seguretat del bail-out**, escrit perquè és silenciós si algú el trenca: `segments` **és exactament** `subsHistory.present` === `draft` (la mateixa referència). És això —i no el comparador— el que manté fresc l'`onSave` de l'ona, que **no** es compara: mentre el memo bloqueja, `draft` no pot haver canviat. Si algú converteix `segments` en un array derivat o copiat, el botó Desar de l'ona pot persistir un draft **ranci**, sense error de tipus ni test que ho agafi.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoSubtitlesEditor/VideoSrtStandaloneEditorView.tsx` — 6 dep-arrays (objecte → mètode), `handleSegmentUpdate` a `useCallback`, `handleSegmentUpdateEnd` nou, i un comentari que explica per què les deps són mètodes. **Únic fitxer.** `WaveformTimeline.tsx` no s'ha tocat.
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` net — i explícitament **insuficient** (veure «El que NO ha funcionat»). L'auditoria de què podria quedar ranci un cop el bail-out s'activa (refs assignats al render, efectes amb props no comparades, closures de la toolbar, `currentTime`) s'ha fet amb **tres revisions adversarials independents** + una quarta sobre el diff real: cap troballa MAJOR.
+> >> **Mesurat al navegador** (harness temporal amb el `WaveformTimeline` real i el `useDocumentHistory` real, simulant el pare standalone: tick de `currentTime` cada 250 ms amb `isPlaying=true`). Finestra de 4 s: amb el cablejat **vell**, 16 renders del pare → **16 de l'ona** (1:1, memo mort); amb el **nou**, 16 renders del pare → **0 de l'ona** (bloqueja el **100 %**). **El test s'ha demostrat capaç de fallar** (contramesura d'H-00017): el mode «vell» del harness reprodueix el bug.
+> >> **El bail-out no congela l'edició** —que era el risc real de la tasca—: amb el memo actiu i el vídeo «en marxa», arrossegar un bloc dona **10 `onSegmentUpdate` + 1 `onSegmentUpdateEnd`**, el segment es mou (0 → 0,72 s), `canUndo` passa a cert, l'ona es re-renderitza **11 cops durant el drag** (bail-in exactament quan toca, perquè `segments` canvia) i, en deixar anar, **torna a bloquejar el 100 %** dels ticks. Queda per validar a l'**app real** (el harness usa un pare sintètic i un vídeo fals) → tasques de l'usuari a SPS-0035.
+> >> **Dependència dura d'ordre:** el comparador de **HEAD** encara no compara `autoScroll`/`minGapMs`/`minDurationMs` (això ho porta el diff no commitejat de SPS-0034). **SPS-0035 no es pot commitejar sense SPS-0034**, o el bail-out s'activa amb la llista vella i el bug de SPS-0034 passa de teòric a real.
+> >>
+> >>#### **Lliçó:**
+> >> **Una dep que és un objecte retornat per un hook és una memoització falsa.** `useCallback(fn, [obj])` on `obj` és un literal reconstruït a cada render **no memoitza res**, però *sembla* que sí — i és invisible a la revisió, perquè el `useCallback` hi és. Aquí n'hi havia 20, i quatre d'ells eren precisament els que feien creure que la vista principal estava bé. La dep ha de ser **el que el cos llegeix de debò** (el mètode), no el contenidor.
+> >> Segona lliçó, més cara: **un bail-out que no salta mai és pitjor que no tenir memo.** Dona una falsa sensació de contenció, converteix el seu comparador en codi mort que ningú pot provar (SPS-0034 el va sanejar **a cegues**), i fa que qualsevol test sobre ell sigui infalsificable. Quan una optimització depèn d'una condició que mai es compleix, el primer que cal verificar **no** és si la condició és correcta, sinó **si s'arriba a avaluar**.
+> >> Tercera: quan una fitxa acota l'abast («arxius afectats: només X») i el diagnòstic real desborda aquell abast, el que s'ha de corregir és **la fitxa**, no l'abast en silenci.
+> >>
+> >>#### **Follow-ups (a tasks.md):**
+> >> * **SPS-0036** — la mateixa arrel al pare principal (i la decisió de si el memo val la pena). Fins que no es faci, el comparador de SPS-0034 no serveix de res a `VideoSubtitlesEditorView`.
+> >> * Aclarir el comentari de `WaveformTimeline.tsx:1238-1242`: diu que «les props de callback no es comparen a propòsit», però el codi de sota **en compara 8**. Tal com està, convida a «arreglar» el comparador esborrant justament el que el fa útil. (Anotat dins SPS-0036 per no tocar aquell fitxer ara.)
+> >>
+> >>#### **⚠️ Correcció de l'invariant (2026-07-13, en implementar SPS-0036 — veure H-00021):**
+> >> L'invariant escrit a «Solució» (**`segments` és exactament `draft`, la mateixa referència**) descriu el **standalone**, i com a regla general **és fals**: el pare principal passa `segments={linkedSegmentsWithDiff}`, un array **derivat i copiat** (`VideoSubtitlesEditorView.tsx:1235`), i tot i així el bail-out hi és segur. Enunciat correcte, en tres clàusules:
+> >> 1. El comparador ha de comparar `segments` **per referència** (`WaveformTimeline.tsx`). Si algú l'«optimitza» comparant longitud o contingut, tota la seguretat cau en silenci.
+> >> 2. La identitat de la **prop** `segments` ha de canviar **sempre** que canviï el `draft`. Al standalone es compleix trivialment (és el draft); al principal, perquè `linkSegmentsToTakeRanges` i `applyGuionDiff` fan `.map()` en tots els seus braços → array nou sempre. Un `useMemo` amb deps incompletes, o una util que retornés el mateix array quan no hi ha canvis, trencaria això.
+> >> 3. Cap prop **no comparada** pot capturar estat que no quedi reflectit en alguna prop **comparada**. És la clàusula general que fa segures les 7 callbacks de la toolbar. Avui hi ha una excepció coneguda i benigna: `onExportSrt` captura `currentDoc.name` (renombrar el doc a mig play deixa ranci el nom del fitxer exportat des de l'ona, fins al següent re-render).
+> ---
+
+> ---
+> ## **H-00019** — Bug: el hit-test de l'ona era cec a la Y, i `scrollRef` amaga tres superfícies diferents sota la mateixa caixa
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt (el fix «obvi» —descartar `y < RULER_H`— només tapava la meitat del forat)
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0033 (→ EN_PROCES). Detectat per la revisió adversarial de SPS-0029, fora d'abast allà.
+> >>
+> >>#### **Síntoma / Context:**
+> >> `hitTestSegment` convertia només la **X** del punter a temps i retornava el segment d'aquella columna. Com que els handlers de ratolí viuen a `scrollRef` —un `absolute inset-0` que ocupa **tota** l'alçada del visor— qualsevol punt de la columna vertical d'un esdeveniment hi encertava. Reproduït al navegador **abans de tocar res** (harness amb el component real + gestos de Playwright): arrossegar 100 px sobre la **regla de timecodes** damunt d'un subtítol dona **10 `onSegmentUpdate` + 1 `onSegmentUpdateEnd`** (el subtítol es mou **i es compromet a l'historial**); arrossegar la **barra de scroll** fa **seek**; i el **doble clic** sobre qualsevol de les dues **selecciona** l'esdeveniment de sota.
+> >>
+> >>#### **Descobriment que canvia el disseny:**
+> >> **`scrollRef` no és «l'ona»: és una sola caixa sota la qual conviuen TRES superfícies amb semàntica diferent** — la regla (22 px, que pinta el canvas), el contingut, i la **barra de scroll horitzontal nativa**. I la barra és el cas lleig: mesurat a l'app (visor 900×120), `offsetHeight` val 120 però `clientHeight` val **110** → la barra reserva **10 px de layout**, i com que el canvas es pinta **a sobre** (germà posicionat posterior, opac, `pointer-events-none`), la franja és **invisible però interactiva**. O sigui: hi veus ona i subtítol, però el ratolí hi troba la barra. Un usuari no pot ni saber que és allà. Per això el fix ha de partir per zones i **no** simplement descartar la regla.
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **El pla literal de la fitxa (descartar `y < RULER_H`) tot sol → INSUFICIENT.** Tanca la regla i deixa la barra de scroll oberta, que és **la meitat pitjor**: és invisible, o sigui que el bug hi és inexplicable per a l'usuari.
+> >> * **Fer el reset «mínim» al sortir d'hora sobre la barra** (`mouseDownActiveRef = false` i prou) → **obre un bug pitjor**, exactament de la família d'H-00018. Les dues branques del `mousemove` estan protegides de forma **asimètrica**: la xarxa de seguretat mira `mouseDownActiveRef`, però la branca de drag **no**. Si un gest anterior va acabar malament (el mouseup empassat pel menú contextual natiu — el cas d'H-00018) i el següent press cau a la barra, el reset parcial deixaria `dragArmed` **viu** amb `mouseDownActive` **fals**: la xarxa queda desactivada i el segment **segueix el punter amb el botó ja deixat anar**. Es tanca amb `finishGesture()`, que ja fa la neteja sencera. **Invariant a no trencar mai: `dragArmed` viu amb `mouseDownActive` fals és un estat prohibit.**
+> >> * **Posar la guarda de zona com a primera línia de `handleMouseDown`** (abans del filtre de botó) → **reobre SPS-0032**: un clic **dret** damunt la barra enmig d'un drag armat consumiria el gest. L'ordre correcte és filtre de botó → guarda de zona.
+> >> * **Filtrar el doble clic per la Y viva del segon clic** → dues fuites simètriques, perquè el `dblclick` resol el **temps** contra el latch del **primer** clic (SPS-0029) i barrejar marcs és el mateix error d'aquella tasca: (a) prémer la **regla** i derivar 2 px avall (dins la distància de doble clic del SO) **seguia seleccionant**; (b) un doble clic **legítim** just sota la regla es **perdia**. La zona ha de sortir del **mateix marc** que el temps → `firstClickZoneRef`.
+> >> * **Fer un `return` anticipat per zona al capdamunt de `handleMouseMove`** (la versió «neta») → deixaria el cursor **enganxat** a `grab`/`col-resize`: la branca de hover és qui el neteja, i ha de continuar executant-se sobre la regla i la barra.
+> >>
+> >>#### **Solució:**
+> >> * `zoneAt(clientY)` → `ruler` | `content` | `scrollbar`. La franja de la barra es **mesura** (`sc.clientHeight`), no es codifica: quan l'ona hi cap sencera no hi ha barra, la franja val 0 i no queda cap zona morta. La **barra mana sobre la regla** en l'ordre de comprovació, per si el visor s'estrenyés fins a solapar-les.
+> >> * `hitTestSegment(clientX, clientY)` retorna `null` fora de `content` → tanca alhora l'armat del drag i el cursor de hover, amb un sol canvi.
+> >> * Press sobre la **barra**: `handleMouseDown` en surt sense armar **res**, amb `finishGesture()` i **després** del filtre de botó.
+> >> * **Regla = eix de temps pur:** clic → seek, arrossegar → scrub, mai drag/resize/selecció. No ha calgut cap branca nova: allà `hit` és `null`, `dragSegIdRef` es queda buit i el gest cau sol a l'scrub. Els modificadors (fixar cues) hi segueixen actius a posta — actuen sobre l'esdeveniment **actiu**, no sobre el de sota el punter.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoEditor/WaveformTimeline.tsx` — `PointerZone` + `zoneAt` (nous), `hitTestSegment` amb Y, guarda de zona a `handleMouseDown`, `firstClickZoneRef` latched i consultat a `handleDoubleClick`, hover amb Y. Cap prop nova → els pares no s'han tocat. El comparador del `React.memo` **no** s'ha tocat (és SPS-0034).
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` net. Al navegador, harness temporal amb el component **real** i gestos de Playwright (esborrat en acabar): **10/10 assercions**. Regla: arrossegar-hi dona **0 `onSegmentUpdate`** i **10 seeks** (scrub); doble clic → **0 seleccions**. Barra de scroll: arrossegar-hi i doble-clicar-hi donen **el log buit** (0 updates, 0 seeks, 0 seleccions). No-regressió del contingut: moure un esdeveniment segueix donant 10 updates + **1** commit; el resize per l'extrem, 8 updates + 1 commit; el doble clic segueix **seleccionant** (`s1`). Marcs creuats: 1r clic a la regla + 2n derivat 2 px al contingut → **no** selecciona; 1r clic al contingut + 2n derivat a la regla → **sí** selecciona.
+> >> **El test s'ha demostrat capaç de fallar** (contramesura d'H-00017): neutralitzant `zoneAt` (que retorni sempre `content`) es **reprodueix el bug sencer** — la regla mou el subtítol i el commiteja (10 updates + 1 commit), la barra fa seek, i tots dos seleccionen al doble clic.
+> >>
+> >>#### **Lliçó:**
+> >> **Quan un handler viu en un contenidor que ocupa més que allò que representa, el hit-test ha de partir el contenidor, no confiar-hi.** Aquí `scrollRef` semblava «l'ona» i n'era **tres coses**; la tercera (la barra de scroll) era **invisible** perquè el canvas s'hi pinta a sobre, i per això no havia sortit mai a cap revisió visual. Generalitzable: **una superfície interactiva que no es veu és pitjor que una que es veu malament** — el canvas `pointer-events-none` amaga la barra però no la desactiva, i la geometria real només la diu el DOM (`offsetHeight - clientHeight`), no el disseny. Segona lliçó, ja recurrent en aquest component (H-00018): en un component amb **estat de gest en refs**, tot camí que surt d'hora ha de sortir per la **neteja completa** (`finishGesture`), mai per un reset a mà de dues refs — les guardes de les branques són asimètriques i un reset parcial en desactiva unes i no les altres.
+> >>
+> >>#### **Follow-ups (a tasks.md):**
+> >> * **Judici d'UX obert** (a les tasques manuals d'SPS-0033): la barra de scroll invisible ocupa 10 px on la part baixa d'un subtítol **no es pot agafar**. Les dues sortides —amagar-la de debò (`scrollbar-width: none`) o fer-la visible encongint el canvas— són tasca nova, no aquesta (regla e: canvi mínim).
+> >> * **Judici d'UX obert:** durant la reproducció amb el seguiment actiu, arrossegar la barra ja no fa seek, però el RAF loop recentra cada frame i la barra sembla que no obeeix. És la semàntica d'SPS-0030 (per moure't lliurement, apaga el seguiment); valorar si un gest a la barra hauria de suspendre'l temporalment.
+> ---
+
+> ---
+> ## **H-00018** — Bug: filtrar el botó al `mouseup` de l'ona obliga a tenir una xarxa de seguretat per al mouseup perdut
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt (petit d'abast, però amb una trampa: el fix «obvi» n'obria un de pitjor)
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0032 (→ EN_PROCES). Detectat per la revisió adversarial de SPS-0029, fora d'abast allà.
+> >>
+> >>#### **Síntoma / Context:**
+> >> `handleMouseDown` filtrava el botó (`if (e.button !== 0) return`) però `handleMouseUp` **no**. Reproduït al navegador amb gestos reals de botó dret abans de tocar res: (a) amb l'esquerre premut en espai buit, el mouseup del **dret** executava el **seek** (a 15,00 s) sense que l'usuari hagués deixat anar res; (b) enmig d'un **drag**, el mouseup del dret **comprometia l'esdeveniment a l'historial** (`onSegmentUpdateEnd`) i **matava el gest**: l'usuari continuava arrossegant amb l'esquerre premut i el subtítol es quedava clavat (8,50 s). A Windows això no és exòtic: el menú contextual surt al **mouse-up** del botó dret.
+> >>
+> >>#### **Descobriment que canvia el disseny:**
+> >> **El `mouseup` no és només l'acció de clic: és l'ÚNIC punt on el component tanca el gest** (commit del drag + reset de tot l'estat d'interacció). Filtrar-lo per botó — el fix d'una línia que demanava la fitxa — vol dir que **cap altre esdeveniment** no pot tancar el gest. I el mouseup de l'esquerre **es pot perdre**: mentre el menú contextual natiu de Windows és obert, captura el ratolí. El resultat hauria estat un **drag enganxat al punter amb el botó ja deixat anar** — un bug més greu (mou subtítols sols) que el que s'anava a arreglar (cas rar, sense pèrdua de dades).
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **El fix literal de la fitxa, tot sol (`if (e && e.button !== 0) return;` i prou) → INSUFICIENT.** És correcte, però deixa el gest sense cap altra via de tancament que un esdeveniment que el SO pot no lliurar mai. La fitxa avisava de comprovar que no s'empassés cap `onSegmentUpdateEnd()` **degut** (i no se n'empassa cap: `dragMovedRef`/`dragSegIdRef` es conserven i el commit el fa el mouseup de l'esquerre); el que no veia és el risc **contrari** — que el commit no arribi **mai**.
+> >> * **Confiar en el `mouseleave` com a xarxa** (ja feia la neteja): només salta si el punter **surt** del contenidor de l'ona. Amb el menú contextual obert damunt de la mateixa ona, el punter no surt de res: el gest quedaria viu i el següent moviment arrossegaria el subtítol sense cap botó premut.
+> >> * **Fer que el `contextmenu` tanqui el gest** (`onContextMenu` → cleanup): rebutjat perquè ataca **un sol** camí de pèrdua del mouseup. `e.buttons` al `mousemove` és l'estat **viu** dels botons segons el navegador: cobreix el menú contextual i **qualsevol** altra pèrdua (canvi de finestra, alt-tab, drag fora del document) amb la mateixa línia i sense endevinar la causa.
+> >>
+> >>#### **Solució:**
+> >> * `if (e && e.button !== 0) return;` com a primera línia de `handleMouseUp` (simètric amb `handleMouseDown`).
+> >> * **Xarxa de seguretat al `mousemove`:** si el gest consta com a actiu (`mouseDownActiveRef`) però el botó primari ja **no** està premut (`(e.buttons & 1) === 0`), es tanca el gest. Commiteja el drag si s'havia mogut de veritat i reseteja l'estat — o sigui: el treball de l'usuari **no es perd**, simplement es tanca on toca.
+> >> * La neteja compartida s'extreu a `finishGesture` i el `mouseleave` **la reutilitza** (mateixa lògica que ja tenia, ara en un sol lloc; el `mouseleave` és ara un àlies).
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoEditor/WaveformTimeline.tsx` — `finishGesture` (neteja compartida, nova), guard de botó a `handleMouseUp`, guarda `e.buttons` a `handleMouseMove`, `handleMouseLeave` reduït a `finishGesture`. Cap prop nova → els pares no s'han tocat.
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` i `vite build` nets. Al navegador, harness temporal amb el component real i gestos de Playwright amb **botó dret de veritat** (esborrat en acabar): **8/8 assercions**. Amb el guard: el mouseup del dret **no** fa seek (log buit) i el seek arriba, exacte (15,00 s), en deixar anar l'esquerre; enmig d'un drag, el botó dret dona **0 commits prematurs** i el drag **continua viu** (8,50 → 9,10 s en seguir arrossegant), amb **un sol** commit en deixar anar l'esquerre i **cap seek espuri**. Xarxa de seguretat: simulant el mouseup perdut (moviment amb `buttons=0`), el gest es tanca sol amb **1 commit** i moure 400 px més **no** arrossega el subtítol (queda a 8,50 s). No-regressió del model de ratolí d'SPS-0029: clic simple → seek; clic dret sol → no fa res; doble clic → segueix seleccionant; Shift+clic → segueix fixant la cue; scrub → segueix fent seeks.
+> >> **El test s'ha demostrat capaç de fallar** (la contramesura que exigeix H-00017): desactivant el guard, els dos escenaris **reprodueixen el bug** (seek a 15,00 s amb l'esquerre premut; 1 commit prematur i drag mort).
+> >>
+> >>#### **Lliçó:**
+> >> **Abans d'afegir una guarda a un handler, pregunta't què més feia aquell handler.** Aquí el `mouseup` era alhora *l'acció* (seek/cue) i *el tancament del gest* (commit + reset); filtrar-lo per botó arregla la primera i **desprotegeix** la segona. Regla generalitzable per a aquest component: **tot gest que s'obre amb un `mousedown` ha de tenir una via de tancament que no depengui d'un esdeveniment que el SO pot no lliurar mai** — i `e.buttons` (estat viu, no històric) és la via barata, perquè no cal enumerar les causes de la pèrdua. Corol·lari de procés: una fitxa etiquetada «risc 2/10, dimensions 1/10, una línia» **no és una excusa per saltar-se la revisió de casos límit**; el forat que va obrir el fix trivial era més greu que el bug original.
+> >>
+> >>#### **Follow-ups (a tasks.md):**
+> >> * **Judici d'UX obert** (a les tasques manuals d'SPS-0032): el clic dret sobre l'ona avui **no fa res**. Si es vol un menú contextual propi (tallar/dividir/esborrar l'esdeveniment sota el punter), és una tasca nova.
+> >> * La verificació del **menú contextual natiu** (el camí real de pèrdua del mouseup) només la pot fer un humà amb ratolí físic: Playwright dispara els esdeveniments DOM del botó dret, però no obre el menú del SO.
+> ---
+
+> ---
+> ## **H-00017** — Bug + decisió: què governa exactament el botó «Seguiment» de l'ona (seguir ≠ revelar)
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt (+ decisió de producte: l'abast del control)
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0030 (→ EN_PROCES) · toca la vora de SPS-0031 (la prop `autoScroll` deixa de ser deute mort)
+> >>
+> >>#### **Síntoma / Context:**
+> >> El botó «Seguiment» de l'ona era **purament cosmètic**: `WaveformTimeline` declarava la prop `autoScroll` i **mai la desestructurava**; el RAF loop de reproducció condicionava l'autoscroll només a `isDraggingRef`. Apagar el seguiment canviava la icona i prou — l'ona continuava desplaçant-se sota el punter. Era, a més, **la vàlvula d'escapament que falta** per al «bot» de la vista en estacionari+reproduint que va quedar viu després d'H-00016.
+> >>
+> >>#### **Descobriment que canvia el disseny:**
+> >> **El component té DOS camins que mouen la vista sols, i NO són la mateixa cosa.** (a) El **RAF loop** durant la reproducció: **segueix** el cursor de manera contínua (recentratge en estacionari, salt de pàgina en pàgina). (b) L'efecte «auto-scroll when paused»: **NO segueix res** — només salta si el punt ja ha quedat **FORA** de la finestra visible (H-00011/H-00014). Això segon no és seguiment, és **revelar** el cursor després d'un esdeveniment discret. La fitxa original de SPS-0030 proposava inhibir tots dos («probablement sí, per coherència amb el que el botó promet»); la revisió va demostrar que això és el pla equivocat.
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **Inhibir també l'efecte de pausa (el pla escrit a la pròpia fitxa de SPS-0030) → DESCARTAT.** Hauria creat **tres bugs nous**, tots invisibles des de la fitxa: (a) **el zoom es converteix en un teletransportador**: `scrollLeft` és en píxels i la finestra visible és `scrollLeft / zoom`, o sigui que canviar el zoom desplaça la vista **en temps**; avui qui la rescata és precisament aquest efecte (`zoom` és a les seves deps). Amb el seguiment apagat, cada mossa de zoom deixaria l'ona en una regió arbitrària amb el cursor amagat i **sense cap via de retorn**. (b) **Els seeks externs es tornen invisibles**: clicar un subtítol a la llista, els salts de teclat o prev/next mourien el vídeo i deixarien l'ona congelada amb el playhead en `display:none` — no hi ha cap afordança de «porta'm al cursor» a la UI. (c) **Canviar de media** deixaria la vista parada a l'offset de l'asset anterior. A més, hauria acoblat en silenci el futur de la persistència del botó amb SPS-0007 (restaurar la posició en reobrir).
+> >> * **Suprimir el salt de la transició de pausa** (perquè, amb el seguiment apagat, prémer pausa revela el cursor i «descongela» la vista un cop): temptador, però l'únic senyal net és la transició `isPlaying`, i una actualització **tardana** del `currentTime` escapçat (~250 ms) pot colar-s'hi just després → el salt passaria **de vegades**. Un comportament intermitent és pitjor que un de consistent. Descartada també la variant amb finestra de temps (p. ex. «ignora canvis < 0,35 s»): és exactament la mena de **constant arbitrària** que H-00016 ja va criticar.
+> >> * **Gatejar el comportament amb `autoScrollWave`** (la prop que pintava el botó) en comptes d'`autoScroll`: `autoScrollWave` no té default, o sigui que un consumidor que no passi els controls de capçalera tindria el seguiment **apagat per omissió** — congelació silenciosa. La solució és derivar-ne **una sola veritat**.
+> >>
+> >>#### **Solució:**
+> >> * El botó «Seguiment» governa **només el seguiment durant la reproducció**: `followEnabledRef` s'afegeix a la guarda del RAF loop. Les branques de dins (recentratge estacionari / salt de pàgina) queden **byte-idèntiques** — la línia que H-00016 protegeix explícitament **no s'ha tocat**.
+> >> * L'efecte de pausa **es queda viu i sense condicionar**, amb el «perquè» escrit al codi perquè ningú no el «corregeixi» després: **revelar ≠ seguir**.
+> >> * `updatePlayheadPos` queda **fora** de la guarda: amb la vista congelada, el cursor continua movent-se dins la finestra i s'amaga en sortir-ne.
+> >> * **Una sola veritat** per al comportament i per a l'estat encès/apagat del botó: `followEnabled = autoScrollWave ?? autoScroll` (amb `autoScroll = true` per defecte). Abans, el botó es pintava amb una prop i el comportament no en llegia cap: si algun dia divergien, el botó tornaria a mentir — que és la classe de bug d'aquesta entrada.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoEditor/WaveformTimeline.tsx` (destructuring d'`autoScroll`, `followEnabled` + `followEnabledRef`, guarda del RAF loop, estat del botó + `aria-pressed`, comparador de `React.memo`). **Cap prop nova → els dos pares no s'han tocat.**
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` i `vite build` nets. Al navegador, amb el component real i un rellotge de media simulat (harness temporal, esborrat en acabar), **8/8 escenaris**: seguiment ON reproduint → la vista segueix el cursor (2597 px vs objectiu 2599); **seguiment OFF reproduint → la vista queda CONGELADA mentre l'àudio avança 1,52 s** (estacionari i pàgina); reactivar-lo en ple playback → recupera el cursor al frame següent (2782 vs 2784); el playhead s'amaga en sortir de la vista congelada i la vista no es mou; en **pausa** amb seguiment OFF, un seek fora de la finestra **sí que revela** el cursor (0 → 8970 px) i un seek dins la finestra **no mou** la vista (invariant d'H-00014 intacte); seguiment ON en mode pàgina → el salt de pàgina segueix funcionant (llindar 5010 px → vista a 4980).
+> >> **A l'APP REAL** (stack sencer: Docker+Mongo, backend NestJS, frontend :3000; projecte amb SRT, vídeo i ona extreta; clics reals als controls, en Duo + estacionari): seguiment ON reproduint → la vista segueix (2363 → 2615 px); **seguiment OFF → vista CONGELADA a 2618 px mentre el vídeo avança 4 s**; reactivar-lo → recupera el cursor (2618 → 3160 px). La conseqüència acceptada també queda mesurada: 14 s congelats → el cursor surt de la vista → **la pausa fa un salt de 2322 px** per revelar-lo; amb només 6 s de deriva (cursor encara visible) **no salta**.
+> >>
+> >>#### **Lliçó:**
+> >> **Un control no es «connecta»: primer cal decidir QUÈ governa.** El pla escrit a la fitxa («que el botó ho aturi tot, per coherència») semblava el més honest i era el més destructiu: hauria apagat un mecanisme que, tot i viure a la mateixa funció i dir-se igual («autoscroll»), fa una feina **oposada** — no seguir el cursor, sinó **rescatar-lo** quan un altre mecanisme (zoom, seek extern, canvi de media) el deixa fora de la vista. La pregunta útil no era «el botó ho apaga tot?» sinó «quantes coses diferents fa això que anomenem autoscroll?». Corol·lari de tooling: verificar-ho va donar **cinc falsos verds** abans del primer verd de veritat, i **tots deien el mateix** («la vista no s'ha mogut») — que és precisament el que el test buscava sentir. Al harness: (1) pestanya en segon plànol → Chromium escanya el `requestAnimationFrame` (cal `bringToFront()`; ja avisat a H-00016); (2) sense el CSS de l'app, `overflow-x-auto` no té efecte → el contenidor **no és scrollable** i `scrollLeft` es queda a 0 passi el que passi. A l'app real: (3) el timeline estava en **mode pàgina**, que amb prou feines mou la vista (només salta al 97% del marge dret) — l'escenari on es veu el bug és **estacionari**; (4) conduir el `<video>` per codi (`v.play()`) reprodueix l'element però **no** canvia l'`isPlaying` de React → el RAF loop no arrenca mai (el play de debò és el **clic sobre l'àrea del vídeo**, un `role="button"`); (5) amb la `duration` de l'app a 0, el contingut del timeline fa exactament l'amplada del viewport → **el component escrivia `scrollLeft = 2042` i l'element el rellegia com a 0**. La contramesura barata i obligatòria: comprovar SEMPRE que el test **pot fallar** — verificar primer que amb el seguiment ENCÈS la vista SÍ que es mou. Un test que no pot fallar no prova res.
+> >>
+> >>#### **Follow-ups (a tasks.md):**
+> >> * **SPS-0031** — s'ha anotat a la seva fitxa que la prop `autoScroll` de `WaveformTimeline` **ja NO és deute mort** (no esborrar-la); el que sí que ho continua sent és l'`autoScroll` que viatja dins de `playerProps` cap a `VideoPlaybackArea`, un camí de props diferent que es diu igual.
+> >> * **Judici d'UX obert** (a les tasques manuals de SPS-0030): amb el seguiment apagat, prémer **pausa** revela el cursor amb un salt. Acceptat conscientment; si molesta, la supressió té el cost documentat més amunt.
+> >> * **Persistència del botó** entre sessions: avui és `useState(true)` (sempre encès en obrir). Si es persisteix, cal revisar SPS-0007 perquè reobrir un projecte amb el seguiment apagat no deixi el cursor invisible.
+> ---
+
+---
+
+> ---
+> ## **H-00016** — Bug: els gestos de ratolí llegien una vista que es movia sota el gest (doble clic, cues i seek durant la reproducció)
+> >> ###### *[2026-07-13]*
+>
+> >>#### **Tipus:**
+> >> Bug resolt (+ decisió arquitectònica: on viu la correcció)
+> >>
+> >>#### **Tasques relacionades:**
+> >> * SPS-0029 (→ EN_PROCES) · engendra SPS-0032, SPS-0033
+> >>
+> >>#### **Síntoma / Context:**
+> >> Els handlers de ratolí de `WaveformTimeline` derivaven el temps del `scrollLeft` **viu**: `handleMouseUp` recalculava el punt clicat al final de la pressió i `handleDoubleClick` feia el hit-test amb el punter viu. Durant la reproducció, el RAF loop reescriu `scrollLeft` a 60 fps → **el marc de coordenades es movia enmig del gest**. Els 3 símptomes que SPS-0029 tenia registrats només com a anàlisi estàtica es van **reproduir primer al navegador** (harness amb el component real, vídeo simulat i gestos de Playwright): doble clic en estacionari+reproduint seleccionant l'esdeveniment equivocat (la vista saltava −364 px entre els dos clics; només encertava prop del centre horitzontal), clic i modificador+clic aterrant tard exactament la durada de la pressió (+110 ms / +250 ms), i un clic que travessa un salt de pàgina aterrant **9,42 s** lluny.
+> >>
+> >>#### **Descobriment que simplifica el disseny:**
+> >> Dos, tots dos sortits de la reproducció i cap dels dos previst per la fitxa:
+> >> 1. **El codi ja tractava «gest en curs → no moguis la vista» com a invariant, però incomplet.** Quan el clic comença **sobre un segment**, el hold-timer arma el drag i posa `isDraggingRef = true`, que congela l'autoscroll → l'error queda acotat a ~50 ms i el salt de pàgina no s'hi manifesta. L'error complet només apareix quan el clic comença en **espai buit** (cap hit → cap hold-timer → autoscroll viu tota la pressió).
+> >> 2. **El bug no és exclusiu de la reproducció ni d'estacionari.** El mateix error de selecció existeix **en pausa i en mode pàgina** si es fa doble clic a la **vora dreta** (>97% del viewport): allà qui mou la vista entre els dos clics no és el RAF, sinó l'**efecte de pausa**. És el bug d'H-00014 encara viu al 3% dret. Això va decidir **on** havia d'anar el fix: a la capa de gest (immune a qualsevol moviment de la vista), no al RAF.
+> >>
+> >>#### **El que NO ha funcionat:**
+> >> * **La finestra de gràcia al RAF loop (`suppressRecenterUntilRef`), que era el pla escrit a la pròpia fitxa de SPS-0029 i al follow-up d'H-00015 → DESCARTADA.** Tres motius: (a) **és incompleta** — no cobreix el camí de pausa (la vora dreta), on el bug també existeix; (b) introdueix una **constant arbitrària** lligada al llindar de doble clic del SO (configurable a Windows), quan `e.detail` ja dona la mateixa informació de forma exacta i autoconsistent (`dblclick` es dispara ⟺ `detail` és parell); (c) hauria **col·lidit amb SPS-0030**, que ha de tocar la mateixa guarda del RAF.
+> >>   > ⚠️ **Delimitació explícita de l'invariant d'H-00011/H-00014, perquè ningú no reobri això:** «l'autoscroll no recentra mai en una acció manual» s'aplica al camí de **PAUSA**. El recentratge continu del RAF durant **reproducció real** (`scroll.scrollLeft = px - vw/2`) **NO és la variant vella pendent d'arreglar: és la definició del mode estacionari**, i H-00014 el va deixar intacte a posta. **Aquella línia es queda.** La Lliçó d'H-00014 («comprovar TOTS els camins que implementen la variant antiga») **no** demana tocar-la.
+> >> * **Latchar el temps ja clampat a `[0, duration]`** (la primera versió del pla): trencava el hit-test. `pixelToTime` clampa però `hitTestSegment` treballa amb píxels absoluts **sense clamp**; amb un media més curt que el viewport a zoom baix, un doble clic a la zona morta de la dreta hauria caigut dins la tolerància `x2 + 2` i **hauria seleccionat l'últim esdeveniment** (avui no en selecciona cap). I amb `duration = 0` (media absent o abans de `loadedmetadata`) tot temps latched hauria valgut 0. Es latcha el temps **cru**.
+> >> * **Latchar píxels absoluts en comptes de temps:** aparentment equivalent i més directe, però un píxel latched no significa res sense la seva escala — si el zoom canvia entre els dos clics (Ctrl+roda), el hit-test el reinterpreta amb el zoom nou. El **temps** és invariant d'escala. (Verificat: doble clic amb el zoom canviant de 100 a 150 entre els dos clics → selecció correcta.)
+> >> * **`e.detail >= 2` com a `return` anticipat a `handleMouseUp`:** s'emportaria per davant el `onSegmentUpdateEnd()` del drag (**pèrdua de dades**: edició al DOM però no a l'historial — la classe de bug d'H-00013) i el reset d'estat (`mouseDownActiveRef` quedaria a `true` → el playhead seguiria el ratolí sense cap botó premut). La guarda ha d'anar **només a la condició de la branca de clic simple**.
+> >> * **`e.detail < 2` (en comptes de la paritat):** mataria el **3r clic** d'una cadena (Chromium continua comptant: 3, 4…) i qualsevol clic posterior. La regla correcta és de **paritat**: una cadena llarga són parelles independents, i el clic senar sempre és un clic simple de ple dret.
+> >> * **Descartar el 2n clic sense mirar els modificadors:** un clic seguit d'un **Shift+clic** al mateix punt (dins de la finestra del SO) és una acció **deliberada i distinta**, no una repetició; descartar-la la faria desaparèixer en silenci. Per això la supressió només s'aplica si els modificadors coincideixen amb els del primer clic.
+> >> * **Tooling — dues trampes que van fer que el bug NO es manifestés al harness:** (a) amb la pestanya en **segon pla**, Chromium escanya el `requestAnimationFrame` → la vista no es movia durant la pressió i tot semblava correcte; cal `page.bringToFront()`. (b) Els esdeveniments sintètics del CDP **no** repliquen el comptador de clics natiu: dos `mouse.down()` seguits donen `detail = 1` i **no** emeten `dblclick`; cal enviar `clickCount: 2` explícit. Qualsevol harness futur de l'ona (SPS-0028, SPS-0030) topa amb totes dues.
+> >>
+> >>#### **Solució:**
+> >> Tot a la **capa de gest** de `WaveformTimeline.tsx`; el RAF loop i l'efecte de pausa queden intactes.
+> >> * **Latch del marc del gest:** `downRawTimeRef` (temps sota el punter al `mousedown`, **sense clamp**) i `firstClickRawTimeRef` (el del primer clic de la parella). Nous helpers `rawTimeAt(clientX)` i `hitTestAtTime(t)`; `pixelToTime` i `hitTestSegment` passen a ser-ne embolcalls i conserven la seva semàntica exacta (clamp inclòs) per als seus consumidors actuals (drag, re-àncora de la zona morta, scrub — que han de seguir el punter amb el marc **viu**).
+> >> * La branca de clic simple de `handleMouseUp` (seek + els 4 modificadors de cue) usa el latch, clampat a `[0, duration]`.
+> >> * `handleDoubleClick` resol el hit-test contra el temps latched del **primer** clic. El latch s'invalida si la cadena comença fora de l'ona (listener de `mousedown` en captura a `document`: el comptador de clics del navegador és temps+distància i **no mira el DOM**, o sigui que una parella pot començar a la capçalera i acabar dins l'ona) o si el gest acaba sent drag/scrub.
+> >> * **Regla de paritat** (`detail` parell = 2n clic d'una parella): no reexecuta l'acció de clic simple (excepte si els modificadors difereixen), no arma el hold-timer i no arma el scrub.
+> >>
+> >>#### **Arxius modificats:**
+> >> * `frontend/components/VideoEditor/WaveformTimeline.tsx` (refs del gest, `rawTimeAt`/`hitTestAtTime`, `handleMouseDown`, branca 3 de `handleMouseMove`, `handleMouseUp`, `handleDoubleClick`, `handleMouseLeave`, listener d'invalidació). **Cap prop nova → cap canvi als dos pares ni al comparador de `React.memo`.**
+> >>
+> >>#### **Verificació:**
+> >> `tsc --noEmit` i `vite build` nets. Al navegador, **15/15 assercions** amb el component real: doble clic correcte a x=120/300/500/850 en estacionari+reproduint; doble clic correcte a la vora dreta en pausa i en pàgina **tot i que la vista salta 960 px entre els dos clics**; clic i els 4 modificadors amb error **0 ms** (abans +110/+250/+50 ms); clic travessant el salt de pàgina amb error **0 ms** (abans 9,42 s); doble clic → **exactament 1** seek / 1 cue / 1 ripple (mai dos); cap `segmentUpdate` ni commit espuri amb deriva del punter durant el 2n clic; scrub i drag intactes; triple clic → el 3r clic torna a fer seek; `duration = 0` i zona morta dreta sense falsos positius; Ctrl+clic a la zona morta rep exactament `duration` (el clamp protegeix `endTime`); el callback de cue veu les mutacions de segments (cap closure rància — H-00013). **Pendent:** verificació humana a l'app real amb ratolí físic (tasques manuals a SPS-0029) — el comptador de clics natiu del SO no és verificable amb Playwright.
+> >>
+> >>#### **Lliçó:**
+> >> **Reproduir abans de planificar canvia el pla.** La fitxa prescrivia tocar el RAF loop; la reproducció va demostrar que (a) el bug també viu en pausa i en mode pàgina (la vora dreta), on el RAF ni hi és, i (b) el codi ja congelava la vista durant els gestos que comencen sobre un segment. Amb això, la correcció correcta era **fer el gest immune al moviment de la vista** (latch del marc), no **impedir que la vista es mogués** (finestra de gràcia) — que era incompleta i, a sobre, hauria trepitjat el contracte del mode estacionari i la tasca SPS-0030. Corol·lari sobre el tooling: un harness que no reprodueix el bug **abans** del fix no prova res del **després** — aquí, amb la pestanya en segon pla i sense `clickCount: 2`, tots els tests haurien passat en verd sobre el codi trencat.
+> >>
+> >>#### **Follow-ups (moguts a tasks.md):**
+> >> * **SPS-0032** — `handleMouseUp` no filtra `e.button`: un mouseup de botó dret amb l'esquerre premut consumeix el gest.
+> >> * **SPS-0033** — el hit-test només mira la X: la regla de timecodes i la barra de scroll poden arrossegar un segment.
+> >> * **SPS-0030** — segueix sent la vàlvula d'escapament real per al bot visual de la vista en estacionari+reproduint (i ara ja no hi ha conflicte de línies amb SPS-0029).
+> >>
+> >>#### **Eina reutilitzable:**
+> >> El harness de verificació de gestos de l'ona (component real + vídeo simulat + API `window.H` per a Playwright) es conserva a **`.claude/to_claude/waveform-harness/`** amb el seu README. `to_claude/` és gitignorat: viatja amb una **còpia de carpeta** però no amb un `git clone`. Si s'ha perdut, és reconstruïble a partir d'aquesta entrada (les dues trampes de Playwright i el patró de mesura hi són descrits) — útil per a SPS-0028/0030/0032/0033.
+> ---
+
+---
+
+> ---
 > ## **H-00015** — Decisió arquitectònica: un sol model d'interacció de ratolí, mode-agnòstic (es tanquen els presets page/duo)
 > >> ###### *[2026-07-13]*
 >

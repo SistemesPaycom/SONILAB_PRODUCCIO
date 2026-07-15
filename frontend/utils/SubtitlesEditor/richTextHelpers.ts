@@ -22,6 +22,37 @@ export function plainToRich(text: string): string {
 }
 
 /**
+ * Parteix un text SRT en una línia d'HTML per cada línia del text.
+ *
+ * A diferència de `text.split('\n').map(plainToRich)`, propaga els tags que queden
+ * oberts d'una línia a la següent: la forma en bloc `<i>línia1\nlínia2</i>` (habitual
+ * en SRT importats) es renderitzaria altrament amb només la primera línia en cursiva,
+ * perquè el `</i>` orfe de la segona línia el descarta el parser d'HTML.
+ */
+export function plainToRichLines(text: string): string[] {
+  const open: string[] = [];
+
+  return (text || '').split('\n').map((line) => {
+    const prefix = open.map((t) => `<${t}>`).join('');
+
+    const tagRe = /<(\/?)([biu])>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = tagRe.exec(line)) !== null) {
+      const tag = match[2].toLowerCase();
+      if (match[1]) {
+        const last = open.lastIndexOf(tag);
+        if (last !== -1) open.splice(last, 1);
+      } else {
+        open.push(tag);
+      }
+    }
+
+    const suffix = [...open].reverse().map((t) => `</${t}>`).join('');
+    return plainToRich(prefix + line + suffix);
+  });
+}
+
+/**
  * Converteix l'HTML del navegador a text pla amb tags SRT estàndard,
  * eliminant estils i tags no suportats.
  */

@@ -31,6 +31,8 @@ interface SubtitlesEditorProps {
   onMerge?: (id: number) => void;
   onInsert?: (id: number, position: 'before' | 'after') => void;
   onDelete?: (id: number) => void;
+  /** Format en lot: aplica canvis de text a diversos segments de cop (un únic pas d'undo a la vista). */
+  onSegmentsBatchChange?: (changes: Array<{ id: number; newText: string }>) => void;
   syncEnabled: boolean;
   onSyncChange: (enabled: boolean) => void;
   overlayConfig: OverlayConfig;
@@ -53,8 +55,6 @@ interface SubtitlesEditorProps {
   pendingInsertions?: any[];
   onAcceptInsertion?: (change: any) => void;
   onRejectInsertion?: (change: any) => void;
-  /** Format en lot: aplica canvis de text a diversos segments de cop (un únic pas d'undo a la vista). */
-  onSegmentsBatchChange?: (changes: Array<{ id: number; newText: string }>) => void;
 }
 
 // ── Cerca i substitució: suport del ressaltat ──
@@ -149,7 +149,7 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   const [insertionsCollapsed, setInsertionsCollapsed] = useState(false);
 
   // ── Selecció múltiple de blocs (checkbox per bloc + Maj+clic per rang) — spec §4 ──
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState(() => new Set<number>());
   const anchorIdRef = useRef<number | null>(null);
   const selectionEnabled = isEditable && !!onSegmentsBatchChange;
 
@@ -175,7 +175,7 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   }, [selectionEnabled, clearSelection]);
 
   // IMPORTANT: tota la lògica d'àncora i de càlcul de rang va FORA de l'updater de
-  // setSelectedIds. L'updater ha de ser PUR: l'app corra sota <React.StrictMode>
+  // setSelectedIds. L'updater ha de ser PUR: l'app corre sota <React.StrictMode>
   // (frontend/index.tsx) i en dev React pot invocar l'updater dues vegades — si
   // l'updater mutés anchorIdRef, la segona invocació llegiria l'àncora ja moguda
   // i el rang Maj+clic degeneraria al bloc clicat.
@@ -497,7 +497,10 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
   }, [replaceEnabled, matches, activeMatchIndex, segments, replaceText, onSegmentsBatchChange, gotoMatch]);
 
   // Substituir-ho tot: per segment, de dreta a esquerra (offsets estables), un únic
-  // batch = un únic pas d'undo. Retorna el total per al missatge de la barra.
+  // batch = un únic pas d'undo. Retorna el total REALMENT substituït per al missatge de
+  // la barra: els segments que queden byte-idèntics (p. ex. terme == substitució) no
+  // s'inclouen al batch — el commit de la vista en faria bail per igualtat profunda i el
+  // missatge diria «N substitucions» sense que res hagi canviat.
   const handleReplaceAll = useCallback((): number => {
     if (!replaceEnabled || matches.length === 0) return 0;
     const bySegIndex = new Map<number, SegmentMatch[]>();
@@ -510,10 +513,12 @@ const SubtitlesEditorInner: React.FC<SubtitlesEditorProps> = ({
     bySegIndex.forEach((ms, segIndex) => {
       const seg = segments[segIndex];
       if (!seg || seg.id !== ms[0].segmentId) return;
-      let raw = seg.originalText || '';
+      const original = seg.originalText || '';
+      let raw = original;
       for (let i = ms.length - 1; i >= 0; i--) {
         raw = replaceVisibleRange(raw, ms[i].start, ms[i].end, replaceText);
       }
+      if (raw === original) return;
       changes.push({ id: seg.id, newText: raw });
       count += ms.length;
     });

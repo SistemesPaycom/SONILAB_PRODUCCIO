@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Document } from '../../appTypes';
 import { parseSrt, secondsToSrtTime } from '../../utils/SubtitlesEditor/srtParser';
+import { plainToRichLines } from '../../utils/SubtitlesEditor/richTextHelpers';
+import { toVisibleText } from '../../utils/SubtitlesEditor/searchReplace';
 import { useLibrary } from '../../context/Library/SonilabLibraryContext';
 import * as Icons from '../icons';
 
@@ -31,8 +33,10 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
   const filtered = useMemo(() => {
     if (!filter.trim()) return segments;
     const q = filter.toLowerCase();
+    // Es filtra pel text visible (sense tags): els tags ja no es mostren, i buscar-los
+    // com a text donaria falsos positius ("i" cassaria amb tot el que va en cursiva).
     return segments.filter(s =>
-      (s.originalText || '').toLowerCase().includes(q)
+      toVisibleText(s.originalText || '').toLowerCase().includes(q)
     );
   }, [segments, filter]);
 
@@ -93,9 +97,12 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
         ) : (
           <div className="space-y-0.5">
             {filtered.map((seg) => {
-              const textLines = (seg.originalText || seg.richText || '').split('\n');
-              const line1 = textLines[0] || '';
-              const line2 = textLines.slice(1).join('\n');
+              // HTML segur: plainToRich escapa &, < i > i només re-emet <i>/<b>/<u>.
+              // Les línies 2+ es fusionen en una sola fila (unides amb espai, no <br>):
+              // la fila té alçada fixa de 22px i el text va truncat amb el·lipsi.
+              const htmlLines = plainToRichLines(seg.originalText || seg.richText || '');
+              const line1 = htmlLines[0] || '';
+              const line2 = htmlLines.slice(1).join(' ');
               return (
                 <div
                   key={seg.id}
@@ -125,9 +132,11 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
                           color: '#FFFFFF',
                         }}
                       >{secondsToSrtTime(seg.startTime)}</div>
-                      <span className="flex-1 min-w-0 truncate ml-3" style={{ fontSize: '13px', lineHeight: '22px', color: 'var(--th-editor-text)' }}>
-                        {line1}
-                      </span>
+                      <span
+                        className="flex-1 min-w-0 truncate ml-3"
+                        style={{ fontSize: '13px', lineHeight: '22px', color: 'var(--th-editor-text)' }}
+                        dangerouslySetInnerHTML={{ __html: line1 }}
+                      />
                     </div>
                     {/* Row 2: TC OUT badge + line2 */}
                     <div className="flex items-center">
@@ -144,9 +153,11 @@ const SrtPreviewView: React.FC<SrtPreviewViewProps> = ({ currentDoc, onClose }) 
                         }}
                       >{secondsToSrtTime(seg.endTime)}</div>
                       {line2 ? (
-                        <span className="flex-1 min-w-0 truncate ml-3" style={{ fontSize: '12px', lineHeight: '22px', color: 'var(--th-editor-text)', opacity: 0.7 }}>
-                          {line2}
-                        </span>
+                        <span
+                          className="flex-1 min-w-0 truncate ml-3"
+                          style={{ fontSize: '12px', lineHeight: '22px', color: 'var(--th-editor-text)', opacity: 0.7 }}
+                          dangerouslySetInnerHTML={{ __html: line2 }}
+                        />
                       ) : (
                         <span className="flex-1 ml-3" style={{ height: '22px' }}>{'\u00A0'}</span>
                       )}

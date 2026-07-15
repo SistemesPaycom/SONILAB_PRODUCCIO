@@ -93,6 +93,8 @@ const EDGE_HIT_PX = 8;        // pixels from segment edge for resize hit zone
 const MIN_SEG_DURATION = MIN_SEG_DURATION_MS / 1000;  // seconds, derivat de constants.ts
 const RULER_H = 22;            // height of the timecode ruler strip at top of canvas
 
+type PointerZone = 'ruler' | 'content' | 'scrollbar';
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
@@ -112,6 +114,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   onSetCueEnd,
   onSetCueStartKeepDuration,
   onRippleFromCue,
+  autoScroll = true,
   scrollMode = 'stationary',
   // Relocated toolbar controls
   onUndo,
@@ -130,6 +133,11 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   minGapMs = 160,
   minDurationMs = 1000,
 }) => {
+  // ── Seguiment (SPS-0030) ──
+  // Una sola veritat per al comportament i per a l'estat encès/apagat del botó: si es llegissin
+  // props diferents, el botó podria tornar a mentir (que és exactament el bug d'aquesta tasca).
+  const followEnabled = autoScrollWave ?? autoScroll;
+
   // ── Refs ──
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -157,10 +165,27 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   const minDurMsRef = useRef(minDurationMs);
   useEffect(() => { minDurMsRef.current = minDurationMs; }, [minDurationMs]);
 
+  // ── Marc de coordenades del gest (SPS-0029) ──
+  // Durant la reproducció el RAF loop reescriu scrollLeft a 60 fps: si un handler deriva el temps
+  // del scrollLeft VIU, el punt llegit ja no és el que l'usuari va prémer. El gest, doncs, es
+  // resol amb el temps capturat al mousedown. Es guarda SENSE clamp: el hit-test compara píxels
+  // absoluts i clampar a [0, duration] convertiria la zona morta de la dreta en un fals positiu
+  // sobre l'últim esdeveniment.
+  const downRawTimeRef = useRef<number | null>(null);
+  // Primer clic de la parella (el doble clic s'ha de resoldre contra el marc que l'usuari veia
+  // en prémer, no contra la vista ja recentrada pel seek d'aquell mateix primer clic).
+  const firstClickRawTimeRef = useRef<number | null>(null);
+  const firstClickZoneRef = useRef<PointerZone | null>(null);
+  const firstClickModsRef = useRef(0);
+  // Un mousedown amb detail parell és el 2n clic d'una parella: mai arma drag ni scrub, i no
+  // reexecuta l'acció de clic simple (el navegador ja hi dispararà un dblclick).
+  const pairContinuationRef = useRef(false);
+
   // Keep mutable refs for values used in RAF loop
   const zoomRef = useRef(DEFAULT_ZOOM);
   const viewportWRef = useRef(0);
   const scrollModeRef = useRef(scrollMode);
+  const followEnabledRef = useRef(followEnabled);
 
   // ── State ──
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -177,6 +202,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   zoomRef.current = zoom;
   viewportWRef.current = viewportWidth;
   scrollModeRef.current = scrollMode;
+  followEnabledRef.current = followEnabled;
 
   // ── Waveform extraction ──
   const { extract, peaks, status: waveStatus } = useWaveformExtractor();
@@ -449,6 +475,15 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   // estacionari (SPS-0014): el primer clic ja movia la vista abans que arribés
   // el segon. El recentratge continu propi d'estacionari només s'aplica DURANT
   // la reproducció real (RAF loop, més avall) — arrel: H-00011.
+  //
+  // El botó «Seguiment» (SPS-0030) NO governa aquest camí, i és deliberat: això no és seguiment,
+  // sinó REVELAR el cursor després d'un esdeveniment discret (només salta si el punt ja ha quedat
+  // FORA de la finestra). EN PAUSA és qui rescata la vista en canviar el zoom (scrollLeft és en
+  // píxels: el zoom desplaça la finestra en temps), en saltar des de la llista o el teclat, en
+  // canviar de media i en restaurar la posició (SPS-0007). Apagar-lo aquí deixaria el cursor
+  // invisible sense cap via de retorn.
+  // DURANT la reproducció amb el seguiment apagat no hi ha cap rescat, i és el que l'usuari demana
+  // en apagar-lo: la vista es queda quieta encara que el cursor en surti.
   useEffect(() => {
     if (isPlaying || isDraggingRef.current || !scrollRef.current) return;
     const px = currentTime * zoom;
@@ -475,7 +510,10 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         const t = vid.currentTime;
 
         // Auto-scroll if playhead about to leave viewport
-        if (!isDraggingRef.current) {
+        // Amb el «Seguiment» apagat la vista queda quieta durant la reproducció: és la vàlvula
+        // d'escapament per treballar sobre una ona que, altrament, es mou sota el punter (SPS-0030).
+        // El playhead continua actualitzant-se (fora de la guarda) i s'amaga en sortir de la vista.
+        if (!isDraggingRef.current && followEnabledRef.current) {
           const px = t * zoomRef.current;
           const vw = viewportWRef.current;
           if (scrollModeRef.current === 'page') {
@@ -505,16 +543,25 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
   }, [isPlaying, videoRef, updatePlayheadPos]);
 
   // ── Click / drag to seek ──
+  /** Temps sota el punter amb el scrollLeft viu, SENSE clamp (pot sortir de [0, duration]). */
+  const rawTimeAt = useCallback((clientX: number): number | null => {
+    const sc = scrollRef.current;
+    if (!sc) return null;
+    const rect = sc.getBoundingClientRect();
+    return (sc.scrollLeft + (clientX - rect.left)) / zoomRef.current;
+  }, []);
+
+  const clampToDuration = useCallback(
+    (t: number) => Math.max(0, Math.min(duration, t)),
+    [duration]
+  );
+
   const pixelToTime = useCallback(
     (clientX: number) => {
-      if (!scrollRef.current) return 0;
-      const rect = scrollRef.current.getBoundingClientRect();
-      const relX = clientX - rect.left;
-      const scrollLeft = scrollRef.current.scrollLeft;
-      const targetPx = scrollLeft + relX;
-      return Math.max(0, Math.min(duration, targetPx / zoom));
+      const raw = rawTimeAt(clientX);
+      return raw === null ? 0 : clampToDuration(raw);
     },
-    [duration, zoom]
+    [rawTimeAt, clampToDuration]
   );
 
   // RAF-throttled seek: coalesces multiple mousemove events into one setState per frame
@@ -534,14 +581,11 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     [onSeek]
   );
 
-  // ── Hit-test: find segment and zone under cursor ──
-  const hitTestSegment = useCallback(
-    (clientX: number): { id: Id; zone: 'start' | 'end' | 'body' } | null => {
-      const sc = scrollRef.current;
-      if (!sc) return null;
-      const rect = sc.getBoundingClientRect();
-      const absX = clientX - rect.left + sc.scrollLeft; // absolute pixel in timeline
+  // ── Hit-test: find segment and zone at a given time ──
+  const hitTestAtTime = useCallback(
+    (time: number): { id: Id; zone: 'start' | 'end' | 'body' } | null => {
       const z = zoomRef.current;
+      const absX = time * z; // absolute pixel in timeline
       const segs = segmentsRef.current;
       // Check in reverse so later-drawn (top) segments get priority
       for (let i = segs.length - 1; i >= 0; i--) {
@@ -564,12 +608,66 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     []
   );
 
+  // ── Franja vertical sota el punter (SPS-0033) ──
+  // `scrollRef` ocupa TOTA l'alçada del visor, i s'hi superposen tres coses ben diferents: la
+  // regla de timecodes (que pinta el canvas als RULER_H px de dalt), la zona de contingut, i la
+  // barra de scroll horitzontal nativa de sota — que reserva espai de layout i rep els seus
+  // propis mousedown/mousemove encara que el canvas la tapi. El hit-test només mira la X, o sigui
+  // que sense partir per Y qualsevol de les tres encerta el segment d'aquella columna: prémer la
+  // regla o arrossegar la barra movia l'esdeveniment de sota.
+  // `clientHeight` exclou la barra; quan no n'hi ha (l'ona hi cap sencera) val l'alçada sencera i
+  // no queda cap franja morta.
+  const zoneAt = useCallback((clientY: number): PointerZone | null => {
+    const sc = scrollRef.current;
+    if (!sc) return null;
+    const rect = sc.getBoundingClientRect();
+    const y = clientY - rect.top;
+    if (y < 0 || y >= rect.height) return null;
+    // La barra mana sobre la regla: si el visor s'estrenyés fins a solapar-les, el que cal
+    // protegir és la barra (arrossegar-la mai pot fer scrub).
+    if (y >= sc.clientHeight) return 'scrollbar';
+    if (y < RULER_H) return 'ruler';
+    return 'content';
+  }, []);
+
+  /** Hit-test amb el marc VIU (per al mousedown i per al hover). Només encerta dins el contingut. */
+  const hitTestSegment = useCallback(
+    (clientX: number, clientY: number) => {
+      if (zoneAt(clientY) !== 'content') return null;
+      const raw = rawTimeAt(clientX);
+      return raw === null ? null : hitTestAtTime(raw);
+    },
+    [zoneAt, rawTimeAt, hitTestAtTime]
+  );
+
   const clearHold = useCallback(() => {
     if (holdTimerRef.current !== null) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
   }, []);
+
+  /**
+   * Tanca el gest en curs sense fer cap seek: compromet el drag si l'esdeveniment s'ha mogut de
+   * veritat i reseteja tot l'estat d'interacció. La fa servir el mouseleave i la xarxa de seguretat
+   * del mousemove (SPS-0032).
+   */
+  const finishGesture = useCallback(() => {
+    clearHold();
+    if (dragMovedRef.current && dragSegIdRef.current) {
+      onSegmentUpdateEnd?.();
+    }
+    isDraggingRef.current = false;
+    dragArmedRef.current = false;
+    dragMovedRef.current = false;
+    dragTypeRef.current = null;
+    dragSegIdRef.current = null;
+    seekDragActiveRef.current = false;
+    mouseDownActiveRef.current = false;
+    firstClickRawTimeRef.current = null;
+    const sc = scrollRef.current;
+    if (sc) sc.style.cursor = '';
+  }, [clearHold, onSegmentUpdateEnd]);
 
   // ── Neighbor bounds for overlap prevention + minimum gap ──
   const gapSec = minGapMs / 1000;
@@ -587,9 +685,39 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
 
   // ── Mouse handlers with short-click / long-press discrimination ──
 
+  /** Màscara de modificadors, per comparar dos clics d'una mateixa parella. */
+  const modMask = (e: React.MouseEvent) =>
+    (e.ctrlKey || e.metaKey ? 1 : 0) | (e.shiftKey ? 2 : 0) | (e.altKey ? 4 : 0);
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return; // left button only
+      // Press sobre la barra de scroll nativa: el navegador ja la gestiona tota sola. Aquí no
+      // s'arma RES —ni latch, ni drag, ni scrub— perquè arrossegar-la no pot moure un esdeveniment
+      // ni moure el cursor de transport. Va DESPRÉS del filtre de botó: si es fes abans, prémer el
+      // dret damunt la barra enmig d'un drag armat el consumiria (SPS-0032).
+      // Es tanca amb finishGesture i no amb un reset parcial: deixar `dragArmed` viu amb
+      // `mouseDownActive` fals desactivaria la xarxa de seguretat del mousemove (que mira
+      // `mouseDownActive`) sense aturar el drag (que no la mira) — el segment seguiria el punter
+      // amb el botó ja deixat anar.
+      const downZone = zoneAt(e.clientY);
+      if (downZone === null || downZone === 'scrollbar') {
+        finishGesture();
+        return;
+      }
+
+      // detail parell = 2n clic d'una parella (el navegador hi dispararà un dblclick). Es fa servir
+      // la paritat i no `>= 2` perquè una cadena llarga són parelles independents: el 3r clic torna
+      // a ser un clic simple de ple dret.
+      const isPairContinuation = e.detail > 0 && e.detail % 2 === 0;
+      pairContinuationRef.current = isPairContinuation;
+      downRawTimeRef.current = rawTimeAt(e.clientX);
+      if (!isPairContinuation) {
+        firstClickRawTimeRef.current = downRawTimeRef.current;
+        firstClickZoneRef.current = downZone;
+        firstClickModsRef.current = modMask(e);
+      }
+
       mouseDownTsRef.current = performance.now();
       mouseDownClientRef.current = { x: e.clientX, y: e.clientY };
       mouseDownActiveRef.current = true;
@@ -601,7 +729,9 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       seekDragActiveRef.current = false;
       clearHold();
 
-      const hit = hitTestSegment(e.clientX);
+      // A la regla, `hit` sempre és null: cap drag ni resize. Hi queda el seek del clic simple (i
+      // el scrub en arrossegar), que és el que fa la regla de timecodes de qualsevol editor.
+      const hit = hitTestSegment(e.clientX, e.clientY);
       if (hit) {
         // Do NOT call onSegmentClick here — it causes a seek via the parent.
         // Selection + seek will happen on mouseUp if it's a short click.
@@ -612,29 +742,44 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
           dragSegOrigStartRef.current = seg.startTime;
           dragSegOrigEndRef.current = seg.endTime;
           const zone = hit.zone;
-          // Start hold timer — if user holds > HOLD_MS, arm drag
-          holdTimerRef.current = setTimeout(() => {
-            holdTimerRef.current = null;
-            dragArmedRef.current = true;
-            isDraggingRef.current = true; // suppress auto-scroll
-            dragTypeRef.current =
-              zone === 'start'
-                ? 'resize-start'
-                : zone === 'end'
-                ? 'resize-end'
-                : 'move';
-            const sc = scrollRef.current;
-            if (sc) sc.style.cursor = zone === 'body' ? 'grabbing' : 'col-resize';
-          }, getHoldMs());
+          // Start hold timer — if user holds > HOLD_MS, arm drag.
+          // Al 2n clic d'una parella, no: el hit-test l'ha resolt amb la vista JA recentrada pel
+          // seek del primer clic, o sigui que podria armar un drag sobre un esdeveniment que
+          // l'usuari no ha assenyalat mai (SPS-0029).
+          if (!isPairContinuation) {
+            holdTimerRef.current = setTimeout(() => {
+              holdTimerRef.current = null;
+              dragArmedRef.current = true;
+              isDraggingRef.current = true; // suppress auto-scroll
+              dragTypeRef.current =
+                zone === 'start'
+                  ? 'resize-start'
+                  : zone === 'end'
+                  ? 'resize-end'
+                  : 'move';
+              const sc = scrollRef.current;
+              if (sc) sc.style.cursor = zone === 'body' ? 'grabbing' : 'col-resize';
+            }, getHoldMs());
+          }
         }
       }
       // Don't seek on mouseDown — decision happens on mouseUp
     },
-    [hitTestSegment, pixelToTime, clearHold]
+    [hitTestSegment, pixelToTime, rawTimeAt, clearHold, zoneAt, finishGesture]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      // ── 0. Xarxa de seguretat: el mouseup s'ha perdut ──
+      // Ara que el mouseup filtra el botó (SPS-0032), el gest només el tanca el mouseup de
+      // l'esquerre. Si aquest no arriba mai (el menú contextual natiu de Windows se l'empassa
+      // mentre és obert), un drag armat continuaria seguint el punter amb el botó ja deixat anar.
+      // `buttons` és l'estat VIU dels botons: si el primari ja no hi és, el gest s'ha acabat.
+      if (mouseDownActiveRef.current && (e.buttons & 1) === 0) {
+        finishGesture();
+        return;
+      }
+
       // ── 1. Segment drag in progress ──
       if (dragArmedRef.current && dragSegIdRef.current && dragTypeRef.current) {
         // Zona morta: després d'armar, ignora moviments minúsculs (tremolor) fins que
@@ -703,7 +848,10 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       }
 
       // ── 3. Empty-space seek-drag (scrubbing) ──
-      if (mouseDownActiveRef.current && !dragSegIdRef.current) {
+      // El 2n clic d'una parella no fa scrub: la seva deriva no està acotada pel llindar de doble
+      // clic del SO (que només compara els dos punts de pressió) i el seek de brossa sobreescriuria
+      // el del primer clic (SPS-0029).
+      if (mouseDownActiveRef.current && !dragSegIdRef.current && !pairContinuationRef.current) {
         const dx = Math.abs(e.clientX - mouseDownClientRef.current.x);
         if (dx > 3 || seekDragActiveRef.current) {
           seekDragActiveRef.current = true;
@@ -714,10 +862,12 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       }
 
       // ── 4. Hover cursor feedback (no button held) ──
+      // Sense return anticipat per zona: cal que aquesta branca s'executi TAMBÉ sobre la regla i la
+      // barra, perquè és qui neteja el cursor `grab`/`col-resize` en sortir d'un esdeveniment.
       if (!mouseDownActiveRef.current) {
         const sc = scrollRef.current;
         if (sc) {
-          const hit = hitTestSegment(e.clientX);
+          const hit = hitTestSegment(e.clientX, e.clientY);
           sc.style.cursor = hit
             ? hit.zone === 'body'
               ? 'grab'
@@ -733,13 +883,21 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       duration,
       hitTestSegment,
       getNeighborBounds,
+      finishGesture,
     ]
   );
 
   const handleMouseUp = useCallback(
     (e?: React.MouseEvent) => {
+      // Només el botó primari tanca el gest (simètric amb handleMouseDown). A Windows el menú
+      // contextual surt al mouse-up del botó dret: sense aquest filtre, prémer el dret amb
+      // l'esquerre encara premut consumia el gest (seek + reset de tot l'estat) enmig d'un drag
+      // que l'usuari no havia deixat anar (SPS-0032).
+      if (e && e.button !== 0) return;
       clearHold();
-      const startedInWave = mouseDownActiveRef.current; // el gest ha començat a la zona d'ona (no a la barra superior)
+      // El gest ha començat a la regla o al contingut. Fals si venia de la barra superior, i també
+      // si venia de la barra de scroll: allà el mousedown surt sense armar res (SPS-0033).
+      const startedInWave = mouseDownActiveRef.current;
       const wasDragged = dragMovedRef.current;   // el punter ha superat la zona morta → drag real
       const wasSeekDrag = seekDragActiveRef.current;
 
@@ -752,15 +910,27 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       // NOMÉS si el gest ha començat dins la zona d'ona (mousedown a scrollRef): així un clic
       // a la barra superior (Timeline/Audio/undo/mode…) no mou el cursor.
       // La selecció d'un esdeveniment es fa amb DOBLE clic (estil Subtitle Edit) — veure handleDoubleClick.
-      if (startedInWave && !wasDragged && !wasSeekDrag && e) {
-        // Modificador+clic (estil Subtitle Edit): fixa cues de l'esdeveniment actiu al punt clicat.
-        const t = pixelToTime(e.clientX);
-        const ctrl = e.ctrlKey || e.metaKey;
-        if (ctrl && e.shiftKey && !e.altKey) onRippleFromCue?.(t);
-        else if (e.shiftKey && !ctrl && !e.altKey) onSetCueStart?.(t);
-        else if (ctrl && !e.shiftKey && !e.altKey) onSetCueEnd?.(t);
-        else if (e.altKey && !ctrl && !e.shiftKey) onSetCueStartKeepDuration?.(t);
-        else onSeek(t);
+      //
+      // El temps surt del latch del mousedown, no del punter al mouseup: durant la reproducció la
+      // vista es mou sota el gest i recalcular-lo aquí desplaçava el seek i les cues tota la durada
+      // de la pressió (SPS-0029).
+      if (startedInWave && !wasDragged && !wasSeekDrag && e && downRawTimeRef.current !== null) {
+        // El 2n clic d'una parella no repeteix l'acció: el primer ja l'ha executada al mateix punt
+        // (dins de la distància de doble clic del SO) i el marc de coordenades pot haver-se mogut
+        // entremig. S'exceptua el cas de modificadors diferents (p. ex. clic i tot seguit Shift+clic):
+        // allà el 2n clic és una acció distinta i deliberada, i s'executa amb el seu propi latch.
+        const redundantSecondClick =
+          pairContinuationRef.current && modMask(e) === firstClickModsRef.current;
+        if (!redundantSecondClick) {
+          // Modificador+clic (estil Subtitle Edit): fixa cues de l'esdeveniment actiu al punt clicat.
+          const t = clampToDuration(downRawTimeRef.current);
+          const ctrl = e.ctrlKey || e.metaKey;
+          if (ctrl && e.shiftKey && !e.altKey) onRippleFromCue?.(t);
+          else if (e.shiftKey && !ctrl && !e.altKey) onSetCueStart?.(t);
+          else if (ctrl && !e.shiftKey && !e.altKey) onSetCueEnd?.(t);
+          else if (e.altKey && !ctrl && !e.shiftKey) onSetCueStartKeepDuration?.(t);
+          else onSeek(t);
+        }
       }
 
       // Flush pending seek from scrub-drag
@@ -775,6 +945,10 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         }
       }
 
+      // Un gest que ha acabat sent drag o scrub no pot ser el primer clic d'un doble clic:
+      // invalida el latch de parella perquè un dblclick posterior no el consumeixi.
+      if (wasDragged || wasSeekDrag) firstClickRawTimeRef.current = null;
+
       // Reset all interaction state
       isDraggingRef.current = false;
       dragArmedRef.current = false;
@@ -786,7 +960,7 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
       const sc = scrollRef.current;
       if (sc) sc.style.cursor = '';
     },
-    [clearHold, onSegmentUpdateEnd, onSeek, pixelToTime, onSetCueStart, onSetCueEnd, onSetCueStartKeepDuration, onRippleFromCue]
+    [clearHold, onSegmentUpdateEnd, onSeek, clampToDuration, onSetCueStart, onSetCueEnd, onSetCueStartKeepDuration, onRippleFromCue]
   );
 
   // Doble clic sobre un esdeveniment → selecciona'l (estil Subtitle Edit). El clic simple només mou el cursor.
@@ -794,28 +968,39 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     (e: React.MouseEvent) => {
       // Només dins la zona d'ona (scrollRef), no a la barra superior
       if (!scrollRef.current || !scrollRef.current.contains(e.target as Node)) return;
-      const hit = hitTestSegment(e.clientX);
+      // Es resol contra el temps latched del PRIMER clic de la parella: el seek d'aquell primer clic
+      // ja pot haver recentrat (estacionari) o saltat de pàgina la vista, i el hit-test amb el
+      // punter viu seleccionaria un esdeveniment que l'usuari no ha assenyalat mai (SPS-0029).
+      const isPair = e.detail > 0 && e.detail % 2 === 0;
+      const fromLatch = isPair && firstClickRawTimeRef.current !== null;
+      // La zona surt del MATEIX marc que el temps. Barrejar la Y viva del 2n clic amb el temps
+      // latched del 1r obriria les dues portes que aquesta tasca tanca: prémer la regla i derivar
+      // 2 px avall (dins la distància de doble clic del SO) seleccionaria igualment, i un doble
+      // clic legítim ran de la regla es perdria (SPS-0033).
+      const zone = fromLatch ? firstClickZoneRef.current : zoneAt(e.clientY);
+      if (zone !== 'content') return;
+      const t = fromLatch ? firstClickRawTimeRef.current : rawTimeAt(e.clientX);
+      if (t === null) return;
+      const hit = hitTestAtTime(t);
       if (hit) onSegmentClick?.(hit.id);
     },
-    [hitTestSegment, onSegmentClick]
+    [rawTimeAt, hitTestAtTime, onSegmentClick, zoneAt]
   );
 
   // Separate handler for mouse leave — cleans up without seeking
-  const handleMouseLeave = useCallback(() => {
-    clearHold();
-    if (dragMovedRef.current && dragSegIdRef.current) {
-      onSegmentUpdateEnd?.();
-    }
-    isDraggingRef.current = false;
-    dragArmedRef.current = false;
-    dragMovedRef.current = false;
-    dragTypeRef.current = null;
-    dragSegIdRef.current = null;
-    seekDragActiveRef.current = false;
-    mouseDownActiveRef.current = false;
-    const sc = scrollRef.current;
-    if (sc) sc.style.cursor = '';
-  }, [clearHold, onSegmentUpdateEnd]);
+  const handleMouseLeave = finishGesture;
+
+  // El comptador de clics del navegador és purament temps+distància: no mira el DOM. Una parella
+  // pot començar FORA de l'ona (capçalera, o qualsevol punt de l'app a tocar de la vora) i acabar
+  // dins; llavors el mousedown de dins arriba amb detail=2 i no reescriu el latch. Sense això, el
+  // dblclick consumiria el latch ranci d'un gest anterior i seleccionaria un esdeveniment arbitrari.
+  useEffect(() => {
+    const onDocMouseDown = (ev: MouseEvent) => {
+      if (!scrollRef.current?.contains(ev.target as Node)) firstClickRawTimeRef.current = null;
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    return () => document.removeEventListener('mousedown', onDocMouseDown, true);
+  }, []);
 
   // ── Zoom with Ctrl+Wheel ──
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -887,11 +1072,12 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
             <div className="flex items-center gap-1 bg-black/30 rounded-full p-0.5 border border-white/5">
               <button
                 onClick={onToggleAutoScrollWave}
-                className={`p-1 rounded-full transition-all ${autoScrollWave ? 'text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
-                style={autoScrollWave ? { backgroundColor: 'var(--th-accent)' } : undefined}
-                title={autoScrollWave ? 'Seguiment actiu' : 'Seguiment inactiu'}
+                className={`p-1 rounded-full transition-all ${followEnabled ? 'text-white shadow-inner' : 'text-gray-500 hover:text-gray-300'}`}
+                style={followEnabled ? { backgroundColor: 'var(--th-accent)' } : undefined}
+                title={followEnabled ? 'Seguiment actiu' : 'Seguiment inactiu'}
+                aria-pressed={followEnabled}
               >
-                <Icons.ArrowDown className={`w-3 h-3 ${autoScrollWave && isPlaying ? 'animate-bounce' : ''}`} />
+                <Icons.ArrowDown className={`w-3 h-3 ${followEnabled && isPlaying ? 'animate-bounce' : ''}`} />
               </button>
               {onScrollModeChangeWave && (
                 <button
@@ -1043,7 +1229,26 @@ const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
 };
 
 export default React.memo(WaveformTimeline, (prev, next) => {
-  // During playback, skip re-renders when only currentTime changes
+  // During playback, skip re-renders when only currentTime changes.
+  //
+  // Dues regles governen aquesta llista (SPS-0034, precisades a SPS-0036):
+  //  1. Tot valor que el RAF o un handler llegeixi per ref (o que sigui dep d'un useMemo/
+  //     useCallback intern) ha de ser aquí. Si no hi és, el bail-out salta el cos del render,
+  //     l'efecte de sincronització no corre i el ref es queda ranci. Dues excepcions volgudes:
+  //     `videoRef` (identitat estable per contracte de useRef) i `currentTime` (només es llegeix
+  //     dins d'efectes guardats per `!isPlaying`; durant el play mana el RAF, que llegeix el <video>).
+  //  2. Les callbacks es reparteixen en dos grups i NO són intercanviables:
+  //     · Les 8 d'interacció amb l'ona (onSeek, onSegmentUpdate, onSegmentUpdateEnd, onSegmentClick
+  //       i els 4 cue) SÍ es comparen, i han de fer-ho: són les que executen els gestos d'edició, i
+  //       amb el bail-out actiu una closure rància commetria contra un draft vell. El preu és que
+  //       els pares les han de mantenir estables (deps als *mètodes* de useDocumentHistory, no a
+  //       l'objecte, que és un literal nou cada render) — si un pare no ho fa, el memo no bloqueja mai.
+  //     · Les 7 de la toolbar (onUndo, onRedo, onToggleAutoScrollWave, onToggleAutosave, onSave,
+  //       onExportSrt, onScrollModeChangeWave) queden fora a propòsit: els pares les passen inline
+  //       (`onUndo={() => …}`) i comparar-les desactivaria el memo a cada tick. El que les manté
+  //       fresques és comparar el *valor d'estat que capturen* (autosaveEnabled, autoScrollWave,
+  //       canUndo/canRedo, segments…): si canvia, hi ha re-render i es reconstrueixen amb la closure nova.
+  //     (`onToggleViewMode` també queda fora, però perquè és prop morta: mai es desestructura.)
   if (prev.isPlaying && next.isPlaying) {
     return (
       prev.videoFile === next.videoFile &&
@@ -1062,10 +1267,13 @@ export default React.memo(WaveformTimeline, (prev, next) => {
       prev.onRippleFromCue === next.onRippleFromCue &&
       prev.canUndo === next.canUndo &&
       prev.canRedo === next.canRedo &&
+      prev.autoScroll === next.autoScroll &&
       prev.autoScrollWave === next.autoScrollWave &&
       prev.scrollModeWave === next.scrollModeWave &&
       prev.scrollModeLocked === next.scrollModeLocked &&
-      prev.autosaveEnabled === next.autosaveEnabled
+      prev.autosaveEnabled === next.autosaveEnabled &&
+      prev.minGapMs === next.minGapMs &&
+      prev.minDurationMs === next.minDurationMs
     );
   }
   return false;

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Segment, OverlayConfig } from '../../appTypes';
 import { Timecode, formatTime } from './Timecode';
-import { plainToRich } from '../../utils/SubtitlesEditor/richTextHelpers';
+import { plainToRichLines } from '../../utils/SubtitlesEditor/richTextHelpers';
 import {
   PlayIcon,
   PauseIcon,
@@ -23,13 +23,16 @@ import { AudioOnlyPlaceholder } from './AudioOnlyPlaceholder';
 const SubtitleLines: React.FC<{ text: string }> = ({ text }) => {
     // Split by original line breaks; each line rendered as a separate block
     // to preserve the exact number of lines. Parent handles nowrap + auto-scaling.
-    const lines = text.split('\n');
+    // plainToRichLines (not plainToRich per line) propaga els tags oberts d'una línia
+    // a la següent, perquè la forma en bloc <i>línia1\nlínia2</i> dels SRT importats
+    // perdria el format a partir de la segona línia.
+    const lines = plainToRichLines(text);
     return (
         <>
-          {lines.map((line, i) => (
+          {lines.map((html, i) => (
             <React.Fragment key={i}>
               {i > 0 && <br />}
-              <span dangerouslySetInnerHTML={{ __html: plainToRich(line) }} />
+              <span dangerouslySetInnerHTML={{ __html: html }} />
             </React.Fragment>
           ))}
         </>
